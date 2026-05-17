@@ -20,6 +20,18 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Local Validation
+
+Run the same static checks used by frontend CI:
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
+Frontend CI is static/build-only. It sets `NEXT_PUBLIC_BACKEND_URL` to `http://127.0.0.1:8080` for a deterministic build, but it does not start or require the backend, does not require secrets, and does not use an admin token.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
