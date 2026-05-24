@@ -3,6 +3,7 @@ import type {
   AdminEndpointDefinition,
   AdminEndpointResult,
   AdminErrorCode,
+  AdminLifecycleSuccess,
   AdminSnapshot,
   JsonObject,
   JsonValue,
@@ -133,11 +134,46 @@ export async function fetchAdminSnapshot(
   return Object.fromEntries(entries) as AdminSnapshot;
 }
 
+export async function fetchOptionExecutionLifecycle(
+  token: string,
+  intentId: string,
+  signal?: AbortSignal,
+): Promise<AdminLifecycleSuccess> {
+  const normalizedIntentId = intentId.trim();
+  const path = `/admin/options/executions/${encodeURIComponent(
+    normalizedIntentId,
+  )}/lifecycle`;
+  const result = await fetchAdminPath({ path }, token, signal);
+
+  return {
+    data: result.data,
+    fetchedAt: result.fetchedAt,
+    label: "Option Execution Lifecycle",
+    ok: true,
+    path,
+    status: result.status,
+  };
+}
+
 async function fetchAdminEndpoint(
   endpoint: AdminEndpointDefinition,
   token: string,
   signal?: AbortSignal,
 ): Promise<AdminEndpointResult> {
+  const result = await fetchAdminPath(endpoint, token, signal);
+
+  return {
+    ...endpoint,
+    ...result,
+    ok: true,
+  };
+}
+
+async function fetchAdminPath(
+  endpoint: { path: string },
+  token: string,
+  signal?: AbortSignal,
+) {
   const headers = new Headers({
     Accept: "application/json",
   });
@@ -178,7 +214,6 @@ async function fetchAdminEndpoint(
   }
 
   return {
-    ...endpoint,
     ok: true,
     data: parsed,
     fetchedAt: Date.now(),
@@ -248,7 +283,7 @@ function classifyAdminError(message: string, status?: number): AdminErrorCode {
   return "http_error";
 }
 
-function toAdminErrorDetails(error: unknown): AdminApiErrorDetails {
+export function toAdminErrorDetails(error: unknown): AdminApiErrorDetails {
   if (error instanceof AdminApiError) {
     return error.toDetails();
   }

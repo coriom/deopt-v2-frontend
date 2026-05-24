@@ -2,8 +2,10 @@
 
 import {
   fetchAdminSnapshot,
+  fetchOptionExecutionLifecycle,
   getAdminBaseUrl,
   RECENT_LIMITS,
+  toAdminErrorDetails,
 } from "@/lib/admin-api";
 import type {
   AdminApiErrorDetails,
@@ -11,6 +13,7 @@ import type {
   AdminEndpointKey,
   AdminEndpointResult,
   AdminEndpointSuccess,
+  AdminLifecycleResult,
   AdminSnapshot,
   JsonObject,
   JsonValue,
@@ -20,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const TOKEN_STORAGE_KEY = "deopt.adminToken";
 const AUTO_REFRESH_MS = 10_000;
+const KNOWN_V1S_OPTION_INTENT_ID = "e6d2941b-65f7-413a-958f-74ab22c53b08";
 
 const EMPTY_RESULTS: Partial<AdminSnapshot> = {};
 
@@ -104,12 +108,17 @@ export function AdminDashboard() {
   const [recentLimit, setRecentLimit] = useState<RecentLimit>(20);
   const [feeEventsLimit, setFeeEventsLimit] = useState<RecentLimit>(20);
   const [feeAccountFilter, setFeeAccountFilter] = useState("");
+  const [lifecycleIntentId, setLifecycleIntentId] = useState("");
+  const [isLifecycleLoading, setIsLifecycleLoading] = useState(false);
+  const [lifecycleResult, setLifecycleResult] =
+    useState<AdminLifecycleResult | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [results, setResults] =
     useState<Partial<AdminSnapshot>>(EMPTY_RESULTS);
   const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const lifecycleAbortRef = useRef<AbortController | null>(null);
   const didInitialRefreshRef = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -143,6 +152,49 @@ export function AdminDashboard() {
     }
   }, [feeAccountFilter, feeEventsLimit, recentLimit, token]);
 
+  const loadLifecycle = useCallback(async () => {
+    const normalizedIntentId = lifecycleIntentId.trim();
+    if (!normalizedIntentId) {
+      return;
+    }
+
+    lifecycleAbortRef.current?.abort();
+
+    const controller = new AbortController();
+    lifecycleAbortRef.current = controller;
+    setIsLifecycleLoading(true);
+
+    const path = `/admin/options/executions/${encodeURIComponent(
+      normalizedIntentId,
+    )}/lifecycle`;
+
+    try {
+      const result = await fetchOptionExecutionLifecycle(
+        token,
+        normalizedIntentId,
+        controller.signal,
+      );
+      setLifecycleResult(result);
+    } catch (error) {
+      if (!isAbortError(error)) {
+        const details = toAdminErrorDetails(error);
+        setLifecycleResult({
+          error: details,
+          fetchedAt: Date.now(),
+          label: "Option Execution Lifecycle",
+          ok: false,
+          path,
+          status: details.status,
+        });
+      }
+    } finally {
+      if (lifecycleAbortRef.current === controller) {
+        lifecycleAbortRef.current = null;
+        setIsLifecycleLoading(false);
+      }
+    }
+  }, [lifecycleIntentId, token]);
+
   useEffect(() => {
     const storedToken = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
     if (storedToken) {
@@ -171,7 +223,10 @@ export function AdminDashboard() {
   }, [autoRefresh, refresh, tokenReady]);
 
   useEffect(() => {
-    return () => abortRef.current?.abort();
+    return () => {
+      abortRef.current?.abort();
+      lifecycleAbortRef.current?.abort();
+    };
   }, []);
 
   const systemMessage = useMemo(() => getSystemMessage(results), [results]);
@@ -354,6 +409,16 @@ export function AdminDashboard() {
               />
             );
           })}
+          <OptionLifecycleSection
+            intentId={lifecycleIntentId}
+            isLoading={isLifecycleLoading}
+            onIntentIdChange={setLifecycleIntentId}
+            onLoad={() => void loadLifecycle()}
+            onQuickFill={() =>
+              setLifecycleIntentId(KNOWN_V1S_OPTION_INTENT_ID)
+            }
+            result={lifecycleResult}
+          />
           <FeesDashboardSection
             accountFilter={feeAccountFilter}
             eventsLimit={feeEventsLimit}
@@ -421,6 +486,1124 @@ function DashboardSection({
       </div>
     </section>
   );
+}
+
+function OptionLifecycleSection({
+  intentId,
+  isLoading,
+  onIntentIdChange,
+  onLoad,
+  onQuickFill,
+  result,
+}: {
+  intentId: string;
+  isLoading: boolean;
+  onIntentIdChange: (value: string) => void;
+  onLoad: () => void;
+  onQuickFill: () => void;
+  result: AdminLifecycleResult | null;
+}) {
+  const path =
+    result?.path ??
+    "/admin/options/executions/:intent_id/lifecycle";
+  const canLoad = Boolean(intentId.trim()) && !isLoading;
+
+  return (
+    <section className="rounded border border-neutral-800 bg-neutral-900/70">
+      <div className="flex flex-col gap-3 border-b border-neutral-800 px-4 py-3 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-white">
+            Option Execution Lifecycle
+          </h2>
+          <p className="mt-1 font-mono text-xs text-neutral-500">
+            GET {path}
+          </p>
+        </div>
+        <LifecycleEndpointStatus isLoading={isLoading} result={result} />
+      </div>
+
+      <div className="grid gap-4 p-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_auto_auto] xl:items-end">
+          <label className="grid gap-1 text-sm text-neutral-300">
+            <span className="text-xs font-medium uppercase tracking-[0.12em] text-neutral-400">
+              Intent ID
+            </span>
+            <input
+              className="h-9 rounded border border-neutral-700 bg-neutral-950 px-3 font-mono text-sm text-neutral-100 outline-none transition focus:border-cyan-400"
+              onChange={(event) => onIntentIdChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && canLoad) {
+                  onLoad();
+                }
+              }}
+              placeholder="Option execution intent UUID"
+              spellCheck={false}
+              value={intentId}
+            />
+          </label>
+          <button
+            className="h-9 rounded border border-neutral-700 px-3 text-sm font-medium text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800"
+            onClick={onQuickFill}
+            type="button"
+          >
+            Fill V1S Intent
+          </button>
+          <button
+            className="h-9 rounded bg-cyan-400 px-4 text-sm font-semibold text-neutral-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!canLoad}
+            onClick={onLoad}
+            type="button"
+          >
+            {isLoading ? "Loading" : "Load lifecycle"}
+          </button>
+        </div>
+
+        {!result ? (
+          <EmptyState
+            text={
+              isLoading
+                ? "Loading lifecycle."
+                : "Enter an option execution intent id to load the lifecycle."
+            }
+          />
+        ) : result.ok ? (
+          <OptionLifecycleView data={result.data} />
+        ) : (
+          <ErrorPanel error={result.error} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LifecycleEndpointStatus({
+  isLoading,
+  result,
+}: {
+  isLoading: boolean;
+  result: AdminLifecycleResult | null;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-neutral-500">
+      {result ? (
+        <>
+          <span
+            className={
+              result.ok
+                ? "rounded bg-emerald-950 px-2 py-1 text-emerald-200"
+                : "rounded bg-red-950 px-2 py-1 text-red-200"
+            }
+          >
+            {result.ok ? `HTTP ${result.status}` : lifecycleErrorStatus(result)}
+          </span>
+          <span>{formatDateTime(result.fetchedAt)}</span>
+        </>
+      ) : (
+        <span>{isLoading ? "Loading" : "Idle"}</span>
+      )}
+    </div>
+  );
+}
+
+function OptionLifecycleView({ data }: { data: JsonValue }) {
+  if (!isJsonObject(data)) {
+    return <GenericDataView value={data} />;
+  }
+
+  return (
+    <div className="grid gap-5">
+      <LifecycleHealthSection health={objectField(data, "health")} />
+      <LifecycleIntentSection data={data} />
+      <LifecycleMetadataSection metadata={objectField(data, "metadata")} />
+      <LifecycleSignaturesSection signatures={objectField(data, "signatures")} />
+      <LifecycleSimulationSection simulation={objectField(data, "simulation")} />
+      <LifecycleCalldataSection calldata={objectField(data, "calldata")} />
+      <LifecycleBroadcastSection broadcast={objectField(data, "broadcast")} />
+      <LifecycleConfirmationSection
+        confirmation={objectField(data, "confirmation")}
+      />
+      <LifecycleEventsSection events={objectField(data, "events")} />
+      <LifecycleFeesSection fees={objectField(data, "fees")} />
+      <LifecycleTransfersSection transfers={objectField(data, "transfers")} />
+      <LifecycleReconciliationSection
+        reconciliation={objectField(data, "reconciliation")}
+      />
+    </div>
+  );
+}
+
+function LifecycleDetailSection({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <div className="border-t border-neutral-800 pt-5 first:border-t-0 first:pt-0">
+      <Subheading>{title}</Subheading>
+      {children}
+    </div>
+  );
+}
+
+function LifecycleHealthSection({
+  health,
+}: {
+  health: JsonObject | null;
+}) {
+  if (!health) {
+    return (
+      <LifecycleDetailSection title="Health">
+        <EmptyState text="No health data." />
+      </LifecycleDetailSection>
+    );
+  }
+
+  const stage = stringValue(health.stage);
+  const warnings = stringArrayField(health, "warnings");
+  const errors = stringArrayField(health, "errors");
+  const isTerminalSuccess = health.is_terminal_success === true;
+  const stageTone =
+    stage === "failed" || errors.length
+      ? "danger"
+      : warnings.length
+        ? "warn"
+        : stage === "reconciled"
+          ? "ok"
+          : "neutral";
+
+  return (
+    <LifecycleDetailSection title="Health">
+      <div className="grid gap-3">
+        <div className="flex flex-wrap gap-2">
+          <LifecycleBadge tone={stageTone}>stage: {stage || "n/a"}</LifecycleBadge>
+          <LifecycleBadge tone={isTerminalSuccess ? "ok" : "neutral"}>
+            terminal success: {isTerminalSuccess ? "true" : "false"}
+          </LifecycleBadge>
+          <LifecycleBadge tone={warnings.length ? "warn" : "neutral"}>
+            warnings: {warnings.length}
+          </LifecycleBadge>
+          <LifecycleBadge tone={errors.length ? "danger" : "neutral"}>
+            errors: {errors.length}
+          </LifecycleBadge>
+        </div>
+
+        {warnings.length ? (
+          <LifecycleList title="Warnings" values={warnings} />
+        ) : null}
+        {errors.length ? <LifecycleList title="Errors" values={errors} /> : null}
+      </div>
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleIntentSection({ data }: { data: JsonObject }) {
+  const intent = objectField(data, "intent");
+  const source = objectField(data, "source");
+  const trade = objectField(data, "trade");
+
+  const fields: LifecycleField[] = [
+    {
+      key: "intent_id",
+      label: "Intent ID",
+      value: firstDefined(data.intent_id, intent?.intent_id),
+    },
+    {
+      key: "status",
+      label: "Status",
+      value: firstDefined(data.status, intent?.status),
+    },
+    {
+      key: "source_type",
+      label: "Source Type",
+      value: firstDefined(source?.source_type, intent?.source_type),
+    },
+    {
+      key: "source_id",
+      label: "Source ID",
+      value: firstDefined(source?.source_id, intent?.source_id),
+    },
+    {
+      key: "buyer",
+      label: "Buyer",
+      value: firstDefined(trade?.buyer, intent?.buyer),
+    },
+    {
+      key: "seller",
+      label: "Seller",
+      value: firstDefined(trade?.seller, intent?.seller),
+    },
+    {
+      key: "option_id",
+      label: "Option ID",
+      value: firstDefined(trade?.option_id, intent?.option_id),
+    },
+    {
+      key: "quantity_contracts",
+      label: "Quantity",
+      value: firstDefined(
+        trade?.quantity,
+        trade?.quantity_contracts,
+        intent?.quantity,
+        intent?.quantity_contracts,
+      ),
+    },
+    {
+      key: "premium_per_contract_native",
+      label: "Premium",
+      value: firstDefined(
+        trade?.premium,
+        trade?.premium_per_contract_native,
+        intent?.premium,
+        intent?.premium_per_contract_native,
+      ),
+    },
+    {
+      key: "buyer_is_maker",
+      label: "Buyer Is Maker",
+      value: firstDefined(trade?.buyer_is_maker, intent?.buyer_is_maker),
+    },
+    {
+      key: "onchain_intent_id",
+      label: "Onchain Intent ID",
+      value: firstDefined(trade?.onchain_intent_id, intent?.onchain_intent_id),
+    },
+  ];
+
+  return (
+    <LifecycleDetailSection title="Intent / Trade">
+      <LifecycleFieldTable fields={fields} />
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleMetadataSection({
+  metadata,
+}: {
+  metadata: JsonObject | null;
+}) {
+  const fields: LifecycleField[] = [
+    {
+      key: "underlying",
+      label: "Underlying",
+      value: metadata?.underlying,
+    },
+    {
+      key: "settlement_asset",
+      label: "Settlement Asset",
+      value: metadata?.settlement_asset,
+    },
+    {
+      key: "expiry",
+      label: "Expiry",
+      value: metadata?.expiry,
+    },
+    {
+      key: "strike_1e8",
+      label: "Strike",
+      value: firstDefined(metadata?.strike, metadata?.strike_1e8),
+    },
+    {
+      key: "contract_size_1e8",
+      label: "Contract Size 1e8",
+      value: metadata?.contract_size_1e8,
+    },
+    {
+      key: "is_call",
+      label: "Is Call",
+      value: metadata?.is_call,
+    },
+    {
+      key: "is_european",
+      label: "Is European",
+      value: metadata?.is_european,
+    },
+  ];
+
+  return (
+    <LifecycleDetailSection title="Option Metadata">
+      <LifecycleFieldTable fields={fields} />
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleSignaturesSection({
+  signatures,
+}: {
+  signatures: JsonObject | null;
+}) {
+  const fields: LifecycleField[] = [
+    {
+      key: "buyer_signature_present",
+      label: "Buyer Signature Present",
+      value: signatures?.buyer_signature_present,
+    },
+    {
+      key: "seller_signature_present",
+      label: "Seller Signature Present",
+      value: signatures?.seller_signature_present,
+    },
+    {
+      key: "signature_mode",
+      label: "Signature Mode",
+      value: signatures?.signature_mode,
+    },
+  ];
+
+  return (
+    <LifecycleDetailSection title="Signatures">
+      <LifecycleFieldTable fields={fields} />
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleSimulationSection({
+  simulation,
+}: {
+  simulation: JsonObject | null;
+}) {
+  const fields: LifecycleField[] = [
+    {
+      key: "status",
+      label: "Simulation Status",
+      value: simulation?.status,
+    },
+    {
+      key: "block_number",
+      label: "Simulation Block",
+      value: simulation?.block_number,
+    },
+    {
+      key: "simulated_at_ms",
+      label: "Simulated At",
+      value: simulation?.simulated_at_ms,
+    },
+    {
+      key: "error",
+      label: "Error",
+      value: simulation?.error,
+    },
+    {
+      key: "revert_selector",
+      label: "Revert Selector",
+      value: simulation?.revert_selector,
+    },
+  ];
+
+  return (
+    <LifecycleDetailSection title="Simulation">
+      <LifecycleFieldTable fields={fields} />
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleCalldataSection({
+  calldata,
+}: {
+  calldata: JsonObject | null;
+}) {
+  const fields: LifecycleField[] = [
+    {
+      key: "present",
+      label: "Present",
+      value: calldata?.present,
+    },
+    {
+      key: "selector",
+      label: "Calldata Selector",
+      value: calldata?.selector,
+    },
+    {
+      key: "hex_length",
+      label: "Calldata Hex Length",
+      value: calldata?.hex_length,
+    },
+    {
+      key: "byte_length",
+      label: "Calldata Byte Length",
+      value: calldata?.byte_length,
+    },
+  ];
+
+  return (
+    <LifecycleDetailSection title="Calldata">
+      <LifecycleFieldTable fields={fields} />
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleBroadcastSection({
+  broadcast,
+}: {
+  broadcast: JsonObject | null;
+}) {
+  if (!broadcast) {
+    return (
+      <LifecycleDetailSection title="Broadcast / Gas Safety">
+        <EmptyState text="No broadcast transaction row." />
+      </LifecycleDetailSection>
+    );
+  }
+
+  const fields: LifecycleField[] = [
+    {
+      key: "transaction_id",
+      label: "Transaction ID",
+      value: broadcast.transaction_id,
+    },
+    {
+      key: "tx_hash",
+      label: "Tx Hash",
+      value: broadcast.tx_hash,
+    },
+    {
+      key: "from",
+      label: "From",
+      value: broadcast.from,
+    },
+    {
+      key: "to",
+      label: "To",
+      value: broadcast.to,
+    },
+    {
+      key: "status",
+      label: "Broadcast Status",
+      value: broadcast.status,
+    },
+    {
+      key: "gas_check_status",
+      label: "Gas Check Status",
+      value: broadcast.gas_check_status,
+    },
+    {
+      key: "estimated_gas",
+      label: "Estimated Gas",
+      value: broadcast.estimated_gas,
+    },
+    {
+      key: "required_gas",
+      label: "Required Gas",
+      value: broadcast.required_gas,
+    },
+    {
+      key: "broadcast_gas_limit",
+      label: "Broadcast Gas Limit",
+      value: broadcast.broadcast_gas_limit,
+    },
+    {
+      key: "gas_safety_bps",
+      label: "Gas Safety Bps",
+      value: broadcast.gas_safety_bps,
+    },
+    {
+      key: "gas_limit",
+      label: "Gas Limit",
+      value: broadcast.gas_limit,
+    },
+    {
+      key: "simulation_gas_limit",
+      label: "Simulation Gas Limit",
+      value: broadcast.simulation_gas_limit,
+    },
+    {
+      key: "gas_check_error",
+      label: "Gas Check Error",
+      value: broadcast.gas_check_error,
+    },
+    {
+      key: "created_at_ms",
+      label: "Created At",
+      value: broadcast.created_at_ms,
+    },
+    {
+      key: "updated_at_ms",
+      label: "Updated At",
+      value: broadcast.updated_at_ms,
+    },
+  ];
+
+  return (
+    <LifecycleDetailSection title="Broadcast / Gas Safety">
+      <LifecycleFieldTable fields={fields} />
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleConfirmationSection({
+  confirmation,
+}: {
+  confirmation: JsonObject | null;
+}) {
+  if (!confirmation) {
+    return (
+      <LifecycleDetailSection title="Confirmation">
+        <EmptyState text="No confirmation data." />
+      </LifecycleDetailSection>
+    );
+  }
+
+  const fields: LifecycleField[] = [
+    {
+      key: "confirmation_status",
+      label: "Confirmation Status",
+      value: confirmation.confirmation_status,
+    },
+    {
+      key: "receipt_status",
+      label: "Receipt Status",
+      value: confirmation.receipt_status,
+    },
+    {
+      key: "confirmed_block_number",
+      label: "Confirmed Block",
+      value: confirmation.confirmed_block_number,
+    },
+    {
+      key: "confirmed_at_ms",
+      label: "Confirmed At",
+      value: confirmation.confirmed_at_ms,
+    },
+    {
+      key: "gas_used",
+      label: "Gas Used",
+      value: confirmation.gas_used,
+    },
+    {
+      key: "effective_gas_price",
+      label: "Effective Gas Price",
+      value: confirmation.effective_gas_price,
+    },
+    {
+      key: "cumulative_gas_used",
+      label: "Cumulative Gas Used",
+      value: confirmation.cumulative_gas_used,
+    },
+    {
+      key: "receipt_block_hash",
+      label: "Receipt Block Hash",
+      value: confirmation.receipt_block_hash,
+    },
+    {
+      key: "receipt_transaction_index",
+      label: "Receipt Transaction Index",
+      value: confirmation.receipt_transaction_index,
+    },
+    {
+      key: "receipt_observed_at_ms",
+      label: "Receipt Observed At",
+      value: confirmation.receipt_observed_at_ms,
+    },
+    {
+      key: "confirmation_error",
+      label: "Confirmation Error",
+      value: confirmation.confirmation_error,
+    },
+  ];
+
+  return (
+    <LifecycleDetailSection title="Confirmation">
+      <LifecycleFieldTable fields={fields} />
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleEventsSection({ events }: { events: JsonObject | null }) {
+  const recent = arrayField(events, "recent");
+  const countsByName = objectField(events, "counts_by_event_name");
+  const countsByAddress = objectField(events, "counts_by_contract_address");
+
+  return (
+    <LifecycleDetailSection title="Events">
+      {!events ? (
+        <EmptyState text="No event summary." />
+      ) : (
+        <div className="grid gap-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Total Event Count"
+              value={formatDisplayValue("total", events.total)}
+              variant="normal"
+            />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <Subheading>Counts By Event Name</Subheading>
+              <LifecycleCountTable
+                emptyText="No event-name counts."
+                keyLabel="Event"
+                value={countsByName}
+                valueLabel="Count"
+              />
+            </div>
+            <div>
+              <Subheading>Counts By Contract Address</Subheading>
+              <LifecycleCountTable
+                emptyText="No contract-address counts."
+                keyLabel="Contract Address"
+                value={countsByAddress}
+                valueLabel="Count"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Subheading>Recent Events</Subheading>
+            {recent?.length ? (
+              <JsonTable rows={recent} />
+            ) : (
+              <EmptyState text="No recent events." />
+            )}
+          </div>
+        </div>
+      )}
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleFeesSection({ fees }: { fees: JsonObject | null }) {
+  const feeEvents = arrayField(fees, "events");
+  const totalsByRecipient = objectField(fees, "total_by_recipient");
+
+  return (
+    <LifecycleDetailSection title="Fees">
+      {!fees ? (
+        <EmptyState text="No fee summary." />
+      ) : (
+        <div className="grid gap-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Trading Fee Event Count"
+              value={formatDisplayValue(
+                "trading_fee_event_count",
+                fees.trading_fee_event_count,
+              )}
+            />
+          </div>
+          <div>
+            <Subheading>Total By Recipient</Subheading>
+            <LifecycleCountTable
+              emptyText="No recipient fee totals."
+              keyLabel="Recipient"
+              value={totalsByRecipient}
+              valueLabel="Total"
+            />
+          </div>
+          <div>
+            <Subheading>Fee Events</Subheading>
+            {feeEvents?.length ? (
+              <JsonTable rows={feeEvents} />
+            ) : (
+              <EmptyState text="No fee events." />
+            )}
+          </div>
+        </div>
+      )}
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleTransfersSection({
+  transfers,
+}: {
+  transfers: JsonObject | null;
+}) {
+  const transferEvents = arrayField(transfers, "events");
+
+  return (
+    <LifecycleDetailSection title="Transfers">
+      {!transfers ? (
+        <EmptyState text="No transfer summary." />
+      ) : (
+        <div className="grid gap-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Internal Transfer Count"
+              value={formatDisplayValue(
+                "internal_transfer_count",
+                transfers.internal_transfer_count,
+              )}
+            />
+          </div>
+          <div>
+            <Subheading>Transfer Events</Subheading>
+            {transferEvents?.length ? (
+              <JsonTable rows={transferEvents} />
+            ) : (
+              <EmptyState text="No transfer events." />
+            )}
+          </div>
+        </div>
+      )}
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleReconciliationSection({
+  reconciliation,
+}: {
+  reconciliation: JsonObject | null;
+}) {
+  if (!reconciliation) {
+    return (
+      <LifecycleDetailSection title="Reconciliation">
+        <EmptyState text="No reconciliation row." />
+      </LifecycleDetailSection>
+    );
+  }
+
+  const fields: LifecycleField[] = [
+    {
+      key: "status",
+      label: "Status",
+      value: reconciliation.status,
+    },
+    {
+      key: "event_check_status",
+      label: "Event Check Status",
+      value: reconciliation.event_check_status,
+    },
+    {
+      key: "fee_check_status",
+      label: "Fee Check Status",
+      value: reconciliation.fee_check_status,
+    },
+    {
+      key: "premium_check_status",
+      label: "Premium Check Status",
+      value: reconciliation.premium_check_status,
+    },
+    {
+      key: "error",
+      label: "Error",
+      value: firstDefined(
+        reconciliation.error,
+        reconciliation.mismatch_reason,
+        reconciliation.missing_required,
+      ),
+    },
+    {
+      key: "checked_at_ms",
+      label: "Checked At",
+      value: firstDefined(
+        reconciliation.checked_at,
+        reconciliation.checked_at_ms,
+        reconciliation.reconciled_at_ms,
+        reconciliation.updated_at_ms,
+      ),
+    },
+    {
+      key: "id",
+      label: "Reconciliation ID",
+      value: reconciliation.id,
+    },
+    {
+      key: "trade_executed_event_id",
+      label: "Trade Executed Event ID",
+      value: reconciliation.trade_executed_event_id,
+    },
+    {
+      key: "margin_trade_event_id",
+      label: "Margin Trade Event ID",
+      value: reconciliation.margin_trade_event_id,
+    },
+    {
+      key: "trading_fee_event_count",
+      label: "Trading Fee Event Count",
+      value: reconciliation.trading_fee_event_count,
+    },
+    {
+      key: "internal_transfer_event_count",
+      label: "Internal Transfer Event Count",
+      value: reconciliation.internal_transfer_event_count,
+    },
+    {
+      key: "decoded_event_count",
+      label: "Decoded Event Count",
+      value: reconciliation.decoded_event_count,
+    },
+    {
+      key: "strict",
+      label: "Strict",
+      value: reconciliation.strict,
+    },
+    {
+      key: "requires_events",
+      label: "Requires Events",
+      value: reconciliation.requires_events,
+    },
+  ];
+
+  return (
+    <LifecycleDetailSection title="Reconciliation">
+      <div className="grid gap-4">
+        <LifecycleFieldTable fields={fields} />
+        <div>
+          <Subheading>Details JSON</Subheading>
+          <JsonBlock compact value={reconciliation} />
+        </div>
+      </div>
+    </LifecycleDetailSection>
+  );
+}
+
+function LifecycleList({
+  title,
+  values,
+}: {
+  title: string;
+  values: string[];
+}) {
+  return (
+    <div className="rounded border border-neutral-800 bg-neutral-950 p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
+        {title}
+      </div>
+      <ul className="grid gap-1 text-sm text-neutral-200">
+        {values.map((value, index) => (
+          <li className="break-words font-mono" key={`${value}-${index}`}>
+            {value}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function LifecycleBadge({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "danger" | "neutral" | "ok" | "warn";
+}) {
+  const className =
+    tone === "danger"
+      ? "border-red-500/50 bg-red-950/70 text-red-100"
+      : tone === "ok"
+        ? "border-emerald-500/40 bg-emerald-950/60 text-emerald-100"
+        : tone === "warn"
+          ? "border-amber-500/50 bg-amber-950/60 text-amber-100"
+          : "border-neutral-800 bg-neutral-950 text-neutral-300";
+
+  return (
+    <span className={`rounded border px-2.5 py-1 text-sm font-medium ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+type LifecycleField = {
+  key: string;
+  label: string;
+  value: JsonValue | undefined;
+};
+
+function LifecycleFieldTable({ fields }: { fields: LifecycleField[] }) {
+  return (
+    <div className="overflow-x-auto rounded border border-neutral-800">
+      <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+        <tbody>
+          {fields.map((field) => (
+            <tr
+              className="border-b border-neutral-800 last:border-b-0"
+              key={`${field.key}-${field.label}`}
+            >
+              <th className="w-64 bg-neutral-950 px-3 py-2 align-top text-xs font-medium uppercase tracking-[0.08em] text-neutral-500">
+                {field.label}
+              </th>
+              <td className="px-3 py-2 align-top font-mono text-neutral-200">
+                <LifecycleValue fieldKey={field.key} value={field.value} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LifecycleCountTable({
+  emptyText,
+  keyLabel,
+  value,
+  valueLabel,
+}: {
+  emptyText: string;
+  keyLabel: string;
+  value: JsonObject | null;
+  valueLabel: string;
+}) {
+  const entries = value ? Object.entries(value) : [];
+
+  if (!entries.length) {
+    return <EmptyState text={emptyText} />;
+  }
+
+  return (
+    <div className="overflow-x-auto rounded border border-neutral-800">
+      <table className="w-full min-w-[420px] border-collapse text-left text-sm">
+        <thead>
+          <tr className="border-b border-neutral-800 bg-neutral-950">
+            <th className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
+              {keyLabel}
+            </th>
+            <th className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-neutral-500">
+              {valueLabel}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([key, entryValue]) => (
+            <tr className="border-b border-neutral-800 last:border-b-0" key={key}>
+              <td className="max-w-[420px] px-3 py-2 align-top font-mono text-xs text-neutral-200">
+                <LifecycleValue fieldKey={keyLabel} value={key} />
+              </td>
+              <td className="px-3 py-2 align-top font-mono text-xs text-neutral-200">
+                <LifecycleValue fieldKey={valueLabel} value={entryValue} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LifecycleValue({
+  fieldKey,
+  value,
+}: {
+  fieldKey: string;
+  value: JsonValue | undefined;
+}) {
+  if (value === undefined) {
+    return <span className="text-neutral-500">n/a</span>;
+  }
+
+  if (value === null) {
+    return <span className="text-neutral-500">null</span>;
+  }
+
+  if (Array.isArray(value) || isJsonObject(value)) {
+    return <JsonBlock compact value={value} />;
+  }
+
+  if (typeof value === "string" && isCopyableIdentifier(value)) {
+    return <CopyableValue value={value} />;
+  }
+
+  if (fieldKey === "expiry") {
+    return <>{formatTimestampWithRaw(value)}</>;
+  }
+
+  return <>{formatDisplayValue(fieldKey, value)}</>;
+}
+
+function CopyableValue({ value }: { value: string }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-2 align-top">
+      <span
+        className="inline-block max-w-[min(34rem,70vw)] select-all truncate align-top"
+        title={value}
+      >
+        {shortenLongIdentifier(value)}
+      </span>
+      <button
+        className="shrink-0 rounded border border-neutral-700 px-1.5 py-0.5 text-[11px] font-medium text-neutral-300 transition hover:border-neutral-500 hover:bg-neutral-800"
+        onClick={() => copyToClipboard(value)}
+        type="button"
+      >
+        Copy
+      </button>
+    </span>
+  );
+}
+
+function objectField(value: JsonObject | null | undefined, key: string) {
+  if (!value) {
+    return null;
+  }
+
+  const entry = value[key];
+  return isJsonObject(entry) ? entry : null;
+}
+
+function arrayField(value: JsonObject | null | undefined, key: string) {
+  if (!value) {
+    return null;
+  }
+
+  const entry = value[key];
+  return Array.isArray(entry) ? entry : null;
+}
+
+function firstDefined(...values: (JsonValue | undefined)[]) {
+  return values.find((value) => value !== undefined);
+}
+
+function stringValue(value: JsonValue | undefined) {
+  return typeof value === "string" ? value : "";
+}
+
+function stringArrayField(value: JsonObject, key: string) {
+  const entry = value[key];
+  if (!Array.isArray(entry)) {
+    return [];
+  }
+
+  return entry.filter((item): item is string => typeof item === "string");
+}
+
+function isCopyableIdentifier(value: string) {
+  return (
+    /^0x[a-fA-F0-9]{16,}$/.test(value) ||
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+      value,
+    ) ||
+    (value.length > 48 && !/\s/.test(value))
+  );
+}
+
+function shortenLongIdentifier(value: string) {
+  if (value.length <= 32) {
+    return value;
+  }
+
+  if (value.startsWith("0x")) {
+    return `${value.slice(0, 10)}...${value.slice(-8)}`;
+  }
+
+  return `${value.slice(0, 12)}...${value.slice(-8)}`;
+}
+
+function copyToClipboard(value: string) {
+  if (typeof navigator === "undefined" || !navigator.clipboard) {
+    return;
+  }
+
+  void navigator.clipboard.writeText(value).catch(() => undefined);
+}
+
+function formatTimestampWithRaw(value: JsonValue) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return formatDisplayValue("expiry", value);
+  }
+
+  const timestamp = readFiniteNumber(value);
+  const rawValue = String(value);
+  if (timestamp === null) {
+    return rawValue;
+  }
+
+  const formatted = formatDateTime(timestamp);
+  return formatted === "n/a" ? rawValue : `${formatted} (${rawValue})`;
+}
+
+function lifecycleErrorStatus(result: Extract<AdminLifecycleResult, { ok: false }>) {
+  return result.status ? `HTTP ${result.status}` : "ERR";
 }
 
 function FeesDashboardSection({

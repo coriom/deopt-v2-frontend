@@ -63,3 +63,25 @@ export type AdminEndpointResult =
 export type AdminSnapshot = Record<AdminEndpointKey, AdminEndpointResult>;
 
 export type RecentLimit = 5 | 20 | 50 | 100;
+
+export type AdminLifecycleSuccess = {
+  ok: true;
+  label: string;
+  path: string;
+  data: JsonValue;
+  fetchedAt: number;
+  status: number;
+};
+
+export type AdminLifecycleFailure = {
+  ok: false;
+  label: string;
+  path: string;
+  error: AdminApiErrorDetails;
+  fetchedAt: number;
+  status?: number;
+};
+
+export type AdminLifecycleResult =
+  | AdminLifecycleSuccess
+  | AdminLifecycleFailure;

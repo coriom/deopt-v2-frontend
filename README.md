@@ -46,3 +46,13 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+
+
+## ⚖️ License
+
+This repository is part of the **deopt** ecosystem and is licensed under the **Business Source License 1.1** (BSL 1.1).
+
+* **Non-Production & Educational use** is fully authorized.
+* **Commercial & Production use** is strictly prohibited until **May 20, 2030**, after which the code will automatically transition to the **GNU General Public License v3.0 (GPL-3.0)**.
