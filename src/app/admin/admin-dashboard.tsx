@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  fetchAdminFeesOnchain,
   fetchAdminSnapshot,
   fetchOptionExecutionLifecycle,
   getAdminBaseUrl,
@@ -13,6 +14,7 @@ import type {
   AdminEndpointKey,
   AdminEndpointResult,
   AdminEndpointSuccess,
+  AdminFeesOnchainResult,
   AdminLifecycleResult,
   AdminSnapshot,
   JsonObject,
@@ -24,6 +26,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 const TOKEN_STORAGE_KEY = "deopt.adminToken";
 const AUTO_REFRESH_MS = 10_000;
 const KNOWN_V1S_OPTION_INTENT_ID = "e6d2941b-65f7-413a-958f-74ab22c53b08";
+const KNOWN_V2E_G_OPTION_INTENT_ID = "94897ee5-e855-40b6-a917-1476578fe48b";
+const KNOWN_V2E_G_TX_HASH =
+  "0xd51ea881cdbc32fe724034c0f7e25ade7359ea3d5b6cadb17b7c345effefc72c";
 
 const EMPTY_RESULTS: Partial<AdminSnapshot> = {};
 
@@ -112,6 +117,10 @@ export function AdminDashboard() {
   const [isLifecycleLoading, setIsLifecycleLoading] = useState(false);
   const [lifecycleResult, setLifecycleResult] =
     useState<AdminLifecycleResult | null>(null);
+  const [feesOnchainTxHash, setFeesOnchainTxHash] = useState("");
+  const [isFeesOnchainLoading, setIsFeesOnchainLoading] = useState(false);
+  const [feesOnchainResult, setFeesOnchainResult] =
+    useState<AdminFeesOnchainResult | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [results, setResults] =
@@ -119,6 +128,7 @@ export function AdminDashboard() {
   const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const lifecycleAbortRef = useRef<AbortController | null>(null);
+  const feesOnchainAbortRef = useRef<AbortController | null>(null);
   const didInitialRefreshRef = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -222,10 +232,52 @@ export function AdminDashboard() {
     return () => window.clearInterval(interval);
   }, [autoRefresh, refresh, tokenReady]);
 
+  const loadFeesOnchain = useCallback(async () => {
+    const normalizedTxHash = feesOnchainTxHash.trim();
+
+    feesOnchainAbortRef.current?.abort();
+
+    const controller = new AbortController();
+    feesOnchainAbortRef.current = controller;
+    setIsFeesOnchainLoading(true);
+
+    const query = normalizedTxHash
+      ? `?tx_hash=${encodeURIComponent(normalizedTxHash)}`
+      : "";
+    const path = `/admin/fees/onchain${query}`;
+
+    try {
+      const result = await fetchAdminFeesOnchain(
+        token,
+        normalizedTxHash,
+        controller.signal,
+      );
+      setFeesOnchainResult(result);
+    } catch (error) {
+      if (!isAbortError(error)) {
+        const details = toAdminErrorDetails(error);
+        setFeesOnchainResult({
+          error: details,
+          fetchedAt: Date.now(),
+          label: "On-chain Fee Events",
+          ok: false,
+          path,
+          status: details.status,
+        });
+      }
+    } finally {
+      if (feesOnchainAbortRef.current === controller) {
+        feesOnchainAbortRef.current = null;
+        setIsFeesOnchainLoading(false);
+      }
+    }
+  }, [feesOnchainTxHash, token]);
+
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
       lifecycleAbortRef.current?.abort();
+      feesOnchainAbortRef.current?.abort();
     };
   }, []);
 
@@ -414,10 +466,21 @@ export function AdminDashboard() {
             isLoading={isLifecycleLoading}
             onIntentIdChange={setLifecycleIntentId}
             onLoad={() => void loadLifecycle()}
-            onQuickFill={() =>
+            onQuickFillV1S={() =>
               setLifecycleIntentId(KNOWN_V1S_OPTION_INTENT_ID)
             }
+            onQuickFillV2EG={() =>
+              setLifecycleIntentId(KNOWN_V2E_G_OPTION_INTENT_ID)
+            }
             result={lifecycleResult}
+          />
+          <AdminFeesOnchainSection
+            isLoading={isFeesOnchainLoading}
+            onLoad={() => void loadFeesOnchain()}
+            onQuickFillV2EG={() => setFeesOnchainTxHash(KNOWN_V2E_G_TX_HASH)}
+            onTxHashChange={setFeesOnchainTxHash}
+            result={feesOnchainResult}
+            txHash={feesOnchainTxHash}
           />
           <FeesDashboardSection
             accountFilter={feeAccountFilter}
@@ -493,14 +556,16 @@ function OptionLifecycleSection({
   isLoading,
   onIntentIdChange,
   onLoad,
-  onQuickFill,
+  onQuickFillV1S,
+  onQuickFillV2EG,
   result,
 }: {
   intentId: string;
   isLoading: boolean;
   onIntentIdChange: (value: string) => void;
   onLoad: () => void;
-  onQuickFill: () => void;
+  onQuickFillV1S: () => void;
+  onQuickFillV2EG: () => void;
   result: AdminLifecycleResult | null;
 }) {
   const path =
@@ -523,7 +588,7 @@ function OptionLifecycleSection({
       </div>
 
       <div className="grid gap-4 p-4">
-        <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_auto_auto] xl:items-end">
+        <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_auto_auto_auto] xl:items-end">
           <label className="grid gap-1 text-sm text-neutral-300">
             <span className="text-xs font-medium uppercase tracking-[0.12em] text-neutral-400">
               Intent ID
@@ -543,10 +608,17 @@ function OptionLifecycleSection({
           </label>
           <button
             className="h-9 rounded border border-neutral-700 px-3 text-sm font-medium text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800"
-            onClick={onQuickFill}
+            onClick={onQuickFillV1S}
             type="button"
           >
             Fill V1S Intent
+          </button>
+          <button
+            className="h-9 rounded border border-neutral-700 px-3 text-sm font-medium text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800"
+            onClick={onQuickFillV2EG}
+            type="button"
+          >
+            Fill V2E-G Intent
           </button>
           <button
             className="h-9 rounded bg-cyan-400 px-4 text-sm font-semibold text-neutral-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
@@ -601,6 +673,312 @@ function LifecycleEndpointStatus({
       ) : (
         <span>{isLoading ? "Loading" : "Idle"}</span>
       )}
+    </div>
+  );
+}
+
+function AdminFeesOnchainSection({
+  isLoading,
+  onLoad,
+  onQuickFillV2EG,
+  onTxHashChange,
+  result,
+  txHash,
+}: {
+  isLoading: boolean;
+  onLoad: () => void;
+  onQuickFillV2EG: () => void;
+  onTxHashChange: (value: string) => void;
+  result: AdminFeesOnchainResult | null;
+  txHash: string;
+}) {
+  const trimmedTxHash = txHash.trim();
+  const queryFragment = trimmedTxHash
+    ? `?tx_hash=${trimmedTxHash}`
+    : "";
+  const path = result?.path ?? `/admin/fees/onchain${queryFragment}`;
+  const canLoad = !isLoading;
+
+  return (
+    <section className="rounded border border-neutral-800 bg-neutral-900/70">
+      <div className="flex flex-col gap-3 border-b border-neutral-800 px-4 py-3 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-white">
+            On-chain Fee Events
+          </h2>
+          <p className="mt-1 font-mono text-xs text-neutral-500">
+            GET {path}
+          </p>
+        </div>
+        <FeesOnchainEndpointStatus isLoading={isLoading} result={result} />
+      </div>
+
+      <div className="grid gap-4 p-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_auto_auto] xl:items-end">
+          <label className="grid gap-1 text-sm text-neutral-300">
+            <span className="text-xs font-medium uppercase tracking-[0.12em] text-neutral-400">
+              Tx Hash (optional)
+            </span>
+            <input
+              className="h-9 rounded border border-neutral-700 bg-neutral-950 px-3 font-mono text-sm text-neutral-100 outline-none transition focus:border-cyan-400"
+              onChange={(event) => onTxHashChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && canLoad) {
+                  onLoad();
+                }
+              }}
+              placeholder="0x... (empty = all observed fee events)"
+              spellCheck={false}
+              value={txHash}
+            />
+          </label>
+          <button
+            className="h-9 rounded border border-neutral-700 px-3 text-sm font-medium text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800"
+            onClick={onQuickFillV2EG}
+            type="button"
+          >
+            Fill V2E-G Tx
+          </button>
+          <button
+            className="h-9 rounded bg-cyan-400 px-4 text-sm font-semibold text-neutral-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!canLoad}
+            onClick={onLoad}
+            type="button"
+          >
+            {isLoading ? "Loading" : "Load on-chain fees"}
+          </button>
+        </div>
+
+        {!result ? (
+          <EmptyState
+            text={
+              isLoading
+                ? "Loading on-chain fees."
+                : "Load to fetch /admin/fees/onchain. Optional tx_hash filter."
+            }
+          />
+        ) : result.ok ? (
+          <AdminFeesOnchainView data={result.data} />
+        ) : (
+          <ErrorPanel error={result.error} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function FeesOnchainEndpointStatus({
+  isLoading,
+  result,
+}: {
+  isLoading: boolean;
+  result: AdminFeesOnchainResult | null;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-neutral-500">
+      {result ? (
+        <>
+          <span
+            className={
+              result.ok
+                ? "rounded bg-emerald-950 px-2 py-1 text-emerald-200"
+                : "rounded bg-red-950 px-2 py-1 text-red-200"
+            }
+          >
+            {result.ok
+              ? `HTTP ${result.status}`
+              : result.status
+                ? `HTTP ${result.status}`
+                : "ERR"}
+          </span>
+          <span>{formatDateTime(result.fetchedAt)}</span>
+        </>
+      ) : (
+        <span>{isLoading ? "Loading" : "Idle"}</span>
+      )}
+    </div>
+  );
+}
+
+function AdminFeesOnchainView({ data }: { data: JsonValue }) {
+  if (!isJsonObject(data)) {
+    return <GenericDataView value={data} />;
+  }
+
+  const eventModel = stringValue(data.event_model);
+  const sourcePriority = stringValue(data.source_priority);
+  const feeRebatedV2Count = toFiniteNumber(data.fee_rebated_v2_count);
+  const feeChargedV2Count = toFiniteNumber(data.fee_charged_v2_count);
+  const transactions = arrayField(data, "transactions");
+  const events = arrayField(data, "events");
+  const byTrader = objectField(data, "by_trader");
+  const byRecipient = objectField(data, "by_recipient");
+  const bySide = objectField(data, "by_side");
+  const rebatedByTrader = objectField(data, "rebated_by_trader");
+  const filter = objectField(data, "filter");
+
+  return (
+    <div className="grid gap-4">
+      <LifecycleFeesEventModelBanner
+        eventModel={eventModel}
+        feeRebatedV2Count={feeRebatedV2Count}
+        sourcePriority={sourcePriority}
+      />
+
+      {filter ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+          <span className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 font-mono">
+            tx_hash: {filter.tx_hash ? String(filter.tx_hash) : "all"}
+          </span>
+          <span className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 font-mono">
+            limit: {filter.limit !== undefined ? String(filter.limit) : "n/a"}
+          </span>
+        </div>
+      ) : null}
+
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+        <MetricCard
+          label="Event Model"
+          value={formatDisplayValue("event_model", data.event_model)}
+          variant={
+            eventModel === "mixed"
+              ? "warn"
+              : eventModel === "v2"
+                ? "ok"
+                : "normal"
+          }
+        />
+        <MetricCard
+          label="Source Priority"
+          value={formatDisplayValue("source_priority", data.source_priority)}
+          variant={sourcePriority === "v2" ? "ok" : "muted"}
+        />
+        <MetricCard
+          label="FeeChargedV2 Count"
+          value={formatDisplayValue(
+            "fee_charged_v2_count",
+            data.fee_charged_v2_count,
+          )}
+          variant={
+            feeChargedV2Count !== null && feeChargedV2Count > 0
+              ? "ok"
+              : "muted"
+          }
+        />
+        <MetricCard
+          label="FeeRebatedV2 Count"
+          value={formatDisplayValue(
+            "fee_rebated_v2_count",
+            data.fee_rebated_v2_count,
+          )}
+          variant={
+            feeRebatedV2Count !== null && feeRebatedV2Count > 0
+              ? "ok"
+              : "muted"
+          }
+        />
+        <MetricCard
+          label="Trading Fee Event Count"
+          value={formatDisplayValue(
+            "trading_fee_event_count",
+            data.trading_fee_event_count,
+          )}
+        />
+        <MetricCard
+          label="Observed Total Charged"
+          value={formatDisplayValue(
+            "observed_total_charged",
+            data.observed_total_charged,
+          )}
+        />
+        <MetricCard
+          label="Observed Total Rebated"
+          value={formatDisplayValue(
+            "observed_total_rebated",
+            data.observed_total_rebated,
+          )}
+        />
+        <MetricCard
+          label="Net Protocol Fee"
+          value={formatDisplayValue("net_protocol_fee", data.net_protocol_fee)}
+        />
+        <MetricCard
+          label="Backend Ledger Status"
+          value={formatDisplayValue(
+            "backend_ledger_status",
+            data.backend_ledger_status,
+          )}
+          variant="muted"
+        />
+        <MetricCard
+          label="Reconciliation Status"
+          value={formatDisplayValue(
+            "reconciliation_status",
+            data.reconciliation_status,
+          )}
+          variant="muted"
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div>
+          <Subheading>By Side</Subheading>
+          <LifecycleCountTable
+            emptyText="No per-side totals."
+            keyLabel="Side"
+            value={bySide}
+            valueLabel="Charged"
+          />
+        </div>
+        <div>
+          <Subheading>By Trader (Charged)</Subheading>
+          <LifecycleCountTable
+            emptyText="No per-trader totals."
+            keyLabel="Trader"
+            value={byTrader}
+            valueLabel="Charged"
+          />
+        </div>
+        <div>
+          <Subheading>By Recipient</Subheading>
+          <LifecycleCountTable
+            emptyText="No per-recipient totals."
+            keyLabel="Recipient"
+            value={byRecipient}
+            valueLabel="Total"
+          />
+        </div>
+      </div>
+
+      {rebatedByTrader && Object.keys(rebatedByTrader).length ? (
+        <div>
+          <Subheading>Rebated By Trader (V2)</Subheading>
+          <LifecycleCountTable
+            emptyText="No rebates recorded."
+            keyLabel="Trader"
+            value={rebatedByTrader}
+            valueLabel="Rebated"
+          />
+        </div>
+      ) : null}
+
+      <div>
+        <Subheading>Per-Tx Breakdown</Subheading>
+        {transactions?.length ? (
+          <JsonTable rows={transactions} />
+        ) : (
+          <EmptyState text="No per-tx breakdown." />
+        )}
+      </div>
+
+      <div>
+        <Subheading>Fee Events</Subheading>
+        {events?.length ? (
+          <JsonTable rows={events} />
+        ) : (
+          <EmptyState text="No fee events." />
+        )}
+      </div>
     </div>
   );
 }
@@ -1165,7 +1543,31 @@ function LifecycleEventsSection({ events }: { events: JsonObject | null }) {
 
 function LifecycleFeesSection({ fees }: { fees: JsonObject | null }) {
   const feeEvents = arrayField(fees, "events");
-  const totalsByRecipient = objectField(fees, "total_by_recipient");
+  const totalsByRecipient = objectField(
+    fees,
+    "by_recipient",
+  ) ?? objectField(fees, "total_by_recipient");
+  const byTrader = objectField(fees, "by_trader");
+  const bySide = objectField(fees, "by_side");
+  const rebatedByTrader = objectField(fees, "rebated_by_trader");
+
+  const eventModel = stringValue(fees?.event_model);
+  const sourcePriority = stringValue(fees?.source_priority);
+  const feeChargedV2Count = toFiniteNumber(fees?.fee_charged_v2_count);
+  const feeRebatedV2Count = toFiniteNumber(fees?.fee_rebated_v2_count);
+
+  const v2Charged =
+    feeEvents?.filter(
+      (row) =>
+        isJsonObject(row) &&
+        row.event_name === "FeeChargedV2",
+    ) ?? [];
+  const v2Rebated =
+    feeEvents?.filter(
+      (row) =>
+        isJsonObject(row) &&
+        row.event_name === "FeeRebatedV2",
+    ) ?? [];
 
   return (
     <LifecycleDetailSection title="Fees">
@@ -1173,7 +1575,29 @@ function LifecycleFeesSection({ fees }: { fees: JsonObject | null }) {
         <EmptyState text="No fee summary." />
       ) : (
         <div className="grid gap-4">
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <LifecycleFeesEventModelBanner
+            eventModel={eventModel}
+            feeRebatedV2Count={feeRebatedV2Count}
+            sourcePriority={sourcePriority}
+          />
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+            <MetricCard
+              label="Event Model"
+              value={formatDisplayValue("event_model", fees.event_model)}
+              variant={
+                eventModel === "mixed"
+                  ? "warn"
+                  : eventModel === "v2"
+                    ? "ok"
+                    : "normal"
+              }
+            />
+            <MetricCard
+              label="Source Priority"
+              value={formatDisplayValue("source_priority", fees.source_priority)}
+              variant={sourcePriority === "v2" ? "ok" : "muted"}
+            />
             <MetricCard
               label="Trading Fee Event Count"
               value={formatDisplayValue(
@@ -1181,18 +1605,129 @@ function LifecycleFeesSection({ fees }: { fees: JsonObject | null }) {
                 fees.trading_fee_event_count,
               )}
             />
-          </div>
-          <div>
-            <Subheading>Total By Recipient</Subheading>
-            <LifecycleCountTable
-              emptyText="No recipient fee totals."
-              keyLabel="Recipient"
-              value={totalsByRecipient}
-              valueLabel="Total"
+            <MetricCard
+              label="FeeChargedV2 Count"
+              value={formatDisplayValue(
+                "fee_charged_v2_count",
+                fees.fee_charged_v2_count,
+              )}
+              variant={
+                feeChargedV2Count !== null && feeChargedV2Count > 0
+                  ? "ok"
+                  : "muted"
+              }
+            />
+            <MetricCard
+              label="FeeRebatedV2 Count"
+              value={formatDisplayValue(
+                "fee_rebated_v2_count",
+                fees.fee_rebated_v2_count,
+              )}
+              variant={
+                feeRebatedV2Count !== null && feeRebatedV2Count > 0
+                  ? "ok"
+                  : "muted"
+              }
+            />
+            <MetricCard
+              label="Observed Total Charged"
+              value={formatDisplayValue(
+                "observed_total_charged",
+                fees.observed_total_charged,
+              )}
+            />
+            <MetricCard
+              label="Observed Total Rebated"
+              value={formatDisplayValue(
+                "observed_total_rebated",
+                fees.observed_total_rebated,
+              )}
+            />
+            <MetricCard
+              label="Net Protocol Fee"
+              value={formatDisplayValue(
+                "net_protocol_fee",
+                fees.net_protocol_fee,
+              )}
+            />
+            <MetricCard
+              label="Backend Ledger Status"
+              value={formatDisplayValue(
+                "backend_ledger_status",
+                fees.backend_ledger_status,
+              )}
+              variant="muted"
+            />
+            <MetricCard
+              label="Reconciliation Status"
+              value={formatDisplayValue(
+                "reconciliation_status",
+                fees.reconciliation_status,
+              )}
+              variant="muted"
             />
           </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div>
+              <Subheading>By Side</Subheading>
+              <LifecycleCountTable
+                emptyText="No per-side totals."
+                keyLabel="Side"
+                value={bySide}
+                valueLabel="Charged"
+              />
+            </div>
+            <div>
+              <Subheading>By Trader (Charged)</Subheading>
+              <LifecycleCountTable
+                emptyText="No per-trader totals."
+                keyLabel="Trader"
+                value={byTrader}
+                valueLabel="Charged"
+              />
+            </div>
+            <div>
+              <Subheading>By Recipient</Subheading>
+              <LifecycleCountTable
+                emptyText="No recipient fee totals."
+                keyLabel="Recipient"
+                value={totalsByRecipient}
+                valueLabel="Total"
+              />
+            </div>
+          </div>
+
+          {rebatedByTrader && Object.keys(rebatedByTrader).length ? (
+            <div>
+              <Subheading>Rebated By Trader (V2)</Subheading>
+              <LifecycleCountTable
+                emptyText="No rebates recorded."
+                keyLabel="Trader"
+                value={rebatedByTrader}
+                valueLabel="Rebated"
+              />
+            </div>
+          ) : null}
+
+          <div className="grid gap-3">
+            <Subheading>FeeChargedV2 Events</Subheading>
+            {v2Charged.length ? (
+              <LifecycleV2FeeEventCards entries={v2Charged} kind="charged" />
+            ) : (
+              <EmptyState text="No FeeChargedV2 events." />
+            )}
+          </div>
+
+          {v2Rebated.length ? (
+            <div className="grid gap-3">
+              <Subheading>FeeRebatedV2 Events</Subheading>
+              <LifecycleV2FeeEventCards entries={v2Rebated} kind="rebated" />
+            </div>
+          ) : null}
+
           <div>
-            <Subheading>Fee Events</Subheading>
+            <Subheading>All Fee Events</Subheading>
             {feeEvents?.length ? (
               <JsonTable rows={feeEvents} />
             ) : (
@@ -1202,6 +1737,187 @@ function LifecycleFeesSection({ fees }: { fees: JsonObject | null }) {
         </div>
       )}
     </LifecycleDetailSection>
+  );
+}
+
+function LifecycleFeesEventModelBanner({
+  eventModel,
+  feeRebatedV2Count,
+  sourcePriority,
+}: {
+  eventModel: string;
+  feeRebatedV2Count: number | null;
+  sourcePriority: string;
+}) {
+  const messages: { tone: "ok" | "warn" | "neutral"; text: string }[] = [];
+
+  if (eventModel === "mixed") {
+    messages.push({
+      tone: "warn",
+      text:
+        "event_model = mixed: V2 is the source of truth; V1 compatibility " +
+        "events (TradingFeeCharged) are present but not used for totals.",
+    });
+  } else if (eventModel === "v2") {
+    messages.push({
+      tone: "ok",
+      text:
+        "event_model = v2: totals come from FeeChargedV2 / FeeRebatedV2 only.",
+    });
+  } else if (eventModel === "v1") {
+    messages.push({
+      tone: "neutral",
+      text:
+        "event_model = v1: totals come from the legacy TradingFeeCharged " +
+        "event stream only.",
+    });
+  } else if (eventModel === "none") {
+    messages.push({
+      tone: "neutral",
+      text: "event_model = none: no fee events were indexed for this trade.",
+    });
+  }
+
+  if (sourcePriority === "v2") {
+    messages.push({
+      tone: "ok",
+      text: "source_priority = v2: totals use V2 FeeChargedV2 / FeeRebatedV2.",
+    });
+  }
+
+  if (feeRebatedV2Count === 0) {
+    messages.push({
+      tone: "neutral",
+      text: "No FeeRebatedV2 emitted (Tier0 has no negative maker ppm).",
+    });
+  }
+
+  if (!messages.length) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-2">
+      {messages.map((message, index) => (
+        <div
+          className={
+            message.tone === "ok"
+              ? "rounded border border-emerald-500/40 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-100"
+              : message.tone === "warn"
+                ? "rounded border border-amber-500/50 bg-amber-950/50 px-3 py-2 text-sm text-amber-100"
+                : "rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-300"
+          }
+          key={index}
+        >
+          {message.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LifecycleV2FeeEventCards({
+  entries,
+  kind,
+}: {
+  entries: JsonValue[];
+  kind: "charged" | "rebated";
+}) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {entries.map((entry, index) => {
+        if (!isJsonObject(entry)) {
+          return (
+            <div
+              className="rounded border border-neutral-800 bg-neutral-950 p-3"
+              key={index}
+            >
+              <JsonBlock compact value={entry} />
+            </div>
+          );
+        }
+
+        const fields: LifecycleField[] = [
+          { key: "trader", label: "Trader", value: entry.trader },
+          { key: "recipient", label: "Recipient", value: entry.recipient },
+          {
+            key: "productKind",
+            label: "Product Kind",
+            value: firstDefined(entry.product_kind, entry.productKind),
+          },
+          {
+            key: "flowKind",
+            label: "Flow Kind",
+            value: firstDefined(entry.flow_kind, entry.flowKind),
+          },
+          {
+            key: "isMaker",
+            label: "Is Maker",
+            value: firstDefined(entry.is_maker, entry.isMaker),
+          },
+          {
+            key: "side",
+            label: "Side",
+            value: entry.side,
+          },
+          {
+            key: "feePpm",
+            label: kind === "rebated" ? "Rebate Ppm" : "Fee Ppm",
+            value: firstDefined(
+              kind === "rebated" ? entry.rebate_ppm : entry.fee_ppm,
+              kind === "rebated" ? entry.rebatePpm : entry.feePpm,
+            ),
+          },
+          {
+            key: "basisAmount",
+            label: "Basis Amount",
+            value: firstDefined(entry.basis_amount, entry.basisAmount),
+          },
+          {
+            key: "feeAmount",
+            label: kind === "rebated" ? "Rebate Amount" : "Fee Amount",
+            value: firstDefined(
+              kind === "rebated" ? entry.rebate_amount : entry.fee_amount,
+              kind === "rebated" ? entry.rebateAmount : entry.feeAmount,
+              entry.applied_fee,
+            ),
+          },
+          {
+            key: "tx_hash",
+            label: "Tx Hash",
+            value: entry.tx_hash,
+          },
+          {
+            key: "log_index",
+            label: "Log Index",
+            value: entry.log_index,
+          },
+          {
+            key: "block_number",
+            label: "Block",
+            value: entry.block_number,
+          },
+          {
+            key: "source_contract",
+            label: "Source Contract",
+            value: entry.source_contract,
+          },
+        ];
+
+        return (
+          <div
+            className={
+              kind === "rebated"
+                ? "rounded border border-emerald-500/40 bg-emerald-950/30 p-3"
+                : "rounded border border-cyan-500/40 bg-cyan-950/20 p-3"
+            }
+            key={index}
+          >
+            <LifecycleFieldTable fields={fields} />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1542,6 +2258,16 @@ function arrayField(value: JsonObject | null | undefined, key: string) {
 
 function firstDefined(...values: (JsonValue | undefined)[]) {
   return values.find((value) => value !== undefined);
+}
+
+function toFiniteNumber(value: JsonValue | undefined): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    return readFiniteNumber(value);
+  }
+  return null;
 }
 
 function stringValue(value: JsonValue | undefined) {
@@ -2208,16 +2934,18 @@ function MetricCard({
 }: {
   label: string;
   value: string;
-  variant?: "danger" | "muted" | "normal" | "ok";
+  variant?: "danger" | "muted" | "normal" | "ok" | "warn";
 }) {
   const className =
     variant === "danger"
       ? "border-red-500/50 bg-red-950/70 text-red-100"
       : variant === "ok"
         ? "border-emerald-500/40 bg-emerald-950/60 text-emerald-100"
-        : variant === "muted"
-          ? "border-neutral-800 bg-neutral-950 text-neutral-400"
-          : "border-neutral-800 bg-neutral-950 text-neutral-100";
+        : variant === "warn"
+          ? "border-amber-500/50 bg-amber-950/60 text-amber-100"
+          : variant === "muted"
+            ? "border-neutral-800 bg-neutral-950 text-neutral-400"
+            : "border-neutral-800 bg-neutral-950 text-neutral-100";
 
   return (
     <div className={`rounded border p-3 ${className}`}>

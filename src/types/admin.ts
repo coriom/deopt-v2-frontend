@@ -85,3 +85,25 @@ export type AdminLifecycleFailure = {
 export type AdminLifecycleResult =
   | AdminLifecycleSuccess
   | AdminLifecycleFailure;
+
+export type AdminFeesOnchainSuccess = {
+  ok: true;
+  label: string;
+  path: string;
+  data: JsonValue;
+  fetchedAt: number;
+  status: number;
+};
+
+export type AdminFeesOnchainFailure = {
+  ok: false;
+  label: string;
+  path: string;
+  error: AdminApiErrorDetails;
+  fetchedAt: number;
+  status?: number;
+};
+
+export type AdminFeesOnchainResult =
+  | AdminFeesOnchainSuccess
+  | AdminFeesOnchainFailure;

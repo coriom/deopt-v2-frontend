@@ -3,6 +3,7 @@ import type {
   AdminEndpointDefinition,
   AdminEndpointResult,
   AdminErrorCode,
+  AdminFeesOnchainSuccess,
   AdminLifecycleSuccess,
   AdminSnapshot,
   JsonObject,
@@ -149,6 +150,28 @@ export async function fetchOptionExecutionLifecycle(
     data: result.data,
     fetchedAt: result.fetchedAt,
     label: "Option Execution Lifecycle",
+    ok: true,
+    path,
+    status: result.status,
+  };
+}
+
+export async function fetchAdminFeesOnchain(
+  token: string,
+  txHash: string,
+  signal?: AbortSignal,
+): Promise<AdminFeesOnchainSuccess> {
+  const normalizedTxHash = txHash.trim();
+  const query = normalizedTxHash
+    ? `?tx_hash=${encodeURIComponent(normalizedTxHash)}`
+    : "";
+  const path = `/admin/fees/onchain${query}`;
+  const result = await fetchAdminPath({ path }, token, signal);
+
+  return {
+    data: result.data,
+    fetchedAt: result.fetchedAt,
+    label: "On-chain Fee Events",
     ok: true,
     path,
     status: result.status,
