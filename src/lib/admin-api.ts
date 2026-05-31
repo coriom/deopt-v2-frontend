@@ -4,6 +4,7 @@ import type {
   AdminEndpointResult,
   AdminErrorCode,
   AdminFeesOnchainSuccess,
+  AdminFeeV2ObservabilitySuccess,
   AdminLifecycleSuccess,
   AdminSnapshot,
   JsonObject,
@@ -172,6 +173,27 @@ export async function fetchAdminFeesOnchain(
     data: result.data,
     fetchedAt: result.fetchedAt,
     label: "On-chain Fee Events",
+    ok: true,
+    path,
+    status: result.status,
+  };
+}
+
+// V2G-G: pull the read-only V2 fee observability snapshot. Mirrors the
+// data that `/metrics` exposes plus the configured engine addresses, so
+// an operator can confirm the metric classifier is wired against the
+// right NEW/OLD engines without opening Grafana.
+export async function fetchAdminFeesV2Observability(
+  token: string,
+  signal?: AbortSignal,
+): Promise<AdminFeeV2ObservabilitySuccess> {
+  const path = "/admin/fees/v2/observability";
+  const result = await fetchAdminPath({ path }, token, signal);
+
+  return {
+    data: result.data,
+    fetchedAt: result.fetchedAt,
+    label: "V2 Fee Observability",
     ok: true,
     path,
     status: result.status,

@@ -2,6 +2,7 @@
 
 import {
   fetchAdminFeesOnchain,
+  fetchAdminFeesV2Observability,
   fetchAdminSnapshot,
   fetchOptionExecutionLifecycle,
   getAdminBaseUrl,
@@ -15,6 +16,7 @@ import type {
   AdminEndpointResult,
   AdminEndpointSuccess,
   AdminFeesOnchainResult,
+  AdminFeeV2ObservabilityResult,
   AdminLifecycleResult,
   AdminSnapshot,
   JsonObject,
@@ -29,6 +31,13 @@ const KNOWN_V1S_OPTION_INTENT_ID = "e6d2941b-65f7-413a-958f-74ab22c53b08";
 const KNOWN_V2E_G_OPTION_INTENT_ID = "94897ee5-e855-40b6-a917-1476578fe48b";
 const KNOWN_V2E_G_TX_HASH =
   "0xd51ea881cdbc32fe724034c0f7e25ade7359ea3d5b6cadb17b7c345effefc72c";
+// V2G-E live rebate broadcasts (PERP + OPTION). These two tx hashes are
+// the source-of-truth fixtures the V2G-G dashboard panel quick-fills.
+// See `deopt-v2-backend/docs/FEES_MANAGER_V2_LIVE_REBATE_SMOKE_RESULT_V2G_E.md`.
+const KNOWN_V2G_E_PERP_TX_HASH =
+  "0x5c15e9233d49729cf21058a89f49bc6fdf0f7295cda5a7f313c96556728aa394";
+const KNOWN_V2G_E_OPTION_TX_HASH =
+  "0x9a85cbced2216bf3c18049111cce68883cb0b035e194b3dcbaaf4fe7d5293149";
 
 const EMPTY_RESULTS: Partial<AdminSnapshot> = {};
 
@@ -121,6 +130,10 @@ export function AdminDashboard() {
   const [isFeesOnchainLoading, setIsFeesOnchainLoading] = useState(false);
   const [feesOnchainResult, setFeesOnchainResult] =
     useState<AdminFeesOnchainResult | null>(null);
+  const [isV2ObservabilityLoading, setIsV2ObservabilityLoading] =
+    useState(false);
+  const [v2ObservabilityResult, setV2ObservabilityResult] =
+    useState<AdminFeeV2ObservabilityResult | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [results, setResults] =
@@ -129,6 +142,7 @@ export function AdminDashboard() {
   const abortRef = useRef<AbortController | null>(null);
   const lifecycleAbortRef = useRef<AbortController | null>(null);
   const feesOnchainAbortRef = useRef<AbortController | null>(null);
+  const v2ObservabilityAbortRef = useRef<AbortController | null>(null);
   const didInitialRefreshRef = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -273,11 +287,54 @@ export function AdminDashboard() {
     }
   }, [feesOnchainTxHash, token]);
 
+  const loadV2Observability = useCallback(async () => {
+    v2ObservabilityAbortRef.current?.abort();
+
+    const controller = new AbortController();
+    v2ObservabilityAbortRef.current = controller;
+    setIsV2ObservabilityLoading(true);
+
+    try {
+      const result = await fetchAdminFeesV2Observability(
+        token,
+        controller.signal,
+      );
+      setV2ObservabilityResult(result);
+    } catch (error) {
+      if (!isAbortError(error)) {
+        const details = toAdminErrorDetails(error);
+        setV2ObservabilityResult({
+          error: details,
+          fetchedAt: Date.now(),
+          label: "V2 Fee Observability",
+          ok: false,
+          path: "/admin/fees/v2/observability",
+          status: details.status,
+        });
+      }
+    } finally {
+      if (v2ObservabilityAbortRef.current === controller) {
+        v2ObservabilityAbortRef.current = null;
+        setIsV2ObservabilityLoading(false);
+      }
+    }
+  }, [token]);
+
+  // Auto-load the V2G-G observability snapshot once on token-ready.
+  // The snapshot is read-only and cheap, so it doubles as an at-a-glance
+  // health card; explicit refresh remains available via the button.
+  useEffect(() => {
+    if (tokenReady) {
+      void loadV2Observability();
+    }
+  }, [tokenReady, loadV2Observability]);
+
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
       lifecycleAbortRef.current?.abort();
       feesOnchainAbortRef.current?.abort();
+      v2ObservabilityAbortRef.current?.abort();
     };
   }, []);
 
@@ -473,6 +530,17 @@ export function AdminDashboard() {
               setLifecycleIntentId(KNOWN_V2E_G_OPTION_INTENT_ID)
             }
             result={lifecycleResult}
+          />
+          <V2FeeObservabilitySection
+            isLoading={isV2ObservabilityLoading}
+            onLoad={() => void loadV2Observability()}
+            onQuickFillPerpTxHash={() =>
+              setFeesOnchainTxHash(KNOWN_V2G_E_PERP_TX_HASH)
+            }
+            onQuickFillOptionTxHash={() =>
+              setFeesOnchainTxHash(KNOWN_V2G_E_OPTION_TX_HASH)
+            }
+            result={v2ObservabilityResult}
           />
           <AdminFeesOnchainSection
             isLoading={isFeesOnchainLoading}
@@ -765,6 +833,377 @@ function AdminFeesOnchainSection({
       </div>
     </section>
   );
+}
+
+// V2G-G: read-only V2 fee observability section. Reads
+// `/admin/fees/v2/observability` and surfaces the same data the V2G-G
+// Grafana dashboard renders: PERP + OPTION FeeChargedV2 / FeeRebatedV2
+// bucketed by consumer (`new` / `old` / `unknown`), the derived rebate
+// budget per settlement asset, and the configured engine addresses the
+// classifier is using right now. OLD-consumer / unknown-consumer
+// counts are highlighted when non-zero so operators see the same
+// alert state Prometheus does, without leaving the admin page.
+function V2FeeObservabilitySection({
+  isLoading,
+  onLoad,
+  onQuickFillPerpTxHash,
+  onQuickFillOptionTxHash,
+  result,
+}: {
+  isLoading: boolean;
+  onLoad: () => void;
+  onQuickFillPerpTxHash: () => void;
+  onQuickFillOptionTxHash: () => void;
+  result: AdminFeeV2ObservabilityResult | null;
+}) {
+  const path = result?.path ?? "/admin/fees/v2/observability";
+
+  return (
+    <section className="rounded border border-neutral-800 bg-neutral-900/70">
+      <div className="flex flex-col gap-3 border-b border-neutral-800 px-4 py-3 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-white">
+            V2 Fee Observability (V2G-G)
+          </h2>
+          <p className="mt-1 font-mono text-xs text-neutral-500">
+            GET {path}
+          </p>
+        </div>
+        <V2ObservabilityEndpointStatus
+          isLoading={isLoading}
+          result={result}
+        />
+      </div>
+
+      <div className="grid gap-4 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="h-9 rounded border border-neutral-700 px-3 text-sm font-medium text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800"
+            onClick={onQuickFillPerpTxHash}
+            type="button"
+          >
+            Fill V2G-E PERP tx (below)
+          </button>
+          <button
+            className="h-9 rounded border border-neutral-700 px-3 text-sm font-medium text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800"
+            onClick={onQuickFillOptionTxHash}
+            type="button"
+          >
+            Fill V2G-E OPTION tx (below)
+          </button>
+          <button
+            className="h-9 rounded bg-cyan-400 px-4 text-sm font-semibold text-neutral-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isLoading}
+            onClick={onLoad}
+            type="button"
+          >
+            {isLoading ? "Refreshing" : "Refresh snapshot"}
+          </button>
+        </div>
+
+        {!result ? (
+          <EmptyState
+            text={
+              isLoading
+                ? "Loading V2 fee observability snapshot."
+                : "Snapshot not loaded yet. Click Refresh."
+            }
+          />
+        ) : result.ok ? (
+          <V2FeeObservabilityView data={result.data} />
+        ) : (
+          <ErrorPanel error={result.error} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function V2ObservabilityEndpointStatus({
+  isLoading,
+  result,
+}: {
+  isLoading: boolean;
+  result: AdminFeeV2ObservabilityResult | null;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-neutral-500">
+      {result ? (
+        <>
+          <span
+            className={
+              result.ok
+                ? "rounded bg-emerald-950 px-2 py-1 text-emerald-200"
+                : "rounded bg-red-950 px-2 py-1 text-red-200"
+            }
+          >
+            {result.ok
+              ? `HTTP ${result.status}`
+              : result.status
+                ? `HTTP ${result.status}`
+                : "ERR"}
+          </span>
+          <span>{formatDateTime(result.fetchedAt)}</span>
+        </>
+      ) : (
+        <span>{isLoading ? "Loading" : "Idle"}</span>
+      )}
+    </div>
+  );
+}
+
+function V2FeeObservabilityView({ data }: { data: JsonValue }) {
+  if (!isJsonObject(data)) {
+    return <EmptyState text="Snapshot response was not a JSON object." />;
+  }
+
+  const network = isJsonObject(data.network) ? data.network : {};
+  const features = isJsonObject(data.features) ? data.features : {};
+  const contracts = isJsonObject(data.contracts) ? data.contracts : {};
+  const metrics = isJsonObject(data.metrics) ? data.metrics : {};
+  const anomaly = isJsonObject(data.anomaly_totals)
+    ? data.anomaly_totals
+    : {};
+
+  const oldEvents = readBucketCount(anomaly.old_consumer_events);
+  const unknownEvents = readBucketCount(anomaly.unknown_consumer_events);
+  const oldVariant = oldEvents > 0 ? "danger" : "ok";
+  const unknownVariant = unknownEvents > 0 ? "warn" : "ok";
+
+  const budgetObject = isJsonObject(metrics.fees_manager_v2_rebate_budget_native)
+    ? metrics.fees_manager_v2_rebate_budget_native
+    : {};
+
+  const perpCharged = bucketsFromValue(
+    metrics.perp_fee_charged_v2_by_consumer,
+  );
+  const perpRebated = bucketsFromValue(
+    metrics.perp_fee_rebated_v2_by_consumer,
+  );
+  const optionCharged = bucketsFromValue(
+    metrics.option_fee_charged_v2_by_consumer,
+  );
+  const optionRebated = bucketsFromValue(
+    metrics.option_fee_rebated_v2_by_consumer,
+  );
+
+  return (
+    <div className="grid gap-4">
+      <div>
+        <Subheading>Anomaly totals</Subheading>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="OLD consumer events (PERP+OPTION)"
+            value={oldEvents.toString()}
+            variant={oldVariant}
+          />
+          <MetricCard
+            label="Unknown consumer events (PERP+OPTION)"
+            value={unknownEvents.toString()}
+            variant={unknownVariant}
+          />
+          <MetricCard
+            label="Network"
+            value={`${valueAsString(network.network_name) || "unknown"} (chain ${
+              valueAsString(network.chain_id) || "?"
+            })`}
+          />
+          <MetricCard
+            label="Milestone"
+            value={valueAsString(data.milestone) || "V2G-G"}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <BucketCountsCard
+          title="PERP FeeChargedV2 by consumer"
+          buckets={perpCharged}
+        />
+        <BucketCountsCard
+          title="PERP FeeRebatedV2 by consumer"
+          buckets={perpRebated}
+        />
+        <BucketCountsCard
+          title="OPTION FeeChargedV2 by consumer"
+          buckets={optionCharged}
+        />
+        <BucketCountsCard
+          title="OPTION FeeRebatedV2 by consumer"
+          buckets={optionRebated}
+        />
+      </div>
+
+      <div>
+        <Subheading>FeesManagerV2 rebate budget (native units)</Subheading>
+        <RebateBudgetTable budget={budgetObject} />
+      </div>
+
+      <div>
+        <Subheading>Active engine wiring (classifier inputs)</Subheading>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <MetricCard
+            label="NEW PerpEngine"
+            value={valueAsString(contracts.perp_engine_new) || "unset"}
+            variant={contracts.perp_engine_new == null ? "warn" : "normal"}
+          />
+          <MetricCard
+            label="OLD PerpEngine (observability-only)"
+            value={valueAsString(contracts.perp_engine_old) || "unset"}
+            variant="muted"
+          />
+          <MetricCard
+            label="NEW MarginEngine"
+            value={valueAsString(contracts.margin_engine_new) || "unset"}
+            variant={contracts.margin_engine_new == null ? "warn" : "normal"}
+          />
+          <MetricCard
+            label="OLD MarginEngine (observability-only)"
+            value={valueAsString(contracts.margin_engine_old) || "unset"}
+            variant="muted"
+          />
+          <MetricCard
+            label="FeesManagerV2"
+            value={valueAsString(contracts.fees_manager_v2) || "unset"}
+            variant={contracts.fees_manager_v2 == null ? "warn" : "normal"}
+          />
+        </div>
+      </div>
+
+      <div>
+        <Subheading>Runtime feature flags</Subheading>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <MetricCard
+            label="metrics_enabled"
+            value={String(features.metrics_enabled ?? false)}
+            variant={features.metrics_enabled ? "ok" : "warn"}
+          />
+          <MetricCard
+            label="option_event_indexer_enabled"
+            value={String(features.option_event_indexer_enabled ?? false)}
+            variant={
+              features.option_event_indexer_enabled ? "ok" : "warn"
+            }
+          />
+          <MetricCard
+            label="fees_enabled"
+            value={String(features.fees_enabled ?? false)}
+          />
+          <MetricCard
+            label="rebates_enabled"
+            value={String(features.rebates_enabled ?? false)}
+          />
+          <MetricCard
+            label="persistence_enabled"
+            value={String(features.persistence_enabled ?? false)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BucketCountsCard({
+  title,
+  buckets,
+}: {
+  title: string;
+  buckets: { new: number; old: number; unknown: number };
+}) {
+  return (
+    <div className="rounded border border-neutral-800 bg-neutral-950/60 p-3">
+      <Subheading>{title}</Subheading>
+      <div className="grid grid-cols-3 gap-2">
+        <MetricCard label="new" value={buckets.new.toString()} variant="ok" />
+        <MetricCard
+          label="old"
+          value={buckets.old.toString()}
+          variant={buckets.old > 0 ? "danger" : "muted"}
+        />
+        <MetricCard
+          label="unknown"
+          value={buckets.unknown.toString()}
+          variant={buckets.unknown > 0 ? "warn" : "muted"}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RebateBudgetTable({
+  budget,
+}: {
+  budget: JsonObject;
+}) {
+  const entries = Object.entries(budget);
+  if (entries.length === 0) {
+    return (
+      <EmptyState text="No RebateBudgetFunded/Spent/Withdrawn events indexed yet." />
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded border border-neutral-800 bg-neutral-950/60">
+      <table className="min-w-full text-xs">
+        <thead className="bg-neutral-900 text-left text-[11px] uppercase tracking-[0.08em] text-neutral-400">
+          <tr>
+            <th className="px-3 py-2">Settlement asset (lowercased)</th>
+            <th className="px-3 py-2">Derived budget (native units)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([asset, value]) => {
+            const numeric = readBucketCount(value);
+            return (
+              <tr key={asset} className="border-t border-neutral-800">
+                <td className="px-3 py-2 font-mono text-neutral-200">
+                  {asset}
+                </td>
+                <td className="px-3 py-2 font-mono text-neutral-100">
+                  {numeric.toLocaleString()}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function bucketsFromValue(value: JsonValue | undefined) {
+  if (!isJsonObject(value)) {
+    return { new: 0, old: 0, unknown: 0 };
+  }
+  return {
+    new: readBucketCount(value.new),
+    old: readBucketCount(value.old),
+    unknown: readBucketCount(value.unknown),
+  };
+}
+
+function readBucketCount(value: JsonValue | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function valueAsString(value: JsonValue | undefined): string {
+  if (value == null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return value.toString();
+  }
+  return "";
 }
 
 function FeesOnchainEndpointStatus({

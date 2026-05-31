@@ -107,3 +107,43 @@ export type AdminFeesOnchainFailure = {
 export type AdminFeesOnchainResult =
   | AdminFeesOnchainSuccess
   | AdminFeesOnchainFailure;
+
+// V2G-G: read-only snapshot from /admin/fees/v2/observability.
+//
+// The backing endpoint always pre-seeds the three consumer buckets
+// (`new`/`old`/`unknown`) at zero so the V2G-G Grafana panels have a
+// stable signal from the first scrape after boot. Raw addresses are
+// never promoted to bucket labels — operators see configured engine
+// addresses only via the `contracts` block.
+//
+// See `deopt-v2-backend/docs/V2_FEE_PRODUCTION_OBSERVABILITY_V2G_G.md`
+// for the backend-side overview and
+// `deopt-v2-backend/src/fees/v2_observability.rs::admin_v2_observability`
+// for the shape contract.
+export type AdminFeeV2ObservabilityBuckets = {
+  new: number;
+  old: number;
+  unknown: number;
+};
+
+export type AdminFeeV2ObservabilitySuccess = {
+  ok: true;
+  label: string;
+  path: string;
+  data: JsonValue;
+  fetchedAt: number;
+  status: number;
+};
+
+export type AdminFeeV2ObservabilityFailure = {
+  ok: false;
+  label: string;
+  path: string;
+  error: AdminApiErrorDetails;
+  fetchedAt: number;
+  status?: number;
+};
+
+export type AdminFeeV2ObservabilityResult =
+  | AdminFeeV2ObservabilitySuccess
+  | AdminFeeV2ObservabilityFailure;
