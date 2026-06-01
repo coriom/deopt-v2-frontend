@@ -147,3 +147,42 @@ export type AdminFeeV2ObservabilityFailure = {
 export type AdminFeeV2ObservabilityResult =
   | AdminFeeV2ObservabilitySuccess
   | AdminFeeV2ObservabilityFailure;
+
+// V2G-M: read-only snapshot from /admin/fees/v2/smoke/readiness.
+//
+// Shape contract:
+// - `engines.*` -- lowercased addresses (or null when unset)
+// - `smoke_eoas.tier4_maker_address` / `tier2_taker_address` -- pinned
+//   V2G-D2 EOAs (addresses only, NEVER a private key)
+// - `smoke_eoas.key_env_vars.{maker,taker}` -- env var NAMES the
+//   operator must export for signing; the endpoint never reads values
+// - `broadcast_gates.*` -- runtime safety toggles, all `false`
+//   (or `dry_run=true`) during the local-compose soak window
+// - `dry_run_packets.{perp,option}` -- canonical PERP/OPTION packet
+//   skeletons with `null` placeholders for trade-specific basis +
+//   expected fee/rebate/budget delta numerics
+//
+// Backend source-of-truth:
+// `deopt-v2-backend/src/fees/smoke_readiness.rs::admin_v2_smoke_readiness`
+// Doc: `deopt-v2-backend/docs/V2_FEE_BACKEND_EXECUTOR_READINESS_V2G_M.md`
+export type AdminFeeV2SmokeReadinessSuccess = {
+  ok: true;
+  label: string;
+  path: string;
+  data: JsonValue;
+  fetchedAt: number;
+  status: number;
+};
+
+export type AdminFeeV2SmokeReadinessFailure = {
+  ok: false;
+  label: string;
+  path: string;
+  error: AdminApiErrorDetails;
+  fetchedAt: number;
+  status?: number;
+};
+
+export type AdminFeeV2SmokeReadinessResult =
+  | AdminFeeV2SmokeReadinessSuccess
+  | AdminFeeV2SmokeReadinessFailure;

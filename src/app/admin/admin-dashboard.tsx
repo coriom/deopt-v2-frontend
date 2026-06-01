@@ -3,6 +3,7 @@
 import {
   fetchAdminFeesOnchain,
   fetchAdminFeesV2Observability,
+  fetchAdminFeesV2SmokeReadiness,
   fetchAdminSnapshot,
   fetchOptionExecutionLifecycle,
   getAdminBaseUrl,
@@ -17,6 +18,7 @@ import type {
   AdminEndpointSuccess,
   AdminFeesOnchainResult,
   AdminFeeV2ObservabilityResult,
+  AdminFeeV2SmokeReadinessResult,
   AdminLifecycleResult,
   AdminSnapshot,
   JsonObject,
@@ -134,6 +136,10 @@ export function AdminDashboard() {
     useState(false);
   const [v2ObservabilityResult, setV2ObservabilityResult] =
     useState<AdminFeeV2ObservabilityResult | null>(null);
+  const [isV2SmokeReadinessLoading, setIsV2SmokeReadinessLoading] =
+    useState(false);
+  const [v2SmokeReadinessResult, setV2SmokeReadinessResult] =
+    useState<AdminFeeV2SmokeReadinessResult | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [results, setResults] =
@@ -143,6 +149,7 @@ export function AdminDashboard() {
   const lifecycleAbortRef = useRef<AbortController | null>(null);
   const feesOnchainAbortRef = useRef<AbortController | null>(null);
   const v2ObservabilityAbortRef = useRef<AbortController | null>(null);
+  const v2SmokeReadinessAbortRef = useRef<AbortController | null>(null);
   const didInitialRefreshRef = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -329,12 +336,54 @@ export function AdminDashboard() {
     }
   }, [tokenReady, loadV2Observability]);
 
+  const loadV2SmokeReadiness = useCallback(async () => {
+    v2SmokeReadinessAbortRef.current?.abort();
+
+    const controller = new AbortController();
+    v2SmokeReadinessAbortRef.current = controller;
+    setIsV2SmokeReadinessLoading(true);
+
+    try {
+      const result = await fetchAdminFeesV2SmokeReadiness(
+        token,
+        controller.signal,
+      );
+      setV2SmokeReadinessResult(result);
+    } catch (error) {
+      if (!isAbortError(error)) {
+        const details = toAdminErrorDetails(error);
+        setV2SmokeReadinessResult({
+          error: details,
+          fetchedAt: Date.now(),
+          label: "V2 Fee Smoke Readiness",
+          ok: false,
+          path: "/admin/fees/v2/smoke/readiness",
+          status: details.status,
+        });
+      }
+    } finally {
+      if (v2SmokeReadinessAbortRef.current === controller) {
+        v2SmokeReadinessAbortRef.current = null;
+        setIsV2SmokeReadinessLoading(false);
+      }
+    }
+  }, [token]);
+
+  // Auto-load the V2G-M smoke readiness snapshot on token-ready. Like
+  // the observability snapshot, this is read-only and cheap.
+  useEffect(() => {
+    if (tokenReady) {
+      void loadV2SmokeReadiness();
+    }
+  }, [tokenReady, loadV2SmokeReadiness]);
+
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
       lifecycleAbortRef.current?.abort();
       feesOnchainAbortRef.current?.abort();
       v2ObservabilityAbortRef.current?.abort();
+      v2SmokeReadinessAbortRef.current?.abort();
     };
   }, []);
 
@@ -541,6 +590,11 @@ export function AdminDashboard() {
               setFeesOnchainTxHash(KNOWN_V2G_E_OPTION_TX_HASH)
             }
             result={v2ObservabilityResult}
+          />
+          <V2FeeSmokeReadinessSection
+            isLoading={isV2SmokeReadinessLoading}
+            onLoad={() => void loadV2SmokeReadiness()}
+            result={v2SmokeReadinessResult}
           />
           <AdminFeesOnchainSection
             isLoading={isFeesOnchainLoading}
@@ -832,6 +886,365 @@ function AdminFeesOnchainSection({
         )}
       </div>
     </section>
+  );
+}
+
+// V2G-M: read-only V2 fee smoke readiness section. Reads
+// `/admin/fees/v2/smoke/readiness` and renders the V2G-D2 EOA
+// registry, the broadcast-gate snapshot, and the canonical PERP/OPTION
+// dry-run packet skeletons that operators preflight before broadcast.
+// NEVER displays a private key — only the boolean presence of the
+// maker/taker env vars. No write buttons, no wallet signing.
+function V2FeeSmokeReadinessSection({
+  isLoading,
+  onLoad,
+  result,
+}: {
+  isLoading: boolean;
+  onLoad: () => void;
+  result: AdminFeeV2SmokeReadinessResult | null;
+}) {
+  const path = result?.path ?? "/admin/fees/v2/smoke/readiness";
+
+  return (
+    <section className="rounded border border-neutral-800 bg-neutral-900/70">
+      <div className="flex flex-col gap-3 border-b border-neutral-800 px-4 py-3 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-white">
+            V2 Fee Smoke Readiness (V2G-M)
+          </h2>
+          <p className="mt-1 font-mono text-xs text-neutral-500">GET {path}</p>
+        </div>
+        <V2SmokeReadinessEndpointStatus
+          isLoading={isLoading}
+          result={result}
+        />
+      </div>
+
+      <div className="grid gap-4 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="h-9 rounded bg-cyan-400 px-4 text-sm font-semibold text-neutral-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isLoading}
+            onClick={onLoad}
+            type="button"
+          >
+            {isLoading ? "Refreshing" : "Refresh snapshot"}
+          </button>
+          <span className="text-xs text-neutral-500">
+            Read-only. No keys. No writes.
+          </span>
+        </div>
+
+        {!result ? (
+          <EmptyState
+            text={
+              isLoading
+                ? "Loading V2 fee smoke readiness snapshot."
+                : "Snapshot not loaded yet. Click Refresh."
+            }
+          />
+        ) : result.ok ? (
+          <V2FeeSmokeReadinessView data={result.data} />
+        ) : (
+          <ErrorPanel error={result.error} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function V2SmokeReadinessEndpointStatus({
+  isLoading,
+  result,
+}: {
+  isLoading: boolean;
+  result: AdminFeeV2SmokeReadinessResult | null;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-neutral-500">
+      {result ? (
+        <>
+          <span
+            className={
+              result.ok
+                ? "rounded bg-emerald-950 px-2 py-1 text-emerald-200"
+                : "rounded bg-red-950 px-2 py-1 text-red-200"
+            }
+          >
+            {result.ok
+              ? `HTTP ${result.status}`
+              : result.status
+                ? `HTTP ${result.status}`
+                : "ERR"}
+          </span>
+          <span>{formatDateTime(result.fetchedAt)}</span>
+        </>
+      ) : (
+        <span>{isLoading ? "Loading" : "Idle"}</span>
+      )}
+    </div>
+  );
+}
+
+function V2FeeSmokeReadinessView({ data }: { data: JsonValue }) {
+  if (!isJsonObject(data)) {
+    return <EmptyState text="Snapshot response was not a JSON object." />;
+  }
+
+  const engines = isJsonObject(data.engines) ? data.engines : {};
+  const smokeEoas = isJsonObject(data.smoke_eoas) ? data.smoke_eoas : {};
+  const keyEnvs = isJsonObject(smokeEoas.key_env_vars)
+    ? smokeEoas.key_env_vars
+    : {};
+  const gates = isJsonObject(data.broadcast_gates) ? data.broadcast_gates : {};
+  const packets = isJsonObject(data.dry_run_packets)
+    ? data.dry_run_packets
+    : {};
+  const safe = data.soak_safe_for_local_compose === true;
+  const activeIsOld = data.active_perp_is_old_engine === true;
+
+  return (
+    <div className="grid gap-4">
+      <div>
+        <Subheading>Status flags</Subheading>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="safe_to_broadcast_today"
+            value={safe ? "yes" : "no"}
+            variant={safe ? "ok" : "warn"}
+          />
+          <MetricCard
+            label="active_perp_is_old_engine"
+            value={activeIsOld ? "YES — abort" : "no"}
+            variant={activeIsOld ? "danger" : "ok"}
+          />
+          <MetricCard
+            label="Milestone"
+            value={valueAsString(data.milestone) || "V2G-M"}
+          />
+          <MetricCard
+            label="Soak mode"
+            value="local-compose"
+            variant="muted"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Subheading>Smoke EOAs (V2G-D2)</Subheading>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MetricCard
+            label="Tier 4 maker"
+            value={valueAsString(smokeEoas.tier4_maker_address) || "unset"}
+          />
+          <MetricCard
+            label="Tier 2 taker"
+            value={valueAsString(smokeEoas.tier2_taker_address) || "unset"}
+          />
+        </div>
+        <p className="mt-2 text-xs text-neutral-500">
+          Private keys are shell-only. The names below are the env vars
+          the operator exports for the standalone signing CLIs — the
+          backend never reads their values.
+        </p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <MetricCard
+            label={`Maker key env (set? = ${gates.maker_key_env_set ? "yes" : "no"})`}
+            value={valueAsString(keyEnvs.maker) || "unset"}
+            variant={gates.maker_key_env_set ? "ok" : "muted"}
+          />
+          <MetricCard
+            label={`Taker key env (set? = ${gates.taker_key_env_set ? "yes" : "no"})`}
+            value={valueAsString(keyEnvs.taker) || "unset"}
+            variant={gates.taker_key_env_set ? "ok" : "muted"}
+          />
+        </div>
+      </div>
+
+      <div>
+        <Subheading>Engine wiring</Subheading>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <MetricCard
+            label="NEW PerpEngine"
+            value={valueAsString(engines.perp_engine_new) || "unset"}
+            variant={engines.perp_engine_new ? "normal" : "warn"}
+          />
+          <MetricCard
+            label="OLD PerpEngine (observability-only)"
+            value={valueAsString(engines.perp_engine_old) || "unset"}
+            variant="muted"
+          />
+          <MetricCard
+            label="NEW MarginEngine"
+            value={valueAsString(engines.margin_engine_new) || "unset"}
+            variant={engines.margin_engine_new ? "normal" : "warn"}
+          />
+          <MetricCard
+            label="OLD MarginEngine (observability-only)"
+            value={valueAsString(engines.margin_engine_old) || "unset"}
+            variant="muted"
+          />
+          <MetricCard
+            label="FeesManagerV2"
+            value={valueAsString(engines.fees_manager_v2) || "unset"}
+            variant={engines.fees_manager_v2 ? "normal" : "warn"}
+          />
+        </div>
+      </div>
+
+      <div>
+        <Subheading>Broadcast gates</Subheading>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="execution_enabled"
+            value={String(gates.execution_enabled ?? false)}
+            variant={gates.execution_enabled ? "warn" : "ok"}
+          />
+          <MetricCard
+            label="executor_dry_run"
+            value={String(gates.executor_dry_run ?? false)}
+            variant={gates.executor_dry_run ? "ok" : "warn"}
+          />
+          <MetricCard
+            label="executor_real_broadcast_enabled"
+            value={String(gates.executor_real_broadcast_enabled ?? false)}
+            variant={
+              gates.executor_real_broadcast_enabled ? "danger" : "ok"
+            }
+          />
+          <MetricCard
+            label="option_execution_broadcast_enabled"
+            value={String(
+              gates.option_execution_broadcast_enabled ?? false,
+            )}
+            variant={
+              gates.option_execution_broadcast_enabled ? "danger" : "ok"
+            }
+          />
+          <MetricCard
+            label="executor_private_key_set"
+            value={String(gates.executor_private_key_set ?? false)}
+            variant={gates.executor_private_key_set ? "warn" : "muted"}
+          />
+        </div>
+      </div>
+
+      <div>
+        <Subheading>Dry-run packet skeletons</Subheading>
+        <p className="mb-2 text-xs text-neutral-500">
+          Trade-specific numeric fields (`basis_amount_native`,
+          `expected_fee_amount_native`, `expected_rebate_amount_native`,
+          `expected_rebate_budget_delta_native`) start as `null`. The
+          operator fills them per broadcast and re-runs the
+          `validate_numeric_invariants` test before signing.
+        </p>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <SmokePacketCard
+            label="PERP packet"
+            packet={isJsonObject(packets.perp) ? packets.perp : null}
+          />
+          <SmokePacketCard
+            label="OPTION packet"
+            packet={isJsonObject(packets.option) ? packets.option : null}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SmokePacketCard({
+  label,
+  packet,
+}: {
+  label: string;
+  packet: JsonObject | null;
+}) {
+  if (!packet) {
+    return (
+      <div className="rounded border border-neutral-800 bg-neutral-950/60 p-3">
+        <Subheading>{label}</Subheading>
+        <EmptyState text="Packet not present (engines unset)." />
+      </div>
+    );
+  }
+  const makerProfile = isJsonObject(packet.maker_profile)
+    ? packet.maker_profile
+    : {};
+  const takerProfile = isJsonObject(packet.taker_profile)
+    ? packet.taker_profile
+    : {};
+  return (
+    <div className="rounded border border-neutral-800 bg-neutral-950/60 p-3">
+      <Subheading>{label}</Subheading>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <span className="text-neutral-500">product</span>
+        <span className="font-mono text-neutral-200">
+          {valueAsString(packet.product)}
+        </span>
+        <span className="text-neutral-500">flow</span>
+        <span className="font-mono text-neutral-200">
+          {valueAsString(packet.flow)}
+        </span>
+        <span className="text-neutral-500">fee_consumer</span>
+        <span className="break-all font-mono text-neutral-200">
+          {valueAsString(packet.fee_consumer_address)}
+        </span>
+        <span className="text-neutral-500">maker_address</span>
+        <span className="break-all font-mono text-neutral-200">
+          {valueAsString(packet.maker_address)}
+        </span>
+        <span className="text-neutral-500">taker_address</span>
+        <span className="break-all font-mono text-neutral-200">
+          {valueAsString(packet.taker_address)}
+        </span>
+        <span className="text-neutral-500">
+          maker tier / ppm (maker / taker)
+        </span>
+        <span className="font-mono text-neutral-200">
+          {String(makerProfile.tier ?? "?")} / {String(makerProfile.maker_ppm ?? "?")} /{" "}
+          {String(makerProfile.taker_ppm ?? "?")}
+        </span>
+        <span className="text-neutral-500">
+          taker tier / ppm (maker / taker)
+        </span>
+        <span className="font-mono text-neutral-200">
+          {String(takerProfile.tier ?? "?")} / {String(takerProfile.maker_ppm ?? "?")} /{" "}
+          {String(takerProfile.taker_ppm ?? "?")}
+        </span>
+        <span className="text-neutral-500">basis_amount_native</span>
+        <span className="font-mono text-neutral-200">
+          {packet.basis_amount_native == null
+            ? "null (operator fills)"
+            : String(packet.basis_amount_native)}
+        </span>
+        <span className="text-neutral-500">expected_fee_amount_native</span>
+        <span className="font-mono text-neutral-200">
+          {packet.expected_fee_amount_native == null
+            ? "null"
+            : String(packet.expected_fee_amount_native)}
+        </span>
+        <span className="text-neutral-500">expected_rebate_amount_native</span>
+        <span className="font-mono text-neutral-200">
+          {packet.expected_rebate_amount_native == null
+            ? "null"
+            : String(packet.expected_rebate_amount_native)}
+        </span>
+        <span className="text-neutral-500">
+          expected_rebate_budget_delta_native
+        </span>
+        <span className="font-mono text-neutral-200">
+          {packet.expected_rebate_budget_delta_native == null
+            ? "null"
+            : String(packet.expected_rebate_budget_delta_native)}
+        </span>
+        <span className="text-neutral-500">safe_to_broadcast_today</span>
+        <span className="font-mono text-neutral-200">
+          {String(packet.safe_to_broadcast_today)}
+        </span>
+      </div>
+    </div>
   );
 }
 

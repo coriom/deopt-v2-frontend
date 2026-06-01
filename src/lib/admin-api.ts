@@ -5,6 +5,7 @@ import type {
   AdminErrorCode,
   AdminFeesOnchainSuccess,
   AdminFeeV2ObservabilitySuccess,
+  AdminFeeV2SmokeReadinessSuccess,
   AdminLifecycleSuccess,
   AdminSnapshot,
   JsonObject,
@@ -194,6 +195,28 @@ export async function fetchAdminFeesV2Observability(
     data: result.data,
     fetchedAt: result.fetchedAt,
     label: "V2 Fee Observability",
+    ok: true,
+    path,
+    status: result.status,
+  };
+}
+
+// V2G-M: read-only V2 fee smoke readiness snapshot. Surfaces the
+// V2G-D2 EOA registry, per-tier fee profile expectations, the canonical
+// dry-run packet templates, and the broadcast-gate snapshot. NEVER
+// echoes a private key — only the boolean presence of the maker/taker
+// env vars is reported.
+export async function fetchAdminFeesV2SmokeReadiness(
+  token: string,
+  signal?: AbortSignal,
+): Promise<AdminFeeV2SmokeReadinessSuccess> {
+  const path = "/admin/fees/v2/smoke/readiness";
+  const result = await fetchAdminPath({ path }, token, signal);
+
+  return {
+    data: result.data,
+    fetchedAt: result.fetchedAt,
+    label: "V2 Fee Smoke Readiness",
     ok: true,
     path,
     status: result.status,
