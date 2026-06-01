@@ -139,10 +139,17 @@ restart" — matching the soak-preservation hard gate.
 
 ## Next recommended milestone
 
-**V2G-V — wallet-aware admin actions behind a hard "operator mode"
-toggle.** Out of scope today (hard gate forbids wallet writes), but
-once the operator broadcast windows for V2G-P / V2G-R5 are scheduled,
-the admin UI should grow:
+**V2G-W3 — Admin Operator Packet UI (Read-Only Mode).** Note:
+this slot was previously labelled "V2G-V" in an earlier revision
+of this doc; that label has since been claimed by the canonical
+V2G-V Admin Auth / RBAC Threat Model
+(`deopt-v2-backend/docs/ADMIN_AUTH_RBAC_THREAT_MODEL_V2G_V.md`),
+so the UI-side follow-up is renamed to **V2G-W3** to avoid
+collision.
+
+Out of scope today (hard gate forbids wallet writes), but
+once the operator broadcast windows for V2G-P / V2G-R5 are
+scheduled, the admin UI should grow:
 
 1. A toggleable "operator mode" guarded by an explicit consent gate.
 2. A "Build operator packet" button that calls
@@ -155,6 +162,12 @@ the admin UI should grow:
    `ProtocolFeeVault.feeBalance`/`rebateReserve`/`grossFeesCollected`/`rebatesPaid`/`netRevenue`
    per asset after the V2G-R5 deploy.
 
-V2G-V remains entirely read-only on chain (signing happens out of
-band; the UI only displays signed payloads + post-broadcast
+V2G-W3 remains entirely read-only on chain (signing happens out
+of band; the UI only displays signed payloads + post-broadcast
 verification).
+
+(Note: a separate **V2G-W3 backend track** also exists — Next.js
+SSR proxy + JWT verifier, per
+`deopt-v2-backend/docs/ADMIN_RBAC_ROUTE_ENFORCEMENT_V2G_W2.md`
+§12. The two W3 tracks are independent and can ship in either
+order; their pre-conditions are disjoint.)
