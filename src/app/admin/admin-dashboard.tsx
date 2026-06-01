@@ -27,6 +27,8 @@ import type {
 } from "@/types/admin";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ProductionReadinessSection } from "./production-readiness-section";
+
 const TOKEN_STORAGE_KEY = "deopt.adminToken";
 const AUTO_REFRESH_MS = 10_000;
 const KNOWN_V1S_OPTION_INTENT_ID = "e6d2941b-65f7-413a-958f-74ab22c53b08";
@@ -579,6 +581,11 @@ export function AdminDashboard() {
               setLifecycleIntentId(KNOWN_V2E_G_OPTION_INTENT_ID)
             }
             result={lifecycleResult}
+          />
+          <ProductionReadinessSection
+            observability={v2ObservabilityResult}
+            smokeReadiness={v2SmokeReadinessResult}
+            feesOnchain={feesOnchainResult}
           />
           <V2FeeObservabilitySection
             isLoading={isV2ObservabilityLoading}
