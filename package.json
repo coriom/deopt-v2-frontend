@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e:install": "playwright install chromium",
+    "e2e:local": "playwright test"
   },
   "dependencies": {
     "next": "16.1.6",
@@ -17,6 +19,7 @@
     "viem": "^2.52.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

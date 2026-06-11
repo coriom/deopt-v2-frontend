@@ -95,4 +95,12 @@ curl http://localhost:4010/trading/health
 - **Do NOT** point trading API to a production URL. The `.env.example`
   values are explicit testnet placeholders.
 
+## Tx-status E2E (M-P4d, 2026-06-10)
+
+For the Playwright tx-status timeline suite, see
+`docs/TRADING_E2E_FIXTURE_MODE_RUNBOOK.md`. That runbook documents
+dual-mode (fixture / fallback) operation against the backend M-P4c
+local-test cycler. No mainnet, no live tx, no real wallet, no admin
+Bearer in the trading UI runtime.
+
 **End of runbook.**

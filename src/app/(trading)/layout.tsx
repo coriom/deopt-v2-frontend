@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { WalletProvider } from "@/lib/wallet";
 import {
   MainnetDisabledBanner,
@@ -16,7 +17,8 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
         <MainnetDisabledBanner />
         <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
           <nav className="flex items-center gap-4 text-sm">
-            <Link href="/" className="font-semibold">
+            <Link href="/" className="flex items-center gap-2 font-semibold">
+              <Image src="/logo-deopt.png" alt="DeOpt" width={28} height={28} priority />
               DeOpt
             </Link>
             <Link href="/markets" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">

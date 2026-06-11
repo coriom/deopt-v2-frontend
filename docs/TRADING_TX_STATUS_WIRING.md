@@ -92,11 +92,24 @@ and can be wired in a follow-on UX polish milestone).
 | TxStatusTimeline: 4 hard-coded stages, no real data | TxStatusTimeline: 6 real stages mapped from backend; reverted_reason + tx_hash + block surfaced |
 | no polling | 2-second poll while non-terminal |
 
-## 9. Cross-links
+## 9. E2E coverage (M-P4d, 2026-06-10)
+
+The 6 timeline stages + 3 banner states are now covered by the
+Playwright dual-mode `tx-status-cycler.spec.ts` suite (8 specs). In
+**fixture mode**, specs drive backend M-P4c synthetic intents through
+the cycler and assert the production polling hook resolves each
+status to the correct UI rendering. In **fallback mode**, the same
+specs synthesise the wire-format responses via `page.route`
+interception. See `docs/TRADING_E2E_FIXTURE_MODE_RUNBOOK.md`.
+
+## 10. Cross-links
 
 - `docs/FRONTEND_TRADING_SIGNING_RESULT.md`
+- `docs/FRONTEND_PLAYWRIGHT_TX_STATUS_CYCLER_WIRING_RESULT.md` (M-P4d)
+- `docs/TRADING_E2E_FIXTURE_MODE_RUNBOOK.md` (M-P4d)
 - `docs/TRADING_SIGNING_FLOW_RUNBOOK.md`
 - `docs/TRADING_UI_ROUTE_MAP.md`
 - `~/DEOPT/deopt-v2-backend/docs/openapi/trading-api.openapi.json` (note: these legacy endpoints are NOT yet in the OpenAPI spec; M-P2c will add them)
+- `~/DEOPT/deopt-v2-backend/docs/E2E_LOCAL_TX_STATUS_CYCLER_RUNBOOK.md` (M-P4c backend cycler)
 
 **End of trading tx status wiring.**
