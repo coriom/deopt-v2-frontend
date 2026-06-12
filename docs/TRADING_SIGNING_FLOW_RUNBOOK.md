@@ -3,6 +3,12 @@
 **Date:** 2026-06-10
 **Audience:** frontend developers wiring + testing the signing flow.
 
+> **Update (M-P3c, 2026-06-10):** the signing flow is now Step 2 of a
+> two-step Trade Ticket layout. Step 1 (Create intent) is documented
+> at `TRADING_CREATE_INTENT_FLOW_RUNBOOK.md`. The signing phases are
+> unchanged, but two new modal phases — `creating_intent` +
+> `intent_pending` — render during Step 1.
+
 ## 1. The 10-phase modal
 
 `src/components/tx/SigningStateModal.tsx` carries the visual state. The

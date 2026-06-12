@@ -12,6 +12,7 @@ import {
 } from "@/lib/trading-api";
 import { OrderbookPanel } from "./OrderbookPanel";
 import { QuotePreviewCard } from "./QuotePreviewCard";
+import { CreateIntentButton } from "./CreateIntentButton";
 import { LoadingState, EmptyState, ErrorState } from "@/components/ui";
 import {
   SigningStateModal,
@@ -19,10 +20,23 @@ import {
 } from "@/components/tx/SigningStateModal";
 
 /**
- * Demo intent id input — until M-P2c wires a real "create intent" endpoint
- * that issues the intent_id from a quoted trade, we collect the intent_id
- * directly. The user obtains it from the backend operator (or anvil dev
- * harness in E2E).
+ * M-P3c — Trade-ticket flow:
+ *
+ *   1. user selects series + side + size + (optional) price
+ *   2. QuotePreviewCard renders the partial-real preview
+ *   3. user clicks Create intent — backend mints intent_id (or, if
+ *      the backend endpoint is pending, an amber notice + the
+ *      legacy paste-intent_id input is shown)
+ *   4. user clicks Sign typed data — frontend fetches the signing
+ *      payload, opens the wallet, surfaces rejection / network /
+ *      typed-data errors via the modal
+ *   5. on signature success, frontend posts the signature to backend
+ *      and navigates to /transactions/:intentId
+ *
+ *   * No auto-sign.
+ *   * No broadcast from the frontend.
+ *   * No admin Bearer.
+ *   * Mainnet is hard-gated by `useWallet().isExpectedChain`.
  */
 export function TradeTicket({ seriesId }: { seriesId: string | null }) {
   const router = useRouter();
@@ -35,6 +49,9 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
   const [phase, setPhase] = useState<SigningPhase>("idle");
   const [detail, setDetail] = useState<string | undefined>();
   const [modalOpen, setModalOpen] = useState(false);
+  const [createPendingMessage, setCreatePendingMessage] = useState<string | null>(
+    null,
+  );
 
   const { data, isLoading, error, refetch } = useSeriesDetails(seriesId);
 
@@ -161,42 +178,94 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
         size={size}
         price_1e8={price1e8 || undefined}
       />
-      <label className="text-xs">
-        Execution intent id
-        <input
-          type="text"
-          value={intentId}
-          onChange={(e) => setIntentId(e.target.value)}
-          placeholder="e.g. uuid-v4 from backend operator"
-          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-900"
+      <div className="flex flex-col gap-2 rounded border border-zinc-200 p-2 dark:border-zinc-800">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          Step 1 — Create intent
+        </div>
+        <CreateIntentButton
+          request={{
+            series_id: seriesId,
+            side,
+            size_1e8: size,
+            price_1e8: price1e8 || "0",
+            buyer: side === "buy" ? (address ?? undefined) : undefined,
+            seller: side === "sell" ? (address ?? undefined) : undefined,
+          }}
+          disabled={!address || !isExpectedChain}
+          onIntentCreated={(id) => {
+            setIntentId(id);
+            setCreatePendingMessage(null);
+          }}
+          onBackendPending={(msg) => {
+            setCreatePendingMessage(msg);
+            setPhase("intent_pending");
+            setDetail(msg);
+            setModalOpen(true);
+          }}
+          onCreateError={(err) => {
+            setCreatePendingMessage(null);
+            setPhase("error");
+            setDetail(err.message);
+            setModalOpen(true);
+          }}
         />
-        <p className="mt-1 text-[10px] text-zinc-500">
-          M-P3b: provide the intent id created by the backend operator.
-          The frontend never auto-creates intents nor broadcasts.
+        {createPendingMessage && (
+          <div
+            className="rounded border border-amber-300 bg-amber-50 p-2 text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+            data-testid="create-intent-pending-notice"
+          >
+            <p className="font-medium">Backend create-intent endpoint pending.</p>
+            <p className="mt-1">{createPendingMessage}</p>
+            <p className="mt-1">
+              Paste an intent_id below — the M-P4c local-test fixture
+              and operator-side flows still mint intents.
+            </p>
+          </div>
+        )}
+        <label className="text-xs">
+          Execution intent id
+          <input
+            type="text"
+            value={intentId}
+            onChange={(e) => setIntentId(e.target.value)}
+            placeholder="auto-filled when backend creates it"
+            className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-900"
+            data-testid="intent-id-input"
+          />
+          <p className="mt-1 text-[10px] text-zinc-500">
+            On success, the field auto-fills from the backend response.
+            Manual paste remains supported for operator-side flows.
+          </p>
+        </label>
+      </div>
+      <div className="flex flex-col gap-2 rounded border border-zinc-200 p-2 dark:border-zinc-800">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          Step 2 — Sign typed data
+        </div>
+        <button
+          type="button"
+          disabled={!canSign}
+          onClick={() => void handleSign()}
+          className="rounded bg-zinc-900 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          data-testid="sign-button"
+          title={
+            !address
+              ? "Connect your wallet"
+              : !isExpectedChain
+                ? "Switch to the expected testnet"
+                : intentId.length === 0
+                  ? "Create or paste an execution intent id"
+                  : ""
+          }
+        >
+          Sign typed data
+        </button>
+        <p className="text-[10px] text-zinc-500">
+          Clicking opens your wallet for an EIP-712 typed-data signature.
+          Nothing is broadcast from the UI; the backend operator handles
+          broadcast after both buyer + seller sign.
         </p>
-      </label>
-      <button
-        type="button"
-        disabled={!canSign}
-        onClick={() => void handleSign()}
-        className="rounded bg-zinc-900 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-        title={
-          !address
-            ? "Connect your wallet"
-            : !isExpectedChain
-              ? "Switch to the expected testnet"
-              : intentId.length === 0
-                ? "Enter an execution intent id"
-                : ""
-        }
-      >
-        Sign typed data
-      </button>
-      <p className="text-[10px] text-zinc-500">
-        Clicking opens your wallet for an EIP-712 typed-data signature.
-        Nothing is broadcast from the UI; the backend operator handles
-        broadcast after both buyer + seller sign.
-      </p>
+      </div>
       <SigningStateModal
         open={modalOpen}
         phase={phase}

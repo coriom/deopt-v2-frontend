@@ -4,6 +4,11 @@
 **Frontend:** Next.js 16.1.6 App Router; route group `(trading)` shares
 the WalletProvider + sticky banners.
 
+> **Update (M-P3c, 2026-06-10):** the `/markets/:productId` TradeTicket
+> now hosts a two-step layout (Create intent → Sign typed data) and
+> consumes `POST /options/execution-intents` (degrades to amber notice
+> on 404/405/501). See `FRONTEND_CREATE_INTENT_UX_RESULT.md`.
+
 ## Route inventory
 
 | URL | File | Page kind | Wallet required? | Backend endpoints consumed |

@@ -2,6 +2,8 @@
 
 export type SigningPhase =
   | "idle"
+  | "creating_intent"
+  | "intent_pending"
   | "fetching_payload"
   | "awaiting_signature"
   | "signed_ready"
@@ -22,6 +24,8 @@ export interface SigningStateModalProps {
 
 const PHASE_LABEL: Record<SigningPhase, string> = {
   idle: "Idle",
+  creating_intent: "Creating intent on backend…",
+  intent_pending: "Backend create-intent endpoint is pending",
   fetching_payload: "Fetching signing payload…",
   awaiting_signature: "Approve the typed-data signature in your wallet",
   signed_ready: "Signed — preparing submission",
@@ -35,6 +39,8 @@ const PHASE_LABEL: Record<SigningPhase, string> = {
 
 const PHASE_COLOR: Record<SigningPhase, string> = {
   idle: "bg-zinc-400",
+  creating_intent: "bg-amber-500 animate-pulse",
+  intent_pending: "bg-amber-500",
   fetching_payload: "bg-amber-500 animate-pulse",
   awaiting_signature: "bg-amber-500 animate-pulse",
   signed_ready: "bg-emerald-500",

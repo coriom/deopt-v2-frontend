@@ -102,9 +102,19 @@ status to the correct UI rendering. In **fallback mode**, the same
 specs synthesise the wire-format responses via `page.route`
 interception. See `docs/TRADING_E2E_FIXTURE_MODE_RUNBOOK.md`.
 
-## 10. Cross-links
+## 10. Tx-status entry (M-P3c, 2026-06-10)
+
+After the TradeTicket completes its two-step Create-intent + Sign
+flow (M-P3c), the user is auto-navigated to `/transactions/:intentId`
+via `router.push(...)` and the existing `TxStatusTimeline` polling
+takes over. The intent_id is held only in component-local state and
+never persisted to localStorage / cookies.
+
+## 11. Cross-links
 
 - `docs/FRONTEND_TRADING_SIGNING_RESULT.md`
+- `docs/FRONTEND_CREATE_INTENT_UX_RESULT.md` (M-P3c)
+- `docs/TRADING_CREATE_INTENT_FLOW_RUNBOOK.md` (M-P3c)
 - `docs/FRONTEND_PLAYWRIGHT_TX_STATUS_CYCLER_WIRING_RESULT.md` (M-P4d)
 - `docs/TRADING_E2E_FIXTURE_MODE_RUNBOOK.md` (M-P4d)
 - `docs/TRADING_SIGNING_FLOW_RUNBOOK.md`

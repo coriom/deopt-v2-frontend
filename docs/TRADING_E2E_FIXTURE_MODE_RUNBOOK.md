@@ -3,6 +3,11 @@
 **Date:** 2026-06-10
 **Audience:** frontend / QA developers running the local Playwright
 tx-status suite.
+
+> **Update (M-P3c, 2026-06-10):** the suite now also covers the
+> Trade-Ticket Step 1 (Create intent) flow via
+> `tests/e2e/create-intent.spec.ts` (5 specs). The fixture-mode
+> patterns documented below apply unchanged.
 **Posture:** local-only. **No mainnet. No live tx. No real wallet.
 No real signing. No admin Bearer in trading UI. No `.env` edit.**
 

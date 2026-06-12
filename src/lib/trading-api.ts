@@ -387,6 +387,99 @@ export function fetchExecutionIntent(
   );
 }
 
+/**
+ * M-P3c — Frontend create-intent request body. Maps the trade ticket
+ * inputs to the operator-side `/options/execution-intents` POST
+ * surface. When the backend does NOT expose a public create endpoint
+ * (current behaviour as of M-P2e — only operator services and the
+ * M-P4c `/admin/test/execution-intents` fixture surface mint
+ * intents), `createExecutionIntent` resolves with a
+ * `BACKEND_ENDPOINT_PENDING` envelope so the UI can degrade to its
+ * legacy manual-intent-id paste path.
+ */
+export interface CreateExecutionIntentRequest {
+  series_id: string;
+  side: "buy" | "sell";
+  size_1e8: string;
+  price_1e8: string;
+  buyer?: string;
+  seller?: string;
+}
+
+export interface CreateExecutionIntentSuccess {
+  status: "ok";
+  data: { intent_id: string; status: string };
+}
+
+export interface CreateExecutionIntentPending {
+  status: "pending";
+  /** Stable code so UI can switch on it. */
+  code: "BACKEND_ENDPOINT_PENDING";
+  message: string;
+}
+
+export type CreateExecutionIntentResult =
+  | CreateExecutionIntentSuccess
+  | CreateExecutionIntentPending;
+
+/**
+ * Attempt to mint an execution intent from a trade-ticket quote.
+ *
+ * The natural REST shape is `POST /options/execution-intents`. As of
+ * M-P2e the backend does NOT expose a public POST handler for that
+ * path — only `GET /options/execution-intents` (list) and the
+ * operator-side service mint intents. We detect this by treating any
+ * 404, 405, or 501 from the public endpoint as a
+ * `BACKEND_ENDPOINT_PENDING` result; the UI renders an amber
+ * "operator-side endpoint pending" notice and surfaces the legacy
+ * manual intent-id paste path.
+ *
+ * Notes for the frontend:
+ *   * NEVER pass an admin Bearer token. This endpoint family is
+ *     public; admin headers would be a defence-in-depth violation.
+ *   * NEVER fall back to `/admin/test/execution-intents` from the
+ *     browser app — that fixture is Playwright-helper-only and lives
+ *     in `tests/e2e/backend-fixture.ts`.
+ *   * NEVER assume mainnet — `chains.ts::expectedChainId()` is the
+ *     single source of truth and silently downgrades to Sepolia.
+ */
+export async function createExecutionIntent(
+  body: CreateExecutionIntentRequest,
+  signal?: AbortSignal,
+): Promise<CreateExecutionIntentResult> {
+  try {
+    const ok = await rawRequest<CreateExecutionIntentSuccess["data"]>(
+      "POST",
+      `/options/execution-intents`,
+      body,
+      signal,
+    );
+    if (ok && typeof ok === "object" && "intent_id" in ok) {
+      return { status: "ok", data: ok };
+    }
+    return {
+      status: "pending",
+      code: "BACKEND_ENDPOINT_PENDING",
+      message:
+        "Backend create-intent endpoint returned an unexpected shape; using legacy intent-id paste path.",
+    };
+  } catch (e) {
+    const err = e as TradingApiError;
+    // 404 / 405 / 501 → endpoint not implemented yet on the public
+    // surface. Other status codes (400, 422, etc.) are real
+    // validation errors and must propagate.
+    if (err.status === 404 || err.status === 405 || err.status === 501) {
+      return {
+        status: "pending",
+        code: "BACKEND_ENDPOINT_PENDING",
+        message:
+          "Public create-intent endpoint not yet wired (operator-side mint only). Paste an intent_id below to continue.",
+      };
+    }
+    throw err;
+  }
+}
+
 export function fetchExecutorTransaction(
   intentId: string,
   signal?: AbortSignal,
