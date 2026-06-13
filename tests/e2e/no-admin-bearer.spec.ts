@@ -43,3 +43,19 @@ test("trading UI never attaches Authorization header to backend XHRs", async ({
     "trading UI must NEVER request /admin/test/* from the browser runtime",
   ).toEqual([]);
 });
+
+test("public beta footer renders no admin bearer or secret-shaped string", async ({
+  page,
+}) => {
+  await installMockWallet(page);
+  await page.goto("/");
+  const footer = page.getByTestId("public-beta-footer");
+  await expect(footer).toBeVisible();
+  const html = await footer.innerHTML();
+  // No bearer tokens, no RPC URLs, no DATABASE_URL, no private keys.
+  expect(html).not.toMatch(/Bearer\s+[A-Za-z0-9_.-]+/);
+  expect(html).not.toMatch(/DATABASE_URL/);
+  expect(html).not.toMatch(/postgres:\/\//);
+  expect(html).not.toMatch(/[a-f0-9]{64}/i);
+  expect(html).not.toMatch(/alchemy\.com\/v2\/[A-Za-z0-9_-]+/);
+});

@@ -1,5 +1,7 @@
 "use client";
 
+import { ReportIssueButton } from "@/components/ReportIssueButton";
+
 export type SigningPhase =
   | "idle"
   | "creating_intent"
@@ -39,18 +41,25 @@ const PHASE_LABEL: Record<SigningPhase, string> = {
 
 const PHASE_COLOR: Record<SigningPhase, string> = {
   idle: "bg-zinc-400",
-  creating_intent: "bg-amber-500 animate-pulse",
-  intent_pending: "bg-amber-500",
-  fetching_payload: "bg-amber-500 animate-pulse",
-  awaiting_signature: "bg-amber-500 animate-pulse",
+  creating_intent: "bg-emerald-500 animate-pulse",
+  intent_pending: "bg-emerald-500",
+  fetching_payload: "bg-emerald-500 animate-pulse",
+  awaiting_signature: "bg-emerald-500 animate-pulse",
   signed_ready: "bg-emerald-500",
-  submitting: "bg-amber-500 animate-pulse",
+  submitting: "bg-emerald-500 animate-pulse",
   submitted: "bg-emerald-500",
   rejected: "bg-red-600",
   wrong_network: "bg-red-600",
   backend_unavailable: "bg-red-600",
   error: "bg-red-600",
 };
+
+const FAILURE_PHASES: SigningPhase[] = [
+  "rejected",
+  "wrong_network",
+  "backend_unavailable",
+  "error",
+];
 
 export function SigningStateModal({
   open,
@@ -60,9 +69,14 @@ export function SigningStateModal({
   onClose,
 }: SigningStateModalProps) {
   if (!open) return null;
+  const isFailure = FAILURE_PHASES.includes(phase);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded border border-zinc-300 bg-white p-4 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+      <div
+        data-testid="signing-state-modal"
+        data-phase={phase}
+        className="w-full max-w-md rounded border border-zinc-300 bg-white p-4 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+      >
         <div className="flex items-center gap-2">
           <span className={`h-3 w-3 rounded-full ${PHASE_COLOR[phase]}`} />
           <div className="text-sm font-medium">{PHASE_LABEL[phase]}</div>
@@ -75,6 +89,27 @@ export function SigningStateModal({
             <dt>intent_id</dt>
             <dd className="text-right font-mono">{intentId}</dd>
           </dl>
+        )}
+        {isFailure && (
+          <div
+            data-testid="signing-failure-report-cta"
+            className="mt-3 rounded border border-zinc-200 bg-zinc-50 p-2 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+          >
+            <p className="font-medium">Hit a wall?</p>
+            <p className="mt-1">
+              This is a public testnet beta — bugs are expected. Share the
+              phase, the detail above, and (if any) the intent_id with the
+              team. Do <strong>NOT</strong> share your private key or seed
+              phrase.
+            </p>
+            <div className="mt-2">
+              <ReportIssueButton
+                intentId={intentId ?? null}
+                label="Report this failure"
+                variant="primary"
+              />
+            </div>
+          </div>
         )}
         <div className="mt-4 flex items-center justify-end gap-2">
           <button

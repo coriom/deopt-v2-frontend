@@ -430,9 +430,9 @@ export type CreateExecutionIntentResult =
  * path — only `GET /options/execution-intents` (list) and the
  * operator-side service mint intents. We detect this by treating any
  * 404, 405, or 501 from the public endpoint as a
- * `BACKEND_ENDPOINT_PENDING` result; the UI renders an amber
- * "operator-side endpoint pending" notice and surfaces the legacy
- * manual intent-id paste path.
+ * `BACKEND_ENDPOINT_PENDING` result; the UI renders an
+ * emerald-bordered "operator-side endpoint pending" notice and
+ * surfaces the legacy manual intent-id paste path.
  *
  * Notes for the frontend:
  *   * NEVER pass an admin Bearer token. This endpoint family is

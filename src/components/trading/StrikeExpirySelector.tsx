@@ -33,7 +33,10 @@ export function StrikeExpirySelector({
     return <p className="text-sm text-zinc-500">No series in this product.</p>;
   }
   return (
-    <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2 md:grid-cols-3">
+    <ul
+      data-testid="strike-expiry-selector"
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+    >
       {seriesIds.map((id) => {
         const s = resolveSeries(id);
         const isSelected = id === selected;
@@ -42,15 +45,19 @@ export function StrikeExpirySelector({
             <button
               type="button"
               onClick={() => onSelect(id)}
-              className={`w-full rounded border px-3 py-2 text-left text-xs ${
+              data-testid={`series-button-${id}`}
+              data-selected={isSelected ? "true" : "false"}
+              className={`w-full rounded border px-3 py-2 text-left text-xs transition ${
                 isSelected
-                  ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                  : "border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                  ? "border-emerald-500/70 bg-emerald-500/10 text-emerald-100"
+                  : "border-zinc-800 bg-black/40 text-zinc-200 hover:border-emerald-500/40 hover:bg-emerald-500/5"
               }`}
             >
-              <div className="font-mono">{s ? `K=${formatStrike1e8(s.strike_1e8)}` : id}</div>
+              <div className="font-mono text-zinc-100">
+                {s ? `K=${formatStrike1e8(s.strike_1e8)}` : id}
+              </div>
               {s && (
-                <div className="mt-1 text-[10px] opacity-75">
+                <div className="mt-1 text-[10px] text-zinc-400">
                   exp {new Date(s.expiry_ms).toISOString().slice(0, 16).replace("T", " ")}
                 </div>
               )}

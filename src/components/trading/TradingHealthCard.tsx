@@ -5,7 +5,7 @@ import { ErrorState, LoadingState } from "@/components/ui";
 
 const STATUS_COLOR: Record<string, string> = {
   ok: "bg-emerald-500",
-  degraded: "bg-amber-500",
+  degraded: "bg-emerald-700",
   unhealthy: "bg-red-600",
 };
 

@@ -39,8 +39,8 @@ export interface CreateIntentButtonProps {
  * **Fallback:** when the backend create-intent endpoint is not yet
  * wired (current behaviour as of M-P2e), `createExecutionIntent`
  * resolves with `status: "pending"` and this button calls
- * `onBackendPending` so the parent renders an amber notice + the
- * legacy intent_id paste path.
+ * `onBackendPending` so the parent renders an emerald-bordered notice
+ * + the legacy intent_id paste path.
  */
 export function CreateIntentButton({
   request,

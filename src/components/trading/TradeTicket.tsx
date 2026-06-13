@@ -13,6 +13,7 @@ import {
 import { OrderbookPanel } from "./OrderbookPanel";
 import { QuotePreviewCard } from "./QuotePreviewCard";
 import { CreateIntentButton } from "./CreateIntentButton";
+import { RoleReadinessCard } from "./RoleReadinessCard";
 import { LoadingState, EmptyState, ErrorState } from "@/components/ui";
 import {
   SigningStateModal,
@@ -25,8 +26,8 @@ import {
  *   1. user selects series + side + size + (optional) price
  *   2. QuotePreviewCard renders the partial-real preview
  *   3. user clicks Create intent — backend mints intent_id (or, if
- *      the backend endpoint is pending, an amber notice + the
- *      legacy paste-intent_id input is shown)
+ *      the backend endpoint is pending, an emerald-bordered notice
+ *      + the legacy paste-intent_id input is shown)
  *   4. user clicks Sign typed data — frontend fetches the signing
  *      payload, opens the wallet, surfaces rejection / network /
  *      typed-data errors via the modal
@@ -40,7 +41,7 @@ import {
  */
 export function TradeTicket({ seriesId }: { seriesId: string | null }) {
   const router = useRouter();
-  const { address, isExpectedChain, signTypedData } = useWallet();
+  const { address, isExpectedChain, isMainnet, signTypedData } = useWallet();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [size, setSize] = useState("1");
   const [price1e8, setPrice1e8] = useState("");
@@ -67,7 +68,21 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
   if (error) return <ErrorState error={error} onRetry={refetch} />;
 
   const canSign =
-    !!address && isExpectedChain && isSigningEnabled() && intentId.length > 0;
+    !!address &&
+    isExpectedChain &&
+    !isMainnet &&
+    isSigningEnabled() &&
+    intentId.length > 0;
+
+  const signBlockerReason = !address
+    ? "Connect your wallet to sign"
+    : isMainnet
+      ? "Mainnet is permanently disabled — switch to Base Sepolia"
+      : !isExpectedChain
+        ? "Wrong network — switch your wallet to Base Sepolia"
+        : intentId.length === 0
+          ? "Create or paste an execution intent id"
+          : null;
 
   const handleSign = async () => {
     if (!canSign) return;
@@ -129,39 +144,65 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+    <div
+      data-testid="trade-ticket"
+      className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3"
+    >
+      <RoleReadinessCard side={side} />
       <OrderbookPanel seriesId={seriesId} />
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setSide("buy")}
-          className={`flex-1 rounded px-2 py-1 text-xs ${
-            side === "buy" ? "bg-emerald-600 text-white" : "border border-zinc-300 dark:border-zinc-700"
-          }`}
+      <div className="flex flex-col gap-1">
+        <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+          Side
+        </div>
+        <div className="flex gap-2" role="group" aria-label="Trade side">
+          <button
+            type="button"
+            onClick={() => setSide("buy")}
+            data-testid="side-buy"
+            data-selected={side === "buy" ? "true" : "false"}
+            className={`flex-1 rounded px-2 py-1.5 text-xs font-medium ${
+              side === "buy"
+                ? "border border-emerald-500/60 bg-emerald-500 text-black"
+                : "border border-zinc-800 bg-black/40 text-zinc-200 hover:border-emerald-500/40"
+            }`}
+          >
+            Buy (long)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSide("sell")}
+            data-testid="side-sell"
+            data-selected={side === "sell" ? "true" : "false"}
+            className={`flex-1 rounded px-2 py-1.5 text-xs font-medium ${
+              side === "sell"
+                ? "border border-red-500/60 bg-red-950/60 text-red-100"
+                : "border border-zinc-800 bg-black/40 text-zinc-200 hover:border-red-500/40"
+            }`}
+          >
+            Sell (short)
+          </button>
+        </div>
+        <p
+          data-testid="trade-side-microcopy"
+          className="text-[10px] leading-relaxed text-zinc-400"
         >
-          Buy
-        </button>
-        <button
-          type="button"
-          onClick={() => setSide("sell")}
-          className={`flex-1 rounded px-2 py-1 text-xs ${
-            side === "sell" ? "bg-red-600 text-white" : "border border-zinc-300 dark:border-zinc-700"
-          }`}
-        >
-          Sell
-        </button>
+          {side === "buy"
+            ? "Buyer (long): pay the premium up front. No mUSDC collateral required to open the long."
+            : "Seller (short): post mUSDC collateral to cover the short. Receive premium on settlement."}
+        </p>
       </div>
-      <label className="text-xs">
+      <label className="text-xs text-zinc-300">
         Size
         <input
           type="text"
           inputMode="numeric"
           value={size}
           onChange={(e) => setSize(e.target.value)}
-          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+          data-testid="trade-size-input"
+          className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
         />
       </label>
-      <label className="text-xs">
+      <label className="text-xs text-zinc-300">
         Limit price (1e8)
         <input
           type="text"
@@ -169,7 +210,8 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
           value={price1e8}
           onChange={(e) => setPrice1e8(e.target.value)}
           placeholder="optional"
-          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+          data-testid="trade-price-input"
+          className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
         />
       </label>
       <QuotePreviewCard
@@ -178,8 +220,8 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
         size={size}
         price_1e8={price1e8 || undefined}
       />
-      <div className="flex flex-col gap-2 rounded border border-zinc-200 p-2 dark:border-zinc-800">
-        <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+      <div className="flex flex-col gap-2 rounded border border-zinc-800 bg-black/40 p-2">
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-200">
           Step 1 — Create intent
         </div>
         <CreateIntentButton
@@ -211,7 +253,7 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
         />
         {createPendingMessage && (
           <div
-            className="rounded border border-amber-300 bg-amber-50 p-2 text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+            className="rounded border border-emerald-500/30 bg-zinc-950 p-2 text-[10px] text-emerald-200"
             data-testid="create-intent-pending-notice"
           >
             <p className="font-medium">Backend create-intent endpoint pending.</p>
@@ -222,14 +264,14 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
             </p>
           </div>
         )}
-        <label className="text-xs">
+        <label className="text-xs text-zinc-300">
           Execution intent id
           <input
             type="text"
             value={intentId}
             onChange={(e) => setIntentId(e.target.value)}
             placeholder="auto-filled when backend creates it"
-            className="mt-1 w-full rounded border border-zinc-300 px-2 py-1 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-900"
+            className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-[10px] text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
             data-testid="intent-id-input"
           />
           <p className="mt-1 text-[10px] text-zinc-500">
@@ -238,33 +280,46 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
           </p>
         </label>
       </div>
-      <div className="flex flex-col gap-2 rounded border border-zinc-200 p-2 dark:border-zinc-800">
-        <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+      <div className="flex flex-col gap-2 rounded border border-zinc-800 bg-black/40 p-2">
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-200">
           Step 2 — Sign typed data
         </div>
         <button
           type="button"
           disabled={!canSign}
           onClick={() => void handleSign()}
-          className="rounded bg-zinc-900 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold text-black hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           data-testid="sign-button"
-          title={
-            !address
-              ? "Connect your wallet"
-              : !isExpectedChain
-                ? "Switch to the expected testnet"
-                : intentId.length === 0
-                  ? "Create or paste an execution intent id"
-                  : ""
-          }
+          title={signBlockerReason ?? ""}
         >
           Sign typed data
         </button>
-        <p className="text-[10px] text-zinc-500">
-          Clicking opens your wallet for an EIP-712 typed-data signature.
-          Nothing is broadcast from the UI; the backend operator handles
-          broadcast after both buyer + seller sign.
-        </p>
+        {signBlockerReason && (
+          <p
+            data-testid="sign-blocker-reason"
+            className="text-[10px] text-emerald-300"
+          >
+            {signBlockerReason}
+          </p>
+        )}
+        <ul
+          data-testid="sign-microcopy"
+          className="ml-3 list-disc text-[10px] leading-relaxed text-zinc-400"
+        >
+          <li>
+            <strong className="text-zinc-200">Your wallet signs typed data.</strong>{" "}
+            Nothing is broadcast from your wallet.
+          </li>
+          <li>
+            The operator-side executor submits the testnet transaction on{" "}
+            <strong className="text-emerald-300">Base Sepolia (chain 84532)</strong>{" "}
+            after both buyer + seller signatures are collected.
+          </li>
+          <li>
+            Settlement happens on chain via the canonical matching engine.{" "}
+            <strong className="text-zinc-200">No real funds.</strong>
+          </li>
+        </ul>
       </div>
       <SigningStateModal
         open={modalOpen}
