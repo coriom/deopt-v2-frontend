@@ -19,6 +19,7 @@ const NAVBAR_LINKS = [
   { testid: "navbar-link-perps", href: "/perps", label: "Perps" },
   { testid: "navbar-link-markets", href: "/markets", label: "Markets" },
   { testid: "navbar-link-portfolio", href: "/portfolio", label: "Portfolio" },
+  { testid: "navbar-link-custom", href: "/custom", label: "Custom" },
 ];
 
 test("primary navbar shows Options / Perps / Markets / Portfolio / API / Académie", async ({

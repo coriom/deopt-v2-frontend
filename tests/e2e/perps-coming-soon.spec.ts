@@ -1,27 +1,57 @@
 /**
- * perps-coming-soon.spec.ts — FRONTEND-NAVBAR-OPTIONS-PERPS-LOCAL-QA
+ * perps-coming-soon.spec.ts — FRONTEND-MODULAR-WORKSPACE-V1
  *
- * Verifies /perps renders an honest placeholder page:
- *   - "Perps" heading and explicit "coming later" chip
- *   - Disclosure panel covers testnet posture (no real funds, unaudited)
- *   - Meanwhile-CTAs link to /trade (Options), /markets, /docs,
- *     /feedback, and the public Discord
- *   - No fake bid/ask/mark/IV/Greeks/liquidity
- *   - No positive claims (audited / mainnet-ready / production-ready /
- *     safe for real funds / guaranteed liquidity / institutional-grade)
- *   - No amber/yellow/orange brand styling
- *   - No admin / bearer / RPC URL / DATABASE_URL leak
+ * /perps now renders the modular Workspace with perps placeholder
+ * widgets + a static disclosure panel. These specs assert:
+ *   - the Workspace shell + perps toolbar render
+ *   - the 6 default perps widgets render (stats, chart, orderbook,
+ *     trade form, trade feed, balances)
+ *   - the static disclosure panel surfaces the testnet posture +
+ *     CTAs to Options / Docs / Discord / Feedback
+ *   - no positive-claim / fake-liquidity / colour drift / admin /
+ *     bearer / RPC URL / DATABASE_URL leak
  */
 import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
 
-test("/perps renders the coming-soon placeholder", async ({ page }) => {
+test("/perps renders the modular Workspace shell", async ({ page }) => {
   await installMockWallet(page);
   await page.goto("/perps");
-  await expect(page.getByTestId("perps-coming-soon")).toBeVisible();
-  await expect(page.getByTestId("perps-status-chip")).toContainText(
-    /coming later in the public testnet beta/i,
-  );
+  await expect(page.getByTestId("perps-terminal-shell")).toBeVisible();
+  await expect(page.getByTestId("workspace-perps")).toBeVisible();
+  await expect(page.getByTestId("workspace-toolbar-perps")).toBeVisible();
+});
+
+test("/perps renders default placeholder widgets", async ({ page }) => {
+  await installMockWallet(page);
+  await page.goto("/perps");
+  for (const id of [
+    "widget-perps-stats",
+    "widget-perps-chart",
+    "widget-perps-orderbook",
+    "widget-perps-trade-form",
+    "widget-perps-trade-feed",
+    "widget-balances",
+  ]) {
+    await expect(page.getByTestId(id)).toBeVisible();
+  }
+  await expect(page.getByTestId("widget-perps-chart-svg")).toBeVisible();
+});
+
+test("/perps placeholder widgets are flagged 'coming later'", async ({
+  page,
+}) => {
+  await installMockWallet(page);
+  await page.goto("/perps");
+  for (const t of [
+    "widget-status-perps-stats",
+    "widget-status-perps-chart",
+    "widget-status-perps-orderbook",
+    "widget-status-perps-trade-form",
+    "widget-status-perps-trade-feed",
+  ]) {
+    await expect(page.getByTestId(t)).toContainText(/coming later/i);
+  }
 });
 
 test("/perps disclosure panel surfaces testnet posture", async ({ page }) => {
@@ -31,9 +61,12 @@ test("/perps disclosure panel surfaces testnet posture", async ({ page }) => {
   await expect(panel).toContainText(/No real funds/i);
   await expect(panel).toContainText(/Unaudited/i);
   await expect(panel).toContainText(/Experimental/i);
+  await expect(page.getByTestId("perps-status-chip")).toContainText(
+    /coming later in the public testnet beta/i,
+  );
 });
 
-test("/perps meanwhile CTAs link Options / Markets / Docs / Feedback / Discord", async ({
+test("/perps meanwhile CTAs link Options / Docs / Discord / Feedback", async ({
   page,
 }) => {
   await installMockWallet(page);
@@ -41,10 +74,6 @@ test("/perps meanwhile CTAs link Options / Markets / Docs / Feedback / Discord",
   await expect(page.getByTestId("perps-cta-options")).toHaveAttribute(
     "href",
     "/trade",
-  );
-  await expect(page.getByTestId("perps-cta-markets")).toHaveAttribute(
-    "href",
-    "/markets",
   );
   await expect(page.getByTestId("perps-cta-docs")).toHaveAttribute(
     "href",
@@ -65,7 +94,7 @@ test("/perps surfaces no fake liquidity / positive claims / colour drift", async
 }) => {
   await installMockWallet(page);
   await page.goto("/perps");
-  await page.waitForSelector("[data-testid=perps-coming-soon]");
+  await page.waitForSelector("[data-testid=perps-terminal-shell]");
   const main = page.locator("main");
   const text = await main.innerText();
   expect(text).not.toMatch(/\bis audited\b/i);

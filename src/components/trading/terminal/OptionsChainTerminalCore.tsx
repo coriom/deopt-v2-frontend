@@ -1,5 +1,10 @@
 "use client";
 
+// Chain-only variant of OptionsChainTerminal. Publishes selection
+// through SelectedOptionProvider context so other widgets (detail
+// panel, payoff) can subscribe. NO embedded detail panel. NO embedded
+// bottom dock — those are separate widgets in the workspace.
+
 import { useEffect, useMemo, useState } from "react";
 import { useProducts, useProductDetails, useSeriesDetails } from "@/hooks/trading";
 import { LoadingState } from "@/components/ui";
@@ -9,24 +14,12 @@ import {
   distinctExpiries,
   distinctUnderlyings,
   filterByExpiry,
-  type OptionLeg,
-  type OptionsChainRow,
 } from "@/lib/options-chain-model";
 import type { Product, Series, SeriesId } from "@/lib/trading-types";
+import { useSelectedOption } from "@/lib/workspace-selected-option";
 import { ExpirySelector } from "./ExpirySelector";
 import { OptionsChainGrid } from "./OptionsChainGrid";
-import { OptionDetailPanel } from "./OptionDetailPanel";
-import { BottomPanel } from "./BottomPanel";
 
-interface SelectedState {
-  leg: OptionLeg;
-  row: OptionsChainRow;
-  productId: string | null;
-}
-
-// Resolve series details one at a time via the single useSeriesDetails
-// hook. We accumulate the most recent result by series_id so the chain
-// builder can render whatever we know so far without flickering.
 function useSeriesById(seriesIds: SeriesId[]) {
   const [target, setTarget] = useState<SeriesId | null>(null);
   const { data } = useSeriesDetails(target);
@@ -56,17 +49,15 @@ function useSeriesById(seriesIds: SeriesId[]) {
   return byId;
 }
 
-export function OptionsChainTerminal() {
+export function OptionsChainTerminalCore() {
   const products = useProducts();
+  const { selected, setSelected } = useSelectedOption();
 
   const allProducts = useMemo<Product[]>(
     () => products.data?.data.products ?? [],
     [products.data],
   );
-  const underlyings = useMemo(
-    () => distinctUnderlyings(allProducts),
-    [allProducts],
-  );
+  const underlyings = useMemo(() => distinctUnderlyings(allProducts), [allProducts]);
   const [underlyingKey, setUnderlyingKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -76,7 +67,6 @@ export function OptionsChainTerminal() {
     Promise.resolve().then(() => setUnderlyingKey(next));
   }, [underlyingKey, allProducts]);
 
-  // Filter products by underlying.
   const filteredProducts = useMemo(
     () =>
       underlyingKey === null
@@ -85,15 +75,11 @@ export function OptionsChainTerminal() {
     [allProducts, underlyingKey],
   );
 
-  // For each product, fetch the detail (which yields its series_ids).
-  // We only fetch the first product detail per render; in practice the
-  // backend usually exposes 1-2 products per underlying (call + put).
   const firstProductId = filteredProducts[0]?.product_id ?? null;
   const firstDetail = useProductDetails(firstProductId);
   const secondProductId = filteredProducts[1]?.product_id ?? null;
   const secondDetail = useProductDetails(secondProductId);
 
-  // Hydrate "products with series_ids" view for the chain builder.
   type ProductWithSeries = Product & { series_ids?: SeriesId[] };
   const productsForChain: ProductWithSeries[] = useMemo(() => {
     const out: ProductWithSeries[] = [];
@@ -134,8 +120,6 @@ export function OptionsChainTerminal() {
     [chainRows, expiryPick],
   );
 
-  const [selected, setSelected] = useState<SelectedState | null>(null);
-
   if (products.isLoading && !products.data) {
     return <LoadingState label="Loading options chain…" />;
   }
@@ -149,13 +133,11 @@ export function OptionsChainTerminal() {
     );
   }
   if (allProducts.length === 0) {
-    return (
-      <MarketsFallbackCard kind="no-products" onRetry={products.refetch} />
-    );
+    return <MarketsFallbackCard kind="no-products" onRetry={products.refetch} />;
   }
 
   return (
-    <div data-testid="terminal-shell" className="flex flex-col gap-2">
+    <div data-testid="options-chain-core" className="flex flex-col gap-2">
       <header
         data-testid="terminal-header"
         className="flex flex-wrap items-center justify-between gap-2 rounded border border-emerald-500/30 bg-zinc-950 px-3 py-1.5 text-[11px]"
@@ -164,11 +146,7 @@ export function OptionsChainTerminal() {
           <span className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">
             Options · v1
           </span>
-          <div
-            role="tablist"
-            aria-label="Underlying"
-            className="flex flex-wrap gap-1"
-          >
+          <div role="tablist" aria-label="Underlying" className="flex flex-wrap gap-1">
             {underlyings.map((u) => (
               <button
                 key={u.key}
@@ -206,25 +184,13 @@ export function OptionsChainTerminal() {
           <span className="text-emerald-300">no real funds</span>
         </div>
       </header>
-
-      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
-        <OptionsChainGrid
-          rows={visibleRows}
-          selectedSeriesId={selected?.leg.seriesId ?? null}
-          onSelect={(leg, row) =>
-            setSelected({ leg, row, productId: leg.productId })
-          }
-        />
-        <div className="lg:sticky lg:top-2 lg:self-start">
-          <OptionDetailPanel
-            leg={selected?.leg ?? null}
-            row={selected?.row ?? null}
-            productId={selected?.productId ?? null}
-          />
-        </div>
-      </div>
-
-      <BottomPanel />
+      <OptionsChainGrid
+        rows={visibleRows}
+        selectedSeriesId={selected?.leg.seriesId ?? null}
+        onSelect={(leg, row) =>
+          setSelected({ leg, row, productId: leg.productId })
+        }
+      />
     </div>
   );
 }

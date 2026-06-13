@@ -41,10 +41,10 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
         <TestnetUnauditedBanner />
         <MainnetDisabledBanner />
         <WrongNetworkBanner />
-        <header className="flex flex-wrap items-center justify-between gap-y-2 border-b border-zinc-900 bg-zinc-950 px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-y-1 border-b border-zinc-900 bg-zinc-950 px-3 py-2">
           <nav
             aria-label="Primary"
-            className="flex items-center gap-3 text-sm sm:gap-4"
+            className="flex items-center gap-2 text-[13px] sm:gap-3"
           >
             <Link
               href="/"
@@ -89,6 +89,13 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
             >
               Portfolio
             </Link>
+            <Link
+              href="/custom"
+              data-testid="navbar-link-custom"
+              className="text-zinc-400 hover:text-emerald-300"
+            >
+              Custom
+            </Link>
             <ComingSoonNavLink
               label="API"
               testid="navbar-link-api"
@@ -106,7 +113,7 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
             <HamburgerMenu />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+        <main className="mx-auto w-full max-w-screen-2xl flex-1 px-3 py-3 lg:px-4 lg:py-4">
           {children}
         </main>
         <PublicBetaFooter />
