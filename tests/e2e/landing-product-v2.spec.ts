@@ -38,9 +38,15 @@ test("landing CTAs are present (Start testing + Read quickstart + Report feedbac
   await page.goto("/");
   await expect(page.getByTestId("landing-cta-start-testing")).toBeVisible();
   await expect(page.getByTestId("landing-cta-quickstart")).toBeVisible();
-  await expect(
-    page.getByTestId("report-issue-button").first(),
-  ).toBeVisible();
+  // Report feedback CTA. Since feedback is wired to the internal /feedback
+  // route (FRONTEND-INTEGRATED-DOCS-AND-FEEDBACK), the button renders as
+  // an `<a>` with testid `report-issue-link`. If the link ever degrades
+  // back to placeholder, the testid would flip to `report-issue-button`.
+  const reportCta = page
+    .getByTestId("report-issue-link")
+    .or(page.getByTestId("report-issue-button"))
+    .first();
+  await expect(reportCta).toBeVisible();
 });
 
 test("HowItWorks block is NOT rendered on the main landing", async ({

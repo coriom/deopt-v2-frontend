@@ -20,6 +20,18 @@ function CtaButton({
       ? "rounded bg-emerald-500 px-4 py-2 text-xs font-medium text-black hover:bg-emerald-400"
       : "rounded border border-emerald-500/40 px-4 py-2 text-xs font-medium text-emerald-200 hover:bg-emerald-500/10";
   if (isLive) {
+    if (link?.internal) {
+      return (
+        <Link
+          href={href}
+          data-testid={`landing-cta-${id}`}
+          data-target="internal"
+          className={base}
+        >
+          {label}
+        </Link>
+      );
+    }
     return (
       <a
         href={href}

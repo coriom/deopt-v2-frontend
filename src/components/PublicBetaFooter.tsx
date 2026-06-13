@@ -1,12 +1,20 @@
 "use client";
 
-import { PUBLIC_BETA_LINKS, isPlaceholderHref } from "@/lib/public-beta-links";
+import Link from "next/link";
+import {
+  PUBLIC_BETA_LINKS,
+  isPlaceholderHref,
+} from "@/lib/public-beta-links";
 
 /**
  * Public testnet beta footer. Renders the safety-copy block + the
  * public docs / feedback links. Placeholder hrefs are rendered as
  * non-clickable text so users see the slot exists but cannot click a
  * dead link before the operator wires it up.
+ *
+ * Internal-route slots (e.g. `/docs/quickstart`, `/feedback`) render
+ * as Next.js <Link> for client-side navigation. External URLs render
+ * as `<a target="_blank">`.
  *
  * Posture: testnet only, unaudited. NO secrets, NO admin bearer, NO
  * RPC URLs, NO DATABASE_URLs.
@@ -37,6 +45,8 @@ export function PublicBetaFooter() {
         >
           {PUBLIC_BETA_LINKS.map((link) => {
             const placeholder = isPlaceholderHref(link.href);
+            const linkClass =
+              "text-emerald-200 underline decoration-emerald-500/40 underline-offset-4 hover:text-emerald-100 hover:decoration-emerald-400";
             if (placeholder) {
               return (
                 <span
@@ -50,15 +60,30 @@ export function PublicBetaFooter() {
                 </span>
               );
             }
+            if (link.internal) {
+              return (
+                <Link
+                  key={link.id}
+                  data-testid={`public-beta-link-${link.id}`}
+                  data-target="internal"
+                  href={link.href}
+                  title={link.description}
+                  className={linkClass}
+                >
+                  {link.label}
+                </Link>
+              );
+            }
             return (
               <a
                 key={link.id}
                 data-testid={`public-beta-link-${link.id}`}
+                data-target="external"
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 title={link.description}
-                className="text-emerald-200 underline decoration-emerald-500/40 underline-offset-4 hover:text-emerald-100 hover:decoration-emerald-400"
+                className={linkClass}
               >
                 {link.label}
               </a>

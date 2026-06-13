@@ -1,0 +1,221 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useProducts, useProductDetails, useSeriesDetails } from "@/hooks/trading";
+import { LoadingState } from "@/components/ui";
+import { MarketsFallbackCard } from "@/components/trading/MarketsFallbackCard";
+import {
+  buildOptionsChain,
+  distinctExpiries,
+  distinctUnderlyings,
+  filterByExpiry,
+  type OptionLeg,
+  type OptionsChainRow,
+} from "@/lib/options-chain-model";
+import type { Product, Series, SeriesId } from "@/lib/trading-types";
+import { ExpirySelector } from "./ExpirySelector";
+import { OptionsChainGrid } from "./OptionsChainGrid";
+import { OptionDetailPanel } from "./OptionDetailPanel";
+import { BottomPanel } from "./BottomPanel";
+
+interface SelectedState {
+  leg: OptionLeg;
+  row: OptionsChainRow;
+  productId: string | null;
+}
+
+// Resolve series details one at a time via the single useSeriesDetails
+// hook. We accumulate the most recent result by series_id so the chain
+// builder can render whatever we know so far without flickering.
+function useSeriesById(seriesIds: SeriesId[]) {
+  const [target, setTarget] = useState<SeriesId | null>(null);
+  const { data } = useSeriesDetails(target);
+  const [byId, setById] = useState<Map<SeriesId, Series>>(new Map());
+
+  useEffect(() => {
+    if (!data) return;
+    const s = data.data?.series;
+    if (!s) return;
+    Promise.resolve().then(() => {
+      setById((prev) => {
+        if (prev.has(s.series_id)) return prev;
+        const next = new Map(prev);
+        next.set(s.series_id, s);
+        return next;
+      });
+    });
+  }, [data]);
+
+  useEffect(() => {
+    const next = seriesIds.find((sid) => !byId.has(sid));
+    if (next && next !== target) {
+      Promise.resolve().then(() => setTarget(next));
+    }
+  }, [seriesIds, byId, target]);
+
+  return byId;
+}
+
+export function OptionsChainTerminal() {
+  const products = useProducts();
+
+  const allProducts = useMemo<Product[]>(
+    () => products.data?.data.products ?? [],
+    [products.data],
+  );
+  const underlyings = useMemo(
+    () => distinctUnderlyings(allProducts),
+    [allProducts],
+  );
+  const [underlyingKey, setUnderlyingKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (underlyingKey !== null) return;
+    if (allProducts.length === 0) return;
+    const next = allProducts[0].underlying;
+    Promise.resolve().then(() => setUnderlyingKey(next));
+  }, [underlyingKey, allProducts]);
+
+  // Filter products by underlying.
+  const filteredProducts = useMemo(
+    () =>
+      underlyingKey === null
+        ? allProducts
+        : allProducts.filter((p) => p.underlying === underlyingKey),
+    [allProducts, underlyingKey],
+  );
+
+  // For each product, fetch the detail (which yields its series_ids).
+  // We only fetch the first product detail per render; in practice the
+  // backend usually exposes 1-2 products per underlying (call + put).
+  const firstProductId = filteredProducts[0]?.product_id ?? null;
+  const firstDetail = useProductDetails(firstProductId);
+  const secondProductId = filteredProducts[1]?.product_id ?? null;
+  const secondDetail = useProductDetails(secondProductId);
+
+  // Hydrate "products with series_ids" view for the chain builder.
+  type ProductWithSeries = Product & { series_ids?: SeriesId[] };
+  const productsForChain: ProductWithSeries[] = useMemo(() => {
+    const out: ProductWithSeries[] = [];
+    if (firstDetail.data) {
+      out.push({
+        ...firstDetail.data.data.product,
+        series_ids: firstDetail.data.data.series_ids,
+      });
+    }
+    if (secondDetail.data) {
+      out.push({
+        ...secondDetail.data.data.product,
+        series_ids: secondDetail.data.data.series_ids,
+      });
+    }
+    return out;
+  }, [firstDetail.data, secondDetail.data]);
+
+  const allSeriesIds = useMemo(() => {
+    const s = new Set<SeriesId>();
+    for (const p of productsForChain) {
+      for (const sid of p.series_ids ?? []) s.add(sid);
+    }
+    return [...s];
+  }, [productsForChain]);
+
+  const seriesById = useSeriesById(allSeriesIds);
+
+  const chainRows = useMemo(
+    () => buildOptionsChain(productsForChain, seriesById),
+    [productsForChain, seriesById],
+  );
+
+  const expiries = useMemo(() => distinctExpiries(chainRows), [chainRows]);
+  const [expiryPick, setExpiryPick] = useState<number | null>(null);
+  const visibleRows = useMemo(
+    () => filterByExpiry(chainRows, expiryPick),
+    [chainRows, expiryPick],
+  );
+
+  const [selected, setSelected] = useState<SelectedState | null>(null);
+
+  if (products.isLoading && !products.data) {
+    return <LoadingState label="Loading options chain…" />;
+  }
+  if (products.error) {
+    return (
+      <MarketsFallbackCard
+        kind="backend-unavailable"
+        detail={`${products.error.code}: ${products.error.message}`}
+        onRetry={products.refetch}
+      />
+    );
+  }
+  if (allProducts.length === 0) {
+    return (
+      <MarketsFallbackCard kind="no-products" onRetry={products.refetch} />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <header
+        data-testid="terminal-header"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-zinc-950 p-3"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">
+            Underlying
+          </span>
+          <div
+            role="tablist"
+            aria-label="Underlying"
+            className="flex flex-wrap gap-1"
+          >
+            {underlyings.map((u) => (
+              <button
+                key={u.key}
+                type="button"
+                role="tab"
+                aria-selected={underlyingKey === u.key}
+                onClick={() => {
+                  setUnderlyingKey(u.key);
+                  setSelected(null);
+                  setExpiryPick(null);
+                }}
+                data-testid={`underlying-pill-${u.label}`}
+                data-selected={underlyingKey === u.key ? "true" : "false"}
+                className={`rounded border px-2 py-0.5 text-[11px] font-medium ${
+                  underlyingKey === u.key
+                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                    : "border-zinc-800 bg-black/40 text-zinc-300 hover:border-emerald-500/40"
+                }`}
+              >
+                {u.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <ExpirySelector
+          expiries={expiries}
+          selected={expiryPick}
+          onSelect={setExpiryPick}
+        />
+      </header>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <OptionsChainGrid
+          rows={visibleRows}
+          selectedSeriesId={selected?.leg.seriesId ?? null}
+          onSelect={(leg, row) =>
+            setSelected({ leg, row, productId: leg.productId })
+          }
+        />
+        <OptionDetailPanel
+          leg={selected?.leg ?? null}
+          row={selected?.row ?? null}
+          productId={selected?.productId ?? null}
+        />
+      </div>
+
+      <BottomPanel />
+    </div>
+  );
+}

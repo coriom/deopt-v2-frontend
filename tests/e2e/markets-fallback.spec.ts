@@ -39,9 +39,14 @@ test("backend-unavailable fallback renders the dark/green card with retry + repo
     page.getByText(/Trading backend temporarily unavailable/i),
   ).toBeVisible();
   await expect(page.getByTestId("markets-fallback-retry")).toBeVisible();
-  await expect(
-    page.getByTestId("report-issue-button").first(),
-  ).toBeVisible();
+  // Report-issue rendered as live `<a>` since feedback URL was wired in
+  // FRONTEND-INTEGRATED-DOCS-AND-FEEDBACK; fall through to the placeholder
+  // testid if it ever degrades.
+  const reportCta = page
+    .getByTestId("report-issue-link")
+    .or(page.getByTestId("report-issue-button"))
+    .first();
+  await expect(reportCta).toBeVisible();
   // Discord live link present.
   const discord = page.getByTestId("markets-fallback-community");
   await expect(discord).toBeVisible();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@/lib/wallet";
 import { findPublicBetaLink, isPlaceholderHref } from "@/lib/public-beta-links";
@@ -67,6 +68,18 @@ export function ReportIssueButton({
         : "rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800";
 
   if (isLive) {
+    if (feedbackLink?.internal) {
+      return (
+        <Link
+          href={href}
+          data-testid="report-issue-link"
+          data-target="internal"
+          className={baseClass}
+        >
+          {label}
+        </Link>
+      );
+    }
     return (
       <a
         href={href}

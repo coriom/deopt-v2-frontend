@@ -10,7 +10,29 @@ import {
 } from "@/components/banners";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { PublicBetaFooter } from "@/components/PublicBetaFooter";
-import { ReportIssueButton } from "@/components/ReportIssueButton";
+import { HamburgerMenu } from "@/components/HamburgerMenu";
+
+function ComingSoonNavLink({
+  label,
+  testid,
+  title,
+}: {
+  label: string;
+  testid: string;
+  title: string;
+}) {
+  return (
+    <span
+      data-testid={testid}
+      data-placeholder="true"
+      aria-disabled="true"
+      title={title}
+      className="cursor-not-allowed text-zinc-600"
+    >
+      {label}
+    </span>
+  );
+}
 
 export default function TradingLayout({ children }: { children: ReactNode }) {
   return (
@@ -20,7 +42,10 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
         <MainnetDisabledBanner />
         <WrongNetworkBanner />
         <header className="flex flex-wrap items-center justify-between gap-y-2 border-b border-zinc-900 bg-zinc-950 px-4 py-3">
-          <nav className="flex items-center gap-3 text-sm sm:gap-4">
+          <nav
+            aria-label="Primary"
+            className="flex items-center gap-3 text-sm sm:gap-4"
+          >
             <Link
               href="/"
               data-testid="header-home-link"
@@ -37,39 +62,46 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
               <span className="tracking-tight">DeOpt</span>
             </Link>
             <Link
+              href="/trade"
+              data-testid="navbar-link-trade"
+              className="text-zinc-400 hover:text-emerald-300"
+            >
+              Trade
+            </Link>
+            <Link
               href="/markets"
+              data-testid="navbar-link-markets"
               className="text-zinc-400 hover:text-emerald-300"
             >
               Markets
             </Link>
             <Link
               href="/portfolio"
+              data-testid="navbar-link-portfolio"
               className="text-zinc-400 hover:text-emerald-300"
             >
               Portfolio
             </Link>
-            <Link
-              href="/history"
-              className="hidden text-zinc-400 hover:text-emerald-300 sm:inline"
-            >
-              History
-            </Link>
-            <Link
-              href="/health"
-              className="hidden text-zinc-400 hover:text-emerald-300 sm:inline"
-            >
-              Health
-            </Link>
+            <ComingSoonNavLink
+              label="API"
+              testid="navbar-link-api"
+              title="DeOpt public API documentation — coming soon in the testnet beta cycle"
+            />
+            <ComingSoonNavLink
+              label="DeOpt Académie"
+              testid="navbar-link-academie"
+              title="DeOpt Académie — educational tracks coming soon in the testnet beta cycle"
+            />
           </nav>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <span className="hidden sm:inline">
-              <ReportIssueButton label="Report a bug" variant="compact" />
-            </span>
             <NetworkBadge />
             <WalletConnectButton />
+            <HamburgerMenu />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+          {children}
+        </main>
         <PublicBetaFooter />
       </div>
     </WalletProvider>
