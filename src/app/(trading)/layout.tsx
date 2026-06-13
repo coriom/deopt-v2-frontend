@@ -63,10 +63,17 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
             </Link>
             <Link
               href="/trade"
-              data-testid="navbar-link-trade"
+              data-testid="navbar-link-options"
               className="text-zinc-400 hover:text-emerald-300"
             >
-              Trade
+              Options
+            </Link>
+            <Link
+              href="/perps"
+              data-testid="navbar-link-perps"
+              className="text-zinc-400 hover:text-emerald-300"
+            >
+              Perps
             </Link>
             <Link
               href="/markets"

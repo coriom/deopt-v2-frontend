@@ -2,7 +2,10 @@
  * terminal-navbar.spec.ts — public testnet beta V1 terminal
  *
  * Covers the refactored top navbar + hamburger menu:
- *   - Trade / Markets / Portfolio / API / DeOpt Académie visible
+ *   - Options / Perps / Markets / Portfolio / API / DeOpt Académie visible
+ *   - Options replaces the previous "Trade" label (route /trade unchanged)
+ *   - Perps is an explicit primary nav item pointing at /perps
+ *     placeholder
  *   - API + Académie are coming-soon placeholders (aria-disabled)
  *   - Hamburger button visible; opens a drawer with the required links
  *   - Drawer entries point at the right internal/external destinations
@@ -12,20 +15,22 @@ import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
 
 const NAVBAR_LINKS = [
-  { testid: "navbar-link-trade", href: "/trade" },
-  { testid: "navbar-link-markets", href: "/markets" },
-  { testid: "navbar-link-portfolio", href: "/portfolio" },
+  { testid: "navbar-link-options", href: "/trade", label: "Options" },
+  { testid: "navbar-link-perps", href: "/perps", label: "Perps" },
+  { testid: "navbar-link-markets", href: "/markets", label: "Markets" },
+  { testid: "navbar-link-portfolio", href: "/portfolio", label: "Portfolio" },
 ];
 
-test("primary navbar shows Trade / Markets / Portfolio / API / Académie", async ({
+test("primary navbar shows Options / Perps / Markets / Portfolio / API / Académie", async ({
   page,
 }) => {
   await installMockWallet(page);
   await page.goto("/");
-  for (const { testid, href } of NAVBAR_LINKS) {
+  for (const { testid, href, label } of NAVBAR_LINKS) {
     const el = page.getByTestId(testid);
     await expect(el).toBeVisible();
     await expect(el).toHaveAttribute("href", href);
+    await expect(el).toHaveText(label);
   }
   // API + Académie are coming-soon placeholders.
   for (const id of ["navbar-link-api", "navbar-link-academie"]) {
@@ -34,6 +39,18 @@ test("primary navbar shows Trade / Markets / Portfolio / API / Académie", async
     await expect(el).toHaveAttribute("aria-disabled", "true");
     await expect(el).toHaveAttribute("data-placeholder", "true");
   }
+});
+
+test("primary navbar no longer renders the legacy 'Trade' label", async ({
+  page,
+}) => {
+  await installMockWallet(page);
+  await page.goto("/");
+  // The previous testid no longer exists.
+  await expect(page.getByTestId("navbar-link-trade")).toHaveCount(0);
+  // No <nav> child carries the bare text "Trade".
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await expect(nav).not.toContainText(/^Trade$/);
 });
 
 test("hamburger drawer opens and contains the docs/feedback/community/limitations links", async ({
