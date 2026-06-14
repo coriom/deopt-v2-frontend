@@ -69,12 +69,16 @@ export interface StoredWorkspaces {
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
 }
 
-export const WORKSPACE_LAYOUT_VERSION = 2;
+export const WORKSPACE_LAYOUT_VERSION = 4;
 export const WORKSPACE_STORAGE_PREFIX = "deopt:v2:workspace:";
 export const ANON_WALLET_KEY = "anon";
 export const WALLET_LAYOUT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const ANON_LAYOUT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-/** Grid model constants used by the Workspace + WidgetFrame. */
-export const GRID_COLS = 12;
+/** Grid model constants used by the Workspace + WidgetFrame.
+ *  V5 doubles cols from 24 → 48 to make the snap units fine enough
+ *  on large external monitors (2560px+) that placement feels truly
+ *  freeform, AND to make the "invisible grid" reach the right edge
+ *  without operator-visible step gaps. */
+export const GRID_COLS = 48;
 export const GRID_ROW_HEIGHT_PX = 30;

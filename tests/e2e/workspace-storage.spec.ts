@@ -10,7 +10,11 @@
  */
 import { test, expect } from "@playwright/test";
 
-test("V1 bucket is wiped on V2 load (migration via version bump)", async ({
+// V4 bumped layout schema to version=3. The version-bump-wipe path
+// still wipes any older bucket on load and replaces it with the new
+// default. The "wrong-version (future)" test uses version=999.
+
+test("V1 bucket (size enum) is wiped when the V3 loader sees it", async ({
   page,
 }) => {
   await page.goto("/custom");
@@ -40,7 +44,7 @@ test("expired V2 anon bucket is pruned on next page load", async ({ page }) => {
   await page.goto("/custom");
   await page.evaluate(() => {
     const bucket = {
-      version: 2,
+      version: 4,
       walletKey: "anon",
       workspaces: {
         "custom-1": {

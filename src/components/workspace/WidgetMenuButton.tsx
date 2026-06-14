@@ -67,21 +67,22 @@ export function WidgetMenuButton() {
               type="button"
               role="menuitem"
               data-testid={`navbar-widget-option-${w.type}`}
+              title={w.description}
               onClick={() => {
                 active.addWidget(w.type);
                 setOpen(false);
               }}
-              className="flex flex-col gap-0.5 rounded border border-transparent px-2 py-1 text-left hover:border-emerald-500/30 hover:bg-emerald-500/5"
+              className="flex items-center justify-between rounded border border-transparent px-2 py-1 text-left hover:border-emerald-500/30 hover:bg-emerald-500/5"
             >
-              <span className="flex items-center justify-between text-[11px] text-zinc-200">
-                <span>{w.title}</span>
-                {!w.implemented ? (
-                  <span className="text-[9px] uppercase tracking-[0.18em] text-emerald-300">
-                    coming later
-                  </span>
-                ) : null}
-              </span>
-              <span className="text-[10px] text-zinc-500">{w.description}</span>
+              <span className="text-[11px] text-zinc-200">{w.title}</span>
+              {!w.implemented ? (
+                <span
+                  data-testid={`navbar-widget-option-status-${w.type}`}
+                  className="text-[9px] uppercase tracking-[0.18em] text-emerald-300"
+                >
+                  coming soon
+                </span>
+              ) : null}
             </button>
           ))}
         </div>

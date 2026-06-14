@@ -88,7 +88,7 @@ test("localStorage stores V2 grid-coord bucket with no secrets", async ({
   }
 
   const parsed = JSON.parse(bucket["deopt:v2:workspace:anon"]);
-  expect(parsed.version).toBe(2);
+  expect(parsed.version).toBe(4);
   const widget = parsed.workspaces["custom-1"].widgets[0];
   expect(typeof widget.x).toBe("number");
   expect(typeof widget.y).toBe("number");

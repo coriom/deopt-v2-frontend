@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { GridLayout, useContainerWidth } from "react-grid-layout";
+import { GridLayout, noCompactor, useContainerWidth } from "react-grid-layout";
 
 interface RGLItem {
   i: string;
@@ -199,7 +199,9 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
         data-wallet-key={walletKey}
         data-workspace-title={title}
         data-workspace-subtitle={subtitle ?? ""}
-        className="flex h-full min-h-0 w-full flex-col"
+        data-grid-cols={GRID_COLS}
+        className="flex h-full min-h-0 w-full flex-col overflow-y-auto overflow-x-hidden"
+        style={{ scrollbarGutter: "stable" }}
       >
         {widgets.length === 0 ? (
           <div
@@ -228,8 +230,9 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
         ) : (
           <div
             data-testid={`workspace-grid-${workspaceId}`}
+            data-container-width={containerWidth}
             ref={containerRef}
-            className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto"
+            className="w-full"
           >
             {containerWidth > 0 ? (
               <GridLayout
@@ -242,6 +245,9 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
                   margin: [4, 4],
                   containerPadding: [0, 0],
                 }}
+                // Freeform canvas — widgets stay where the user drops
+                // them. No vertical/horizontal packing.
+                compactor={noCompactor}
                 dragConfig={{
                   enabled: true,
                   handle: ".deopt-widget-drag-handle",
