@@ -1,9 +1,15 @@
-// Widget registry. Maps WidgetType → metadata + render component.
+// Widget registry — maps WidgetType → metadata + render component.
+//
+// V2 default layouts target a Derive-style terminal:
+//   Options: large chain (left) + trade/detail panel (right) + bottom dock
+//   Perps:   chart (left) + orderbook + trade-form (right) + bottom dock
+//   Custom:  empty grid
 
 import type { ComponentType } from "react";
-import type { WidgetType, WidgetSize, WorkspaceId } from "@/lib/workspace-types";
+import type { WidgetType, WorkspaceId } from "@/lib/workspace-types";
 import {
   BalancesWidget,
+  BottomDockWidget,
   DocsHelpWidget,
   EventsWidget,
   FeedbackWidget,
@@ -27,7 +33,12 @@ export interface WidgetDef {
   description: string;
   /** Which workspaces this widget is offered in via the Add Widget menu. */
   workspaces: WorkspaceId[];
-  defaultSize: WidgetSize;
+  /** Default grid placement when added by the user. The Workspace
+   *  recomputes x/y to fit the next available row. */
+  defaultW: number;
+  defaultH: number;
+  minW: number;
+  minH: number;
   /** `true` = real functionality. `false` = honest placeholder. */
   implemented: boolean;
   Render: ComponentType;
@@ -50,25 +61,46 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Options chain",
     description: "Calls | Strike | Puts ladder with underlying + expiry pills.",
     workspaces: OPTIONS_WS,
-    defaultSize: "xl",
+    defaultW: 8,
+    defaultH: 18,
+    minW: 4,
+    minH: 8,
     implemented: true,
     Render: OptionsChainWidget,
   },
   "option-details": {
     type: "option-details",
-    title: "Selected option",
+    title: "Trade · detail",
     description: "5-tab panel: Trade / Payoff / Greeks / Details / Risk.",
     workspaces: OPTIONS_WS,
-    defaultSize: "lg",
+    defaultW: 4,
+    defaultH: 18,
+    minW: 3,
+    minH: 8,
     implemented: true,
     Render: OptionDetailsWidget,
+  },
+  "bottom-dock": {
+    type: "bottom-dock",
+    title: "Account dock",
+    description: "Balances / Positions / Orders / Trades / Greeks / Events.",
+    workspaces: ALL_WS,
+    defaultW: 12,
+    defaultH: 10,
+    minW: 4,
+    minH: 4,
+    implemented: true,
+    Render: BottomDockWidget,
   },
   payoff: {
     type: "payoff",
     title: "Payoff",
-    description: "Schematic payoff for the selected option.",
+    description: "Schematic payoff for the selected option (also a tab inside Trade · detail).",
     workspaces: OPTIONS_WS,
-    defaultSize: "md",
+    defaultW: 4,
+    defaultH: 8,
+    minW: 3,
+    minH: 4,
     implemented: true,
     Render: PayoffWidget,
   },
@@ -77,7 +109,10 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Balances",
     description: "Per-token testnet balances for the connected wallet.",
     workspaces: ALL_WS,
-    defaultSize: "md",
+    defaultW: 4,
+    defaultH: 8,
+    minW: 3,
+    minH: 4,
     implemented: true,
     Render: BalancesWidget,
   },
@@ -86,7 +121,10 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Positions",
     description: "Open option positions for the connected wallet.",
     workspaces: ALL_WS,
-    defaultSize: "md",
+    defaultW: 4,
+    defaultH: 8,
+    minW: 3,
+    minH: 4,
     implemented: true,
     Render: PositionsWidget,
   },
@@ -95,7 +133,10 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Orders",
     description: "Resting limit-order book — not live in this testnet beta.",
     workspaces: ALL_WS,
-    defaultSize: "md",
+    defaultW: 4,
+    defaultH: 6,
+    minW: 3,
+    minH: 3,
     implemented: false,
     Render: OrdersWidget,
   },
@@ -104,16 +145,22 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Trades",
     description: "Trade history for the connected wallet.",
     workspaces: ALL_WS,
-    defaultSize: "md",
+    defaultW: 4,
+    defaultH: 8,
+    minW: 3,
+    minH: 4,
     implemented: true,
     Render: TradesWidget,
   },
   greeks: {
     type: "greeks",
     title: "Greeks",
-    description: "Portfolio greeks — coming later.",
+    description: "Portfolio greeks — coming later (also a tab inside Trade · detail).",
     workspaces: ALL_WS,
-    defaultSize: "md",
+    defaultW: 4,
+    defaultH: 6,
+    minW: 3,
+    minH: 3,
     implemented: false,
     Render: GreeksWidget,
   },
@@ -122,25 +169,34 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Events",
     description: "Per-wallet event stream — coming soon.",
     workspaces: ALL_WS,
-    defaultSize: "md",
+    defaultW: 4,
+    defaultH: 6,
+    minW: 3,
+    minH: 3,
     implemented: false,
     Render: EventsWidget,
   },
   "perps-stats": {
     type: "perps-stats",
     title: "Perps stats",
-    description: "Underlying / mark / 24h Δ / volume / funding / OI strip — not live.",
+    description: "Underlying / mark / 24h / volume / funding / OI — not live.",
     workspaces: PERPS_WS,
-    defaultSize: "xl",
+    defaultW: 12,
+    defaultH: 3,
+    minW: 6,
+    minH: 2,
     implemented: false,
     Render: PerpsStatsWidget,
   },
   "perps-chart": {
     type: "perps-chart",
     title: "Perps chart",
-    description: "Schematic sparkline — not live in this testnet beta.",
+    description: "Schematic sparkline — not live.",
     workspaces: PERPS_WS,
-    defaultSize: "lg",
+    defaultW: 7,
+    defaultH: 14,
+    minW: 4,
+    minH: 6,
     implemented: false,
     Render: PerpsChartWidget,
   },
@@ -149,16 +205,22 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Perps order book",
     description: "5-row Bid/Size/Ask placeholder — not live.",
     workspaces: PERPS_WS,
-    defaultSize: "md",
+    defaultW: 5,
+    defaultH: 10,
+    minW: 3,
+    minH: 4,
     implemented: false,
     Render: PerpsOrderbookWidget,
   },
   "perps-trade-form": {
     type: "perps-trade-form",
     title: "Perps trade ticket",
-    description: "Long/Short/size/leverage form — disabled in this testnet beta.",
+    description: "Long/Short/size/leverage — disabled in this testnet beta.",
     workspaces: PERPS_WS,
-    defaultSize: "md",
+    defaultW: 5,
+    defaultH: 12,
+    minW: 3,
+    minH: 6,
     implemented: false,
     Render: PerpsTradeFormWidget,
   },
@@ -167,7 +229,10 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Perps trade feed",
     description: "Public trade feed — not live.",
     workspaces: PERPS_WS,
-    defaultSize: "md",
+    defaultW: 7,
+    defaultH: 8,
+    minW: 4,
+    minH: 4,
     implemented: false,
     Render: PerpsTradeFeedWidget,
   },
@@ -176,7 +241,10 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Docs · help",
     description: "Quickstart / Testing guide / Limitations / FAQ links.",
     workspaces: ALL_WS,
-    defaultSize: "sm",
+    defaultW: 3,
+    defaultH: 6,
+    minW: 2,
+    minH: 3,
     implemented: true,
     Render: DocsHelpWidget,
   },
@@ -185,7 +253,10 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     title: "Feedback",
     description: "Report a bug + open Discord.",
     workspaces: ALL_WS,
-    defaultSize: "sm",
+    defaultW: 3,
+    defaultH: 6,
+    minW: 2,
+    minH: 3,
     implemented: true,
     Render: FeedbackWidget,
   },
@@ -199,28 +270,33 @@ export function widgetsForWorkspace(workspaceId: WorkspaceId): WidgetDef[] {
   ).map((t) => WIDGET_REGISTRY[t]);
 }
 
-/** Default widget set for a workspace when nothing is persisted yet. */
-export function defaultWidgetsFor(
-  workspaceId: WorkspaceId,
-): { type: WidgetType; size: WidgetSize }[] {
+/** Default widget set for a workspace. The Workspace places these at
+ *  the listed coordinates; they're chosen to feel like a Derive-style
+ *  terminal in a 12-col grid (rowHeight = 30px). */
+export interface DefaultPlacement {
+  type: WidgetType;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] {
   switch (workspaceId) {
     case "options":
       return [
-        { type: "options-chain", size: "xl" },
-        { type: "option-details", size: "lg" },
-        { type: "balances", size: "md" },
-        { type: "positions", size: "md" },
-        { type: "trades", size: "md" },
-        { type: "events", size: "md" },
+        { type: "options-chain", x: 0, y: 0, w: 8, h: 18 },
+        { type: "option-details", x: 8, y: 0, w: 4, h: 18 },
+        { type: "bottom-dock", x: 0, y: 18, w: 12, h: 10 },
       ];
     case "perps":
       return [
-        { type: "perps-stats", size: "xl" },
-        { type: "perps-chart", size: "lg" },
-        { type: "perps-orderbook", size: "md" },
-        { type: "perps-trade-form", size: "md" },
-        { type: "perps-trade-feed", size: "md" },
-        { type: "balances", size: "md" },
+        { type: "perps-stats", x: 0, y: 0, w: 12, h: 3 },
+        { type: "perps-chart", x: 0, y: 3, w: 7, h: 14 },
+        { type: "perps-orderbook", x: 7, y: 3, w: 5, h: 10 },
+        { type: "perps-trade-form", x: 7, y: 13, w: 5, h: 12 },
+        { type: "perps-trade-feed", x: 0, y: 17, w: 7, h: 8 },
+        { type: "bottom-dock", x: 0, y: 25, w: 12, h: 10 },
       ];
     case "custom-1":
     case "custom-2":

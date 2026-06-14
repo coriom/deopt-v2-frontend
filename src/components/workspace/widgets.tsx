@@ -9,6 +9,7 @@
 import { BalancesCard } from "@/components/trading/BalancesCard";
 import { PositionsTable } from "@/components/trading/PositionsTable";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
+import { BottomPanel } from "@/components/trading/terminal/BottomPanel";
 import { OptionsChainTerminalCore } from "@/components/trading/terminal/OptionsChainTerminalCore";
 import { OptionDetailPanel } from "@/components/trading/terminal/OptionDetailPanel";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
@@ -28,6 +29,10 @@ function PlaceholderBody({ title, body }: { title: string; body: string }) {
 
 export function OptionsChainWidget() {
   return <OptionsChainTerminalCore />;
+}
+
+export function BottomDockWidget() {
+  return <BottomPanel />;
 }
 
 export function OptionDetailsWidget() {

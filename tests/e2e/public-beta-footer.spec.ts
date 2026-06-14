@@ -62,11 +62,14 @@ test("public beta footer DOM contains no secret-looking values", async ({
   expect(html).not.toMatch(/infura\.io\/v3\/[A-Za-z0-9_-]+/);
 });
 
-test("safety-copy bullets are present on every trading route", async ({
+test("safety-copy bullets are present on every page-mode trading route", async ({
   page,
 }) => {
   await installMockWallet(page);
-  const routes = ["/", "/markets", "/portfolio", "/history", "/health"];
+  // V3: /markets and /portfolio joined the terminal route set and no
+  // longer render the footer; the testnet/unaudited posture is now
+  // carried by the top banner + per-widget chips on those routes.
+  const routes = ["/", "/history", "/health"];
   for (const route of routes) {
     await page.goto(route);
     await expect(

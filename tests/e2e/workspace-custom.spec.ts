@@ -1,14 +1,14 @@
 /**
- * workspace-custom.spec.ts — FRONTEND-MODULAR-WORKSPACE-V1
+ * workspace-custom.spec.ts — FRONTEND-TERMINAL-WORKSPACE-CLEANUP-V3
  *
- * Covers the /custom modular workspace:
- *   - starts empty with the empty-state hint
- *   - Add Widget menu lists options + adds a widget
- *   - Remove widget removes it
- *   - Reset layout restores empty state
- *   - Anonymous layout warning is visible (no wallet connected)
- *   - localStorage stores the bucket under the expected prefix
- *   - No secret / RPC URL / DATABASE_URL pattern leaks into stored bucket
+ * /custom modular workspace under V3:
+ *   - starts empty with the empty-state hint pointing at the navbar
+ *   - the global Add Widget / Reset Layout / Anon-warning controls
+ *     are GONE from the workspace body
+ *   - the navbar `Widget` button opens the menu and adds the widget
+ *   - widget remove control still works
+ *   - localStorage stores grid coords (V2 schema) with no secrets
+ *   - No PublicBetaFooter on /custom
  */
 import { test, expect } from "@playwright/test";
 
@@ -17,60 +17,49 @@ test("/custom renders the empty workspace shell with the empty-state hint", asyn
 }) => {
   await page.goto("/custom");
   await expect(page.getByTestId("workspace-custom-1")).toBeVisible();
-  await expect(page.getByTestId("workspace-toolbar-custom-1")).toBeVisible();
   await expect(page.getByTestId("workspace-empty-custom-1")).toBeVisible();
 });
 
-test("/custom shows the anon-layout warning when no wallet is connected", async ({
+test("/custom body has NO Reset / Anon-warning / Add-Widget toolbar (V3 cleanup)", async ({
   page,
 }) => {
   await page.goto("/custom");
-  await expect(page.getByTestId("workspace-anon-warning")).toBeVisible();
-  await expect(page.getByTestId("workspace-anon-warning")).toContainText(
-    /Anonymous layout/i,
-  );
+  await expect(page.getByTestId("workspace-reset")).toHaveCount(0);
+  await expect(page.getByTestId("workspace-anon-warning")).toHaveCount(0);
+  await expect(page.getByTestId("workspace-wallet-badge")).toHaveCount(0);
+  // The pre-V3 in-toolbar Add Widget button is gone; the navbar one is the only entry point.
+  await expect(page.getByTestId("workspace-add-widget")).toHaveCount(0);
 });
 
-test("Add Widget menu opens and adds a widget to /custom", async ({ page }) => {
+test("Navbar Widget button opens the menu and adds a widget to /custom", async ({
+  page,
+}) => {
   await page.goto("/custom");
-  await page.getByTestId("workspace-add-widget").click();
-  await expect(page.getByTestId("workspace-add-widget-menu")).toBeVisible();
-  await page.getByTestId("workspace-add-widget-option-docs-help").click();
+  await expect(page.getByTestId("navbar-widget-button")).toBeVisible();
+  await expect(page.getByTestId("navbar-widget-button")).toHaveText(/Widget/);
+  await page.getByTestId("navbar-widget-button").click();
+  await expect(page.getByTestId("navbar-widget-menu")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-docs-help").click();
   await expect(page.getByTestId("widget-docs-help")).toBeVisible();
-  // workspace is no longer empty.
   await expect(page.getByTestId("workspace-empty-custom-1")).toHaveCount(0);
 });
 
-test("Remove widget removes it from the workspace", async ({ page }) => {
+test("Remove control inside a widget still removes it", async ({ page }) => {
   await page.goto("/custom");
-  await page.getByTestId("workspace-add-widget").click();
-  await page.getByTestId("workspace-add-widget-option-feedback").click();
+  await page.getByTestId("navbar-widget-button").click();
+  await page.getByTestId("navbar-widget-option-feedback").click();
   await expect(page.getByTestId("widget-feedback")).toBeVisible();
-
-  const removeBtn = page
-    .locator("[data-testid^='widget-remove-']")
-    .first();
+  const removeBtn = page.locator("[data-testid^='widget-remove-']").first();
   await removeBtn.click();
   await expect(page.getByTestId("widget-feedback")).toHaveCount(0);
 });
 
-test("Reset layout restores the empty default for /custom", async ({ page }) => {
-  await page.goto("/custom");
-  await page.getByTestId("workspace-add-widget").click();
-  await page.getByTestId("workspace-add-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
-  await page.getByTestId("workspace-reset").click();
-  // /custom default = empty, so the empty-state card should be back.
-  await expect(page.getByTestId("workspace-empty-custom-1")).toBeVisible();
-  await expect(page.getByTestId("widget-docs-help")).toHaveCount(0);
-});
-
-test("localStorage stores the bucket under the expected prefix and no secrets", async ({
+test("localStorage stores V2 grid-coord bucket with no secrets", async ({
   page,
 }) => {
   await page.goto("/custom");
-  await page.getByTestId("workspace-add-widget").click();
-  await page.getByTestId("workspace-add-widget-option-docs-help").click();
+  await page.getByTestId("navbar-widget-button").click();
+  await page.getByTestId("navbar-widget-option-docs-help").click();
   await expect(page.getByTestId("widget-docs-help")).toBeVisible();
 
   const bucket = await page.evaluate(() => {
@@ -86,18 +75,31 @@ test("localStorage stores the bucket under the expected prefix and no secrets", 
 
   const keys = Object.keys(bucket);
   expect(keys.length).toBeGreaterThanOrEqual(1);
-  // anonymous bucket should be present.
   expect(keys.some((k) => k === "deopt:v2:workspace:anon")).toBeTruthy();
 
   for (const v of Object.values(bucket)) {
-    // No raw secret patterns must be persisted.
-    expect(v).not.toMatch(/0x[a-fA-F0-9]{64}/); // 64-hex (priv keys / tx hashes / signatures)
+    expect(v).not.toMatch(/0x[a-fA-F0-9]{64}/);
     expect(v).not.toMatch(/Bearer\s+[A-Za-z0-9_.-]{16,}/);
     expect(v).not.toMatch(/alchemy\.com\/v2\//);
     expect(v).not.toMatch(/infura\.io\/v3\//);
     expect(v).not.toMatch(/DATABASE_URL/);
     expect(v).not.toMatch(/mainnet/i);
-    // No 12+ word seed phrase pattern.
     expect(v).not.toMatch(/(?:\b[a-z]{3,8}\b\s+){11,}\b[a-z]{3,8}\b/);
   }
+
+  const parsed = JSON.parse(bucket["deopt:v2:workspace:anon"]);
+  expect(parsed.version).toBe(2);
+  const widget = parsed.workspaces["custom-1"].widgets[0];
+  expect(typeof widget.x).toBe("number");
+  expect(typeof widget.y).toBe("number");
+  expect(typeof widget.w).toBe("number");
+  expect(typeof widget.h).toBe("number");
+});
+
+test("/custom does NOT render the PublicBetaFooter (terminal route)", async ({
+  page,
+}) => {
+  await page.goto("/custom");
+  await expect(page.getByTestId("public-beta-footer")).toHaveCount(0);
+  await expect(page.getByTestId("trading-main-terminal")).toBeVisible();
 });

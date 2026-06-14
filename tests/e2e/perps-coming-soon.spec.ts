@@ -1,28 +1,29 @@
 /**
- * perps-coming-soon.spec.ts — FRONTEND-MODULAR-WORKSPACE-V1
+ * perps-coming-soon.spec.ts — FRONTEND-TERMINAL-WORKSPACE-RESIZABLE-V2
  *
  * /perps now renders the modular Workspace with perps placeholder
- * widgets + a static disclosure panel. These specs assert:
- *   - the Workspace shell + perps toolbar render
- *   - the 6 default perps widgets render (stats, chart, orderbook,
- *     trade form, trade feed, balances)
- *   - the static disclosure panel surfaces the testnet posture +
- *     CTAs to Options / Docs / Discord / Feedback
- *   - no positive-claim / fake-liquidity / colour drift / admin /
- *     bearer / RPC URL / DATABASE_URL leak
+ * widgets (no static disclosure block — placeholders + status chips +
+ * subtitle carry the honest "not live" copy). The bottom dock is also
+ * a workspace widget.
  */
 import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
 
-test("/perps renders the modular Workspace shell", async ({ page }) => {
+test("/perps renders the modular Workspace shell with the 'perps not live' subtitle", async ({
+  page,
+}) => {
   await installMockWallet(page);
   await page.goto("/perps");
   await expect(page.getByTestId("perps-terminal-shell")).toBeVisible();
   await expect(page.getByTestId("workspace-perps")).toBeVisible();
-  await expect(page.getByTestId("workspace-toolbar-perps")).toBeVisible();
+  await expect(page.getByTestId("workspace-toolbar-perps")).toContainText(
+    /perps not live/i,
+  );
 });
 
-test("/perps renders default placeholder widgets", async ({ page }) => {
+test("/perps renders default placeholder widgets + bottom dock", async ({
+  page,
+}) => {
   await installMockWallet(page);
   await page.goto("/perps");
   for (const id of [
@@ -31,7 +32,7 @@ test("/perps renders default placeholder widgets", async ({ page }) => {
     "widget-perps-orderbook",
     "widget-perps-trade-form",
     "widget-perps-trade-feed",
-    "widget-balances",
+    "widget-bottom-dock",
   ]) {
     await expect(page.getByTestId(id)).toBeVisible();
   }
@@ -52,41 +53,6 @@ test("/perps placeholder widgets are flagged 'coming later'", async ({
   ]) {
     await expect(page.getByTestId(t)).toContainText(/coming later/i);
   }
-});
-
-test("/perps disclosure panel surfaces testnet posture", async ({ page }) => {
-  await installMockWallet(page);
-  await page.goto("/perps");
-  const panel = page.getByTestId("perps-disclosure-panel");
-  await expect(panel).toContainText(/No real funds/i);
-  await expect(panel).toContainText(/Unaudited/i);
-  await expect(panel).toContainText(/Experimental/i);
-  await expect(page.getByTestId("perps-status-chip")).toContainText(
-    /coming later in the public testnet beta/i,
-  );
-});
-
-test("/perps meanwhile CTAs link Options / Docs / Discord / Feedback", async ({
-  page,
-}) => {
-  await installMockWallet(page);
-  await page.goto("/perps");
-  await expect(page.getByTestId("perps-cta-options")).toHaveAttribute(
-    "href",
-    "/trade",
-  );
-  await expect(page.getByTestId("perps-cta-docs")).toHaveAttribute(
-    "href",
-    "/docs",
-  );
-  await expect(page.getByTestId("perps-cta-feedback")).toHaveAttribute(
-    "href",
-    "/feedback",
-  );
-  await expect(page.getByTestId("perps-cta-discord")).toHaveAttribute(
-    "href",
-    "https://discord.gg/zaEMvWuxu",
-  );
 });
 
 test("/perps surfaces no fake liquidity / positive claims / colour drift", async ({
@@ -116,4 +82,14 @@ test("/perps surfaces no fake liquidity / positive claims / colour drift", async
   expect(html).not.toMatch(/DATABASE_URL/);
   expect(html).not.toMatch(/\/admin\//);
   expect(html).not.toMatch(/mainnet\.base\.org/);
+});
+
+test("/perps does NOT render the PublicBetaFooter on the terminal route", async ({
+  page,
+}) => {
+  await installMockWallet(page);
+  await page.goto("/perps");
+  await page.waitForSelector("[data-testid=perps-terminal-shell]");
+  await expect(page.getByTestId("public-beta-footer")).toHaveCount(0);
+  await expect(page.getByTestId("trading-main-terminal")).toBeVisible();
 });

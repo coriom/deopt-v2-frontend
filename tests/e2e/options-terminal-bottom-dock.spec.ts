@@ -1,15 +1,11 @@
 /**
- * options-terminal-bottom-dock.spec.ts — FRONTEND-MODULAR-WORKSPACE-V1
+ * options-terminal-bottom-dock.spec.ts — FRONTEND-TERMINAL-WORKSPACE-RESIZABLE-V2
  *
- * The dock-as-tabbed-panel has been replaced by individual workspace
- * widgets. These specs assert the new wire-up:
- *   - /trade renders the Workspace shell + Options toolbar
- *   - Default Options widgets include Balances / Positions / Trades /
- *     Events plus the chain + selected-option
- *   - Orders + Greeks widgets surface honest "not live / coming later"
- *     copy when added from the Add Widget menu
- *   - terminal-header + terminal-stat-chain still render inside the
- *     options-chain widget
+ * V2 collapses the per-tab widgets back into a single `bottom-dock`
+ * widget (Balances / Positions / Orders / Trades / Greeks / Events
+ * tabs). The Options workspace ships a 3-widget default: options-chain
+ * (left), option-details (right with 5 tabs incl. Payoff + Greeks),
+ * bottom-dock (full-width below).
  */
 import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
@@ -117,7 +113,7 @@ async function setupChain(page: import("@playwright/test").Page) {
   );
 }
 
-test("/trade renders the Options workspace + default widgets", async ({
+test("/trade renders the 3-widget default Options workspace", async ({
   page,
 }) => {
   await setupChain(page);
@@ -127,13 +123,56 @@ test("/trade renders the Options workspace + default widgets", async ({
   await expect(page.getByTestId("workspace-toolbar-options")).toBeVisible();
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
   await expect(page.getByTestId("widget-option-details")).toBeVisible();
-  await expect(page.getByTestId("widget-balances")).toBeVisible();
-  await expect(page.getByTestId("widget-positions")).toBeVisible();
-  await expect(page.getByTestId("widget-trades")).toBeVisible();
-  await expect(page.getByTestId("widget-events")).toBeVisible();
+  await expect(page.getByTestId("widget-bottom-dock")).toBeVisible();
 });
 
-test("/trade terminal header still renders 'chain 84532' status", async ({
+test("/trade option-details widget exposes Trade/Payoff/Greeks/Details/Risk tabs", async ({
+  page,
+}) => {
+  await setupChain(page);
+  await installMockWallet(page);
+  await page.goto("/trade");
+  const detail = page.getByTestId("widget-option-details");
+  await expect(detail).toBeVisible();
+  for (const id of ["trade", "payoff", "greeks", "details", "risk"]) {
+    await expect(detail.getByTestId(`detail-tab-${id}`)).toBeVisible();
+  }
+});
+
+test("Payoff and Greeks are NOT default separate widgets on /trade", async ({
+  page,
+}) => {
+  await setupChain(page);
+  await installMockWallet(page);
+  await page.goto("/trade");
+  // They live as tabs inside the option-details widget, not as their
+  // own widget frames (the frame would carry the data-testid
+  // `widget-payoff` / `widget-greeks`).
+  await expect(page.getByTestId("widget-payoff")).toHaveCount(0);
+  await expect(page.getByTestId("widget-greeks")).toHaveCount(0);
+});
+
+test("/trade bottom-dock widget renders the 6 account tabs", async ({
+  page,
+}) => {
+  await setupChain(page);
+  await installMockWallet(page);
+  await page.goto("/trade");
+  const dock = page.getByTestId("widget-bottom-dock");
+  await expect(dock).toBeVisible();
+  for (const id of [
+    "balances",
+    "positions",
+    "orders",
+    "trades",
+    "greeks",
+    "events",
+  ]) {
+    await expect(dock.getByTestId(`bottom-tab-${id}`)).toBeVisible();
+  }
+});
+
+test("/trade terminal-header still surfaces 'chain 84532' status", async ({
   page,
 }) => {
   await setupChain(page);
@@ -143,22 +182,4 @@ test("/trade terminal header still renders 'chain 84532' status", async ({
   await expect(page.getByTestId("terminal-stat-chain")).toContainText(
     /chain 84532/i,
   );
-});
-
-test("Add Widget menu can add Orders + Greeks widgets which surface honest copy", async ({
-  page,
-}) => {
-  await setupChain(page);
-  await installMockWallet(page);
-  await page.goto("/trade");
-  await page.getByTestId("workspace-add-widget").click();
-  await expect(page.getByTestId("workspace-add-widget-menu")).toBeVisible();
-  await page.getByTestId("workspace-add-widget-option-orders").click();
-  await expect(page.getByTestId("widget-orders")).toBeVisible();
-
-  await page.getByTestId("workspace-add-widget").click();
-  await page.getByTestId("workspace-add-widget-option-greeks").click();
-  await expect(page.getByTestId("widget-greeks")).toBeVisible();
-
-  await expect(page.locator("[data-widget-implemented='false']").first()).toBeVisible();
 });

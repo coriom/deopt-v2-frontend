@@ -9,8 +9,10 @@ import {
   WrongNetworkBanner,
 } from "@/components/banners";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
-import { PublicBetaFooter } from "@/components/PublicBetaFooter";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
+import { TradingShell } from "@/components/TradingShell";
+import { WorkspaceBridgeProvider } from "@/lib/workspace-bridge";
+import { WidgetMenuButton } from "@/components/workspace/WidgetMenuButton";
 
 function ComingSoonNavLink({
   label,
@@ -37,7 +39,8 @@ function ComingSoonNavLink({
 export default function TradingLayout({ children }: { children: ReactNode }) {
   return (
     <WalletProvider>
-      <div className="flex min-h-screen flex-col bg-black text-zinc-100">
+     <WorkspaceBridgeProvider>
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-black text-zinc-100">
         <TestnetUnauditedBanner />
         <MainnetDisabledBanner />
         <WrongNetworkBanner />
@@ -110,14 +113,13 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <NetworkBadge />
             <WalletConnectButton />
+            <WidgetMenuButton />
             <HamburgerMenu />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-screen-2xl flex-1 px-3 py-3 lg:px-4 lg:py-4">
-          {children}
-        </main>
-        <PublicBetaFooter />
+        <TradingShell>{children}</TradingShell>
       </div>
+     </WorkspaceBridgeProvider>
     </WalletProvider>
   );
 }
