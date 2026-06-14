@@ -1,18 +1,16 @@
-// Workspace V2 — resizable + draggable widget grid.
+// Workspace V5 — adaptive freeform grid + visible dotted backdrop.
 //
-// V2 replaces the V1 size-preset model (`sm/md/lg/xl` enum) with real
-// grid coordinates {x, y, w, h, minW?, minH?} so widgets can be
-// dragged/resized with the mouse via react-grid-layout.
+// V5 replaces V4's static `GRID_COLS = 48` with a column count derived
+// from the actual container width:
+//   cols = clamp(round(width / TARGET_CELL_PX), MIN_COLS, MAX_COLS)
+// so that snap units stay near a fixed pixel target across viewports
+// (~36px per cell on every monitor; 53 cols on 1920px, 71 cols on
+// 2560px). The visible grid backdrop renders at the SAME cell size
+// via CSS variables, so the user sees exactly where widgets snap.
 //
 // Posture: localStorage-only persistence. NO secrets, NO private keys,
 // NO RPC URLs, NO bearer tokens, NO DATABASE_URL, NO signatures.
-// Wallet address (lowercased) is the only identity-bearing field; the
-// anonymous bucket has a tighter expiry. V1 buckets are version-bumped
-// → wiped on load and replaced with the V2 default.
 
-/** All widget kinds supported by V2. Placeholders ALWAYS surface
- *  honest "not live" / "coming later" copy — they never fabricate
- *  Greeks / bid / ask / liquidity. */
 export type WidgetType =
   | "options-chain"
   | "option-details"
@@ -39,8 +37,6 @@ export type WorkspaceId =
   | "custom-2"
   | "custom-3";
 
-/** A single placed widget. Coordinates are in 12-col grid units; `h`
- *  is in `rowHeight` units (30px in the current shell). */
 export interface WidgetInstance {
   id: string;
   type: WidgetType;
@@ -52,33 +48,50 @@ export interface WidgetInstance {
   minH?: number;
 }
 
-/** A single workspace's layout. */
 export interface WorkspaceLayout {
   workspaceId: WorkspaceId;
   widgets: WidgetInstance[];
+  /** Column count this layout was saved at — used to rescale x/w
+   *  proportionally when the user loads the layout under a different
+   *  viewport (and therefore a different `cols`). */
+  cols: number;
   updatedAt: number;
-  /** Absolute ms epoch. Bucket pruned on load after this point. */
   expiresAt: number;
 }
 
-/** The full localStorage payload per wallet (or anon). */
 export interface StoredWorkspaces {
   version: number;
-  /** Lower-cased 0x… address OR the literal `"anon"`. */
   walletKey: string;
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
 }
 
-export const WORKSPACE_LAYOUT_VERSION = 4;
+export const WORKSPACE_LAYOUT_VERSION = 5;
 export const WORKSPACE_STORAGE_PREFIX = "deopt:v2:workspace:";
 export const ANON_WALLET_KEY = "anon";
 export const WALLET_LAYOUT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const ANON_LAYOUT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-/** Grid model constants used by the Workspace + WidgetFrame.
- *  V5 doubles cols from 24 → 48 to make the snap units fine enough
- *  on large external monitors (2560px+) that placement feels truly
- *  freeform, AND to make the "invisible grid" reach the right edge
- *  without operator-visible step gaps. */
-export const GRID_COLS = 48;
+/** Adaptive grid bounds. Target ~36px per cell so the placement grid
+ *  feels free without becoming pixel-precise. */
+export const GRID_MIN_COLS = 48;
+export const GRID_MAX_COLS = 120;
+export const GRID_TARGET_CELL_PX = 36;
 export const GRID_ROW_HEIGHT_PX = 30;
+export const GRID_ITEM_MARGIN_PX = 4;
+
+/** Compute the column count for a given container width (in px). */
+export function computeCols(containerWidth: number): number {
+  if (!Number.isFinite(containerWidth) || containerWidth <= 0) {
+    return GRID_MIN_COLS;
+  }
+  const raw = Math.round(containerWidth / GRID_TARGET_CELL_PX);
+  return Math.max(GRID_MIN_COLS, Math.min(GRID_MAX_COLS, raw));
+}
+
+/** Compute the per-cell width in px for the visible grid backdrop.
+ *  Mirrors RGL's calc: width = cellWidth*cols + margin*(cols+1). */
+export function computeCellWidth(containerWidth: number, cols: number): number {
+  if (cols <= 0) return 0;
+  const usable = containerWidth - GRID_ITEM_MARGIN_PX * (cols + 1);
+  return Math.max(0, usable / cols);
+}

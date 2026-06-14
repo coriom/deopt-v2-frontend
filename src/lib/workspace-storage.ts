@@ -112,6 +112,7 @@ export function saveWorkspaceLayout(
   walletKey: string,
   workspaceId: WorkspaceId,
   widgets: WorkspaceLayout["widgets"],
+  cols: number,
 ): WorkspaceLayout | null {
   if (!isBrowser()) return null;
   const bucket = loadBucket(walletKey);
@@ -119,6 +120,7 @@ export function saveWorkspaceLayout(
   const layout: WorkspaceLayout = {
     workspaceId,
     widgets,
+    cols,
     updatedAt: now,
     expiresAt: now + defaultTtl(walletKey),
   };

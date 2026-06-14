@@ -43,14 +43,18 @@ test("/custom workspace grid container fills viewport on 1920x1080", async ({
   expect(gridWidth).toBeGreaterThan(1800);
 });
 
-test("Options default layout uses the full 24/24 col grid (no right dead zone)", async ({
+test("Options default layout fills the adaptive grid (no right dead zone)", async ({
   page,
 }) => {
   await page.goto("/trade");
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
   await expect(page.getByTestId("widget-option-details")).toBeVisible();
-  // Read the persisted bucket — chain.x+chain.w + details.x+details.w
-  // should cover all 24 cols of the first row.
+  // V5 adaptive: cols comes from the workspace root; defaults span it.
+  const cols = await page
+    .getByTestId("workspace-options")
+    .getAttribute("data-grid-cols");
+  expect(cols).not.toBeNull();
+  const colsN = Number(cols);
   const widgets = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return null;
@@ -72,13 +76,12 @@ test("Options default layout uses the full 24/24 col grid (no right dead zone)",
     expect(details).toBeDefined();
     expect(dock).toBeDefined();
     if (chain && details) {
-      // V5: 48-col grid. chain.w=32 + details.w=16 = 48 → no right gutter.
-      expect(chain.x + chain.w + details.w).toBe(48);
+      // chain.w + details.w must equal the adaptive cols (no gutter).
+      expect(chain.x + chain.w + details.w).toBe(colsN);
     }
     if (dock) {
-      // Bottom dock spans the full 48-col grid.
       expect(dock.x).toBe(0);
-      expect(dock.w).toBe(48);
+      expect(dock.w).toBe(colsN);
     }
   }
 });
@@ -139,7 +142,7 @@ test("V3 layout schema persists with grid coords (no V1 size enum)", async ({
     return raw ? JSON.parse(raw) : null;
   });
   expect(parsed).not.toBeNull();
-  expect(parsed.version).toBe(4);
+  expect(parsed.version).toBe(5);
   const widget = parsed.workspaces["custom-1"].widgets[0];
   expect(typeof widget.x).toBe("number");
   expect(typeof widget.y).toBe("number");

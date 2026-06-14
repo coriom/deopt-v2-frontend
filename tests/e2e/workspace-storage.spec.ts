@@ -44,7 +44,7 @@ test("expired V2 anon bucket is pruned on next page load", async ({ page }) => {
   await page.goto("/custom");
   await page.evaluate(() => {
     const bucket = {
-      version: 4,
+      version: 5,
       walletKey: "anon",
       workspaces: {
         "custom-1": {

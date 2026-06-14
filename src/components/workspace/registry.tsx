@@ -174,9 +174,9 @@ export function widgetsForWorkspace(workspaceId: WorkspaceId): WidgetDef[] {
   ).map((t) => WIDGET_REGISTRY[t]);
 }
 
-/** Default placement on the 48-col freeform canvas (rowHeight = 30px).
- *  With noCompactor, these coordinates are preserved exactly,
- *  including any intentional gaps. */
+/** Default placement on the adaptive freeform canvas. Positions are
+ *  expressed as fractions of `cols` so defaults always fill the
+ *  workspace edge-to-edge regardless of viewport width. */
 export interface DefaultPlacement {
   type: WidgetType;
   x: number;
@@ -185,23 +185,37 @@ export interface DefaultPlacement {
   h: number;
 }
 
-export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] {
+/** Scale a fraction [0, 1] into a grid col count. Always at least 1. */
+function frac(cols: number, f: number): number {
+  return Math.max(1, Math.round(cols * f));
+}
+
+export function defaultWidgetsFor(
+  workspaceId: WorkspaceId,
+  cols: number,
+): DefaultPlacement[] {
   switch (workspaceId) {
-    case "options":
+    case "options": {
+      const chainW = frac(cols, 0.667); // ~2/3 of width
+      const detailsW = cols - chainW;
       return [
-        { type: "options-chain", x: 0, y: 0, w: 32, h: 18 },
-        { type: "option-details", x: 32, y: 0, w: 16, h: 18 },
-        { type: "bottom-dock", x: 0, y: 18, w: 48, h: 10 },
+        { type: "options-chain", x: 0, y: 0, w: chainW, h: 18 },
+        { type: "option-details", x: chainW, y: 0, w: detailsW, h: 18 },
+        { type: "bottom-dock", x: 0, y: 18, w: cols, h: 10 },
       ];
-    case "perps":
+    }
+    case "perps": {
+      const chartW = frac(cols, 0.583); // ~7/12
+      const sideW = cols - chartW;
       return [
-        { type: "perps-stats", x: 0, y: 0, w: 48, h: 3 },
-        { type: "perps-chart", x: 0, y: 3, w: 28, h: 14 },
-        { type: "perps-orderbook", x: 28, y: 3, w: 20, h: 10 },
-        { type: "perps-trade-form", x: 28, y: 13, w: 20, h: 12 },
-        { type: "perps-trade-feed", x: 0, y: 17, w: 28, h: 8 },
-        { type: "bottom-dock", x: 0, y: 25, w: 48, h: 10 },
+        { type: "perps-stats", x: 0, y: 0, w: cols, h: 3 },
+        { type: "perps-chart", x: 0, y: 3, w: chartW, h: 14 },
+        { type: "perps-orderbook", x: chartW, y: 3, w: sideW, h: 10 },
+        { type: "perps-trade-form", x: chartW, y: 13, w: sideW, h: 12 },
+        { type: "perps-trade-feed", x: 0, y: 17, w: chartW, h: 8 },
+        { type: "bottom-dock", x: 0, y: 25, w: cols, h: 10 },
       ];
+    }
     case "custom-1":
     case "custom-2":
     case "custom-3":
