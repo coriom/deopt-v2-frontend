@@ -1,8 +1,9 @@
 // Widget registry — maps WidgetType → metadata + render component.
 //
-// V5 doubles defaultW / minW from the V4 24-col baseline to the
-// 48-col baseline. Heights are unchanged (the grid uses 30px row
-// units).
+// V6 expresses defaults in percentages of the canvas (xPct/yPct/wPct/
+// hPct, all in [0, 1]). Defaults always fill the canvas edge-to-edge
+// regardless of monitor size — there is no column count and no right
+// gutter.
 
 import type { ComponentType } from "react";
 import type { WidgetType, WorkspaceId } from "@/lib/workspace-types";
@@ -32,10 +33,12 @@ export interface WidgetDef {
   /** Long-form description; surfaced in docs/tests, NOT in the menu. */
   description: string;
   workspaces: WorkspaceId[];
-  defaultW: number;
-  defaultH: number;
-  minW: number;
-  minH: number;
+  /** Default percentage size when a user adds the widget via the menu. */
+  defaultWPct: number;
+  defaultHPct: number;
+  /** Minimum pixel size enforced during resize. */
+  minWPx: number;
+  minHPx: number;
   implemented: boolean;
   Render: ComponentType;
 }
@@ -49,119 +52,119 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     type: "options-chain", title: "Options chain",
     description: "Calls | Strike | Puts ladder with underlying + expiry pills.",
     workspaces: OPTIONS_WS,
-    defaultW: 32, defaultH: 18, minW: 16, minH: 8,
+    defaultWPct: 0.7, defaultHPct: 0.7, minWPx: 360, minHPx: 240,
     implemented: true, Render: OptionsChainWidget,
   },
   "option-details": {
     type: "option-details", title: "Trade · detail",
     description: "5-tab panel: Trade / Payoff / Greeks / Details / Risk.",
     workspaces: OPTIONS_WS,
-    defaultW: 16, defaultH: 18, minW: 12, minH: 8,
+    defaultWPct: 0.3, defaultHPct: 0.7, minWPx: 280, minHPx: 240,
     implemented: true, Render: OptionDetailsWidget,
   },
   "bottom-dock": {
     type: "bottom-dock", title: "Account dock",
     description: "Balances / Positions / Orders / Trades / Greeks / Events.",
     workspaces: ALL_WS,
-    defaultW: 48, defaultH: 10, minW: 16, minH: 4,
+    defaultWPct: 1.0, defaultHPct: 0.3, minWPx: 360, minHPx: 140,
     implemented: true, Render: BottomDockWidget,
   },
   payoff: {
     type: "payoff", title: "Payoff",
     description: "Schematic payoff for the selected option (also a tab inside Trade · detail).",
     workspaces: OPTIONS_WS,
-    defaultW: 16, defaultH: 8, minW: 12, minH: 4,
+    defaultWPct: 0.3, defaultHPct: 0.3, minWPx: 240, minHPx: 160,
     implemented: true, Render: PayoffWidget,
   },
   balances: {
     type: "balances", title: "Balances",
     description: "Per-token testnet balances for the connected wallet.",
     workspaces: ALL_WS,
-    defaultW: 16, defaultH: 8, minW: 12, minH: 4,
+    defaultWPct: 0.3, defaultHPct: 0.3, minWPx: 240, minHPx: 160,
     implemented: true, Render: BalancesWidget,
   },
   positions: {
     type: "positions", title: "Positions",
     description: "Open option positions for the connected wallet.",
     workspaces: ALL_WS,
-    defaultW: 16, defaultH: 8, minW: 12, minH: 4,
+    defaultWPct: 0.4, defaultHPct: 0.3, minWPx: 280, minHPx: 160,
     implemented: true, Render: PositionsWidget,
   },
   orders: {
     type: "orders", title: "Orders",
     description: "Resting limit-order book — not live in this testnet beta.",
     workspaces: ALL_WS,
-    defaultW: 16, defaultH: 6, minW: 12, minH: 3,
+    defaultWPct: 0.3, defaultHPct: 0.25, minWPx: 240, minHPx: 120,
     implemented: false, Render: OrdersWidget,
   },
   trades: {
     type: "trades", title: "Trades",
     description: "Trade history for the connected wallet.",
     workspaces: ALL_WS,
-    defaultW: 16, defaultH: 8, minW: 12, minH: 4,
+    defaultWPct: 0.4, defaultHPct: 0.3, minWPx: 280, minHPx: 160,
     implemented: true, Render: TradesWidget,
   },
   greeks: {
     type: "greeks", title: "Greeks",
     description: "Portfolio greeks — coming later (also a tab inside Trade · detail).",
     workspaces: ALL_WS,
-    defaultW: 16, defaultH: 6, minW: 12, minH: 3,
+    defaultWPct: 0.3, defaultHPct: 0.25, minWPx: 240, minHPx: 120,
     implemented: false, Render: GreeksWidget,
   },
   events: {
     type: "events", title: "Events",
     description: "Per-wallet event stream — coming soon.",
     workspaces: ALL_WS,
-    defaultW: 16, defaultH: 6, minW: 12, minH: 3,
+    defaultWPct: 0.3, defaultHPct: 0.25, minWPx: 240, minHPx: 120,
     implemented: false, Render: EventsWidget,
   },
   "perps-stats": {
     type: "perps-stats", title: "Perps stats",
     description: "Underlying / mark / 24h / volume / funding / OI — not live.",
     workspaces: PERPS_WS,
-    defaultW: 48, defaultH: 3, minW: 24, minH: 2,
+    defaultWPct: 1.0, defaultHPct: 0.1, minWPx: 360, minHPx: 60,
     implemented: false, Render: PerpsStatsWidget,
   },
   "perps-chart": {
     type: "perps-chart", title: "Perps chart",
     description: "Schematic sparkline — not live.",
     workspaces: PERPS_WS,
-    defaultW: 28, defaultH: 14, minW: 16, minH: 6,
+    defaultWPct: 0.6, defaultHPct: 0.45, minWPx: 360, minHPx: 200,
     implemented: false, Render: PerpsChartWidget,
   },
   "perps-orderbook": {
     type: "perps-orderbook", title: "Perps order book",
     description: "5-row Bid/Size/Ask placeholder — not live.",
     workspaces: PERPS_WS,
-    defaultW: 20, defaultH: 10, minW: 12, minH: 4,
+    defaultWPct: 0.4, defaultHPct: 0.3, minWPx: 240, minHPx: 160,
     implemented: false, Render: PerpsOrderbookWidget,
   },
   "perps-trade-form": {
     type: "perps-trade-form", title: "Perps trade ticket",
     description: "Long/Short/size/leverage — disabled in this testnet beta.",
     workspaces: PERPS_WS,
-    defaultW: 20, defaultH: 12, minW: 12, minH: 6,
+    defaultWPct: 0.4, defaultHPct: 0.35, minWPx: 240, minHPx: 200,
     implemented: false, Render: PerpsTradeFormWidget,
   },
   "perps-trade-feed": {
     type: "perps-trade-feed", title: "Perps trade feed",
     description: "Public trade feed — not live.",
     workspaces: PERPS_WS,
-    defaultW: 28, defaultH: 8, minW: 16, minH: 4,
+    defaultWPct: 0.6, defaultHPct: 0.25, minWPx: 280, minHPx: 140,
     implemented: false, Render: PerpsTradeFeedWidget,
   },
   "docs-help": {
     type: "docs-help", title: "Docs · help",
     description: "Quickstart / Testing guide / Limitations / FAQ links.",
     workspaces: ALL_WS,
-    defaultW: 12, defaultH: 6, minW: 8, minH: 3,
+    defaultWPct: 0.25, defaultHPct: 0.25, minWPx: 220, minHPx: 140,
     implemented: true, Render: DocsHelpWidget,
   },
   feedback: {
     type: "feedback", title: "Feedback",
     description: "Report a bug + open Discord.",
     workspaces: ALL_WS,
-    defaultW: 12, defaultH: 6, minW: 8, minH: 3,
+    defaultWPct: 0.25, defaultHPct: 0.25, minWPx: 220, minHPx: 140,
     implemented: true, Render: FeedbackWidget,
   },
 };
@@ -174,48 +177,36 @@ export function widgetsForWorkspace(workspaceId: WorkspaceId): WidgetDef[] {
   ).map((t) => WIDGET_REGISTRY[t]);
 }
 
-/** Default placement on the adaptive freeform canvas. Positions are
- *  expressed as fractions of `cols` so defaults always fill the
- *  workspace edge-to-edge regardless of viewport width. */
+/** Default placement on the pixel canvas. Positions are percentages so
+ *  defaults always fill the canvas edge-to-edge regardless of monitor
+ *  size, with no right gutter. */
 export interface DefaultPlacement {
   type: WidgetType;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+  xPct: number;
+  yPct: number;
+  wPct: number;
+  hPct: number;
 }
 
-/** Scale a fraction [0, 1] into a grid col count. Always at least 1. */
-function frac(cols: number, f: number): number {
-  return Math.max(1, Math.round(cols * f));
-}
-
-export function defaultWidgetsFor(
-  workspaceId: WorkspaceId,
-  cols: number,
-): DefaultPlacement[] {
+export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] {
   switch (workspaceId) {
-    case "options": {
-      const chainW = frac(cols, 0.667); // ~2/3 of width
-      const detailsW = cols - chainW;
+    case "options":
+      // chain ≈ 70% wide, details ≈ 30%, both occupy the top 70%; the
+      // bottom dock fills the remaining 30% across the full width.
       return [
-        { type: "options-chain", x: 0, y: 0, w: chainW, h: 18 },
-        { type: "option-details", x: chainW, y: 0, w: detailsW, h: 18 },
-        { type: "bottom-dock", x: 0, y: 18, w: cols, h: 10 },
+        { type: "options-chain",  xPct: 0,    yPct: 0,    wPct: 0.7, hPct: 0.7 },
+        { type: "option-details", xPct: 0.7,  yPct: 0,    wPct: 0.3, hPct: 0.7 },
+        { type: "bottom-dock",    xPct: 0,    yPct: 0.7,  wPct: 1.0, hPct: 0.3 },
       ];
-    }
-    case "perps": {
-      const chartW = frac(cols, 0.583); // ~7/12
-      const sideW = cols - chartW;
+    case "perps":
       return [
-        { type: "perps-stats", x: 0, y: 0, w: cols, h: 3 },
-        { type: "perps-chart", x: 0, y: 3, w: chartW, h: 14 },
-        { type: "perps-orderbook", x: chartW, y: 3, w: sideW, h: 10 },
-        { type: "perps-trade-form", x: chartW, y: 13, w: sideW, h: 12 },
-        { type: "perps-trade-feed", x: 0, y: 17, w: chartW, h: 8 },
-        { type: "bottom-dock", x: 0, y: 25, w: cols, h: 10 },
+        { type: "perps-stats",      xPct: 0,    yPct: 0,    wPct: 1.0, hPct: 0.1 },
+        { type: "perps-chart",      xPct: 0,    yPct: 0.1,  wPct: 0.6, hPct: 0.45 },
+        { type: "perps-orderbook",  xPct: 0.6,  yPct: 0.1,  wPct: 0.4, hPct: 0.3 },
+        { type: "perps-trade-form", xPct: 0.6,  yPct: 0.4,  wPct: 0.4, hPct: 0.3 },
+        { type: "perps-trade-feed", xPct: 0,    yPct: 0.55, wPct: 0.6, hPct: 0.15 },
+        { type: "bottom-dock",      xPct: 0,    yPct: 0.7,  wPct: 1.0, hPct: 0.3 },
       ];
-    }
     case "custom-1":
     case "custom-2":
     case "custom-3":

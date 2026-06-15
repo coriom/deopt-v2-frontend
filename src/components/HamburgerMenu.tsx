@@ -2,50 +2,68 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  PUBLIC_BETA_LINKS,
-  isPlaceholderHref,
-} from "@/lib/public-beta-links";
 
-interface Entry {
+interface DrawerEntry {
   id: string;
   label: string;
   href: string;
+  /** Internal Next.js route → render as <Link>. External URL → <a target="_blank">. */
   internal: boolean;
-  description?: string;
 }
 
-function entriesFromConfig(): Entry[] {
-  const wanted = ["quickstart", "feedback", "discord", "github", "limitations"];
-  const out: Entry[] = [];
-  for (const id of wanted) {
-    const l = PUBLIC_BETA_LINKS.find((x) => x.id === id);
-    if (!l) continue;
-    out.push({
-      id: l.id,
-      label: l.label,
-      href: l.href,
-      internal: !!l.internal,
-      description: l.description,
-    });
-  }
-  return out;
+interface DrawerSection {
+  id: string;
+  title: string;
+  entries: DrawerEntry[];
 }
 
 /**
  * Slide-out hamburger drawer for the trading-terminal navbar.
  *
- * Contains: Docs index, Quickstart, Feedback, Discord, GitHub, Risks /
- * limitations, Changelog placeholder. NO admin links — admin paths
- * are operator-only and gated by separate auth elsewhere.
+ * V2 (FRONTEND-NAVBAR-HAMBURGER-IA-CLEANUP, 2026-06-14):
+ *   - Portfolio + API moved out of the primary navbar and into this menu
+ *   - New /fees + /api placeholder routes wired up
+ *   - Sections: Pages / Docs / Community
+ *   - Includes: Docs · Quickstart · Fees · API · Portfolio · Feedback ·
+ *     Discord · GitHub · Known limitations · FAQ
  *
  * Posture: testnet only. Internal-route entries use Next.js <Link>;
- * external entries open in a new tab. Placeholder slots degrade to a
- * non-clickable "(coming soon)" row.
+ * external entries open in a new tab. NO admin links — admin paths
+ * are operator-only and gated by separate auth elsewhere.
  */
+const SECTIONS: DrawerSection[] = [
+  {
+    id: "pages",
+    title: "Pages",
+    entries: [
+      { id: "portfolio", label: "Portfolio", href: "/portfolio", internal: true },
+      { id: "fees", label: "Fees", href: "/fees", internal: true },
+      { id: "api", label: "API", href: "/api", internal: true },
+      { id: "feedback", label: "Feedback", href: "/feedback", internal: true },
+    ],
+  },
+  {
+    id: "docs",
+    title: "Docs",
+    entries: [
+      { id: "docs-index", label: "Docs", href: "/docs", internal: true },
+      { id: "quickstart", label: "Quickstart", href: "/docs/quickstart", internal: true },
+      { id: "limitations", label: "Known limitations", href: "/docs/limitations", internal: true },
+      { id: "faq", label: "FAQ", href: "/docs/faq", internal: true },
+    ],
+  },
+  {
+    id: "community",
+    title: "Community",
+    entries: [
+      { id: "discord", label: "Discord", href: "https://discord.gg/zaEMvWuxu", internal: false },
+      { id: "github", label: "GitHub", href: "https://github.com/DeOpt", internal: false },
+    ],
+  },
+];
+
 export function HamburgerMenu() {
   const [open, setOpen] = useState(false);
-  const entries = entriesFromConfig();
 
   useEffect(() => {
     if (!open) return;
@@ -91,7 +109,7 @@ export function HamburgerMenu() {
           onClick={() => setOpen(false)}
         >
           <aside
-            className="flex h-full w-72 max-w-[90vw] flex-col gap-3 border-l border-emerald-500/30 bg-zinc-950 p-5 text-zinc-100 shadow-[0_0_30px_rgba(16,185,129,0.08)]"
+            className="flex h-full w-72 max-w-[90vw] flex-col gap-3 overflow-y-auto border-l border-emerald-500/30 bg-zinc-950 p-5 text-zinc-100 shadow-[0_0_30px_rgba(16,185,129,0.08)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -109,52 +127,45 @@ export function HamburgerMenu() {
               </button>
             </div>
 
-            <nav aria-label="Hamburger menu" className="flex flex-col gap-1">
-              <DrawerLink href="/docs" label="Docs" testid="hamburger-link-docs-index" onPick={() => setOpen(false)} />
-              {entries.map((e) =>
-                isPlaceholderHref(e.href) ? (
-                  <span
-                    key={e.id}
-                    data-testid={`hamburger-link-${e.id}`}
-                    data-placeholder="true"
-                    className="cursor-not-allowed rounded px-2 py-1.5 text-[12px] text-zinc-500"
-                  >
-                    {e.label} (coming soon)
+            <nav aria-label="Hamburger menu" className="flex flex-col gap-3">
+              {SECTIONS.map((section) => (
+                <div
+                  key={section.id}
+                  data-testid={`hamburger-section-${section.id}`}
+                  className="flex flex-col gap-1"
+                >
+                  <span className="px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                    {section.title}
                   </span>
-                ) : e.internal ? (
-                  <Link
-                    key={e.id}
-                    href={e.href}
-                    data-testid={`hamburger-link-${e.id}`}
-                    data-target="internal"
-                    onClick={() => setOpen(false)}
-                    className="rounded px-2 py-1.5 text-[12px] text-zinc-200 hover:bg-emerald-500/10 hover:text-emerald-200"
-                  >
-                    {e.label}
-                  </Link>
-                ) : (
-                  <a
-                    key={e.id}
-                    href={e.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid={`hamburger-link-${e.id}`}
-                    data-target="external"
-                    onClick={() => setOpen(false)}
-                    className="rounded px-2 py-1.5 text-[12px] text-zinc-200 hover:bg-emerald-500/10 hover:text-emerald-200"
-                  >
-                    {e.label}
-                  </a>
-                ),
-              )}
-              <span
-                data-testid="hamburger-link-changelog"
-                data-placeholder="true"
-                className="cursor-not-allowed rounded px-2 py-1.5 text-[12px] text-zinc-500"
-                title="Changelog will be published once the public testnet beta cycle begins generating one"
-              >
-                Changelog (coming soon)
-              </span>
+                  {section.entries.map((e) =>
+                    e.internal ? (
+                      <Link
+                        key={e.id}
+                        href={e.href}
+                        data-testid={`hamburger-link-${e.id}`}
+                        data-target="internal"
+                        onClick={() => setOpen(false)}
+                        className="rounded px-2 py-1.5 text-[12px] text-zinc-200 hover:bg-emerald-500/10 hover:text-emerald-200"
+                      >
+                        {e.label}
+                      </Link>
+                    ) : (
+                      <a
+                        key={e.id}
+                        href={e.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid={`hamburger-link-${e.id}`}
+                        data-target="external"
+                        onClick={() => setOpen(false)}
+                        className="rounded px-2 py-1.5 text-[12px] text-zinc-200 hover:bg-emerald-500/10 hover:text-emerald-200"
+                      >
+                        {e.label}
+                      </a>
+                    ),
+                  )}
+                </div>
+              ))}
             </nav>
 
             <div className="mt-auto rounded border border-zinc-800 bg-black/40 p-2 text-[10px] leading-relaxed text-zinc-400">
@@ -165,29 +176,5 @@ export function HamburgerMenu() {
         </div>
       )}
     </>
-  );
-}
-
-function DrawerLink({
-  href,
-  label,
-  testid,
-  onPick,
-}: {
-  href: string;
-  label: string;
-  testid: string;
-  onPick: () => void;
-}) {
-  return (
-    <Link
-      href={href}
-      data-testid={testid}
-      data-target="internal"
-      onClick={onPick}
-      className="rounded px-2 py-1.5 text-[12px] text-zinc-200 hover:bg-emerald-500/10 hover:text-emerald-200"
-    >
-      {label}
-    </Link>
   );
 }

@@ -20,6 +20,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  clearWorkspaceLayouts,
+  pruneExpiredLayouts,
+} from "./workspace-storage";
 import type { WidgetType, WorkspaceId } from "./workspace-types";
 
 interface ActiveWorkspace {
@@ -39,6 +43,17 @@ const Ctx = createContext<WorkspaceBridgeValue | null>(null);
 
 export function WorkspaceBridgeProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ActiveWorkspace | null>(null);
+
+  // On first mount, prune any expired / invalid buckets and expose a
+  // console-only recovery helper for users with corrupted layouts.
+  // No UI surface — terminal stays clean.
+  useEffect(() => {
+    pruneExpiredLayouts();
+    if (typeof window !== "undefined") {
+      (window as unknown as { __deoptClearWorkspaceLayouts?: () => number })
+        .__deoptClearWorkspaceLayouts = clearWorkspaceLayouts;
+    }
+  }, []);
 
   const registerActive = useCallback((handle: ActiveWorkspace) => {
     setActive(handle);

@@ -1,0 +1,126 @@
+/**
+ * fees-and-api-placeholders.spec.ts —
+ * FRONTEND-NAVBAR-HAMBURGER-IA-CLEANUP
+ *
+ * Covers the two new placeholder routes wired up by this milestone:
+ *   - /fees renders the honest beta-only placeholder
+ *   - /api  renders the honest beta-only placeholder
+ *   - Both link out to /docs, /feedback, and Discord/GitHub
+ *   - Both carry the testnet/unaudited status chip
+ *   - Neither contains positive-claim language (audited / mainnet-
+ *     ready / production-ready / safe for real funds / guaranteed)
+ *   - Neither leaks admin / bearer / RPC / DATABASE_URL / mainnet
+ *   - Hamburger menu's Portfolio link routes to /portfolio and the
+ *     portfolio page still renders
+ */
+import { test, expect } from "@playwright/test";
+
+test("/fees placeholder renders with status chip + summary + links", async ({
+  page,
+}) => {
+  await page.goto("/fees");
+  await expect(page.getByTestId("fees-page")).toBeVisible();
+  await expect(page.getByTestId("fees-page-status-chip")).toContainText(
+    /public testnet beta/i,
+  );
+  await expect(page.getByTestId("fees-page-summary")).toBeVisible();
+  await expect(page.getByTestId("fees-page-disclaimers")).toBeVisible();
+  await expect(page.getByTestId("fees-page-roadmap")).toBeVisible();
+  await expect(page.getByTestId("fees-page-link-docs")).toHaveAttribute(
+    "href",
+    "/docs",
+  );
+  await expect(page.getByTestId("fees-page-link-feedback")).toHaveAttribute(
+    "href",
+    "/feedback",
+  );
+  await expect(page.getByTestId("fees-page-link-discord")).toHaveAttribute(
+    "href",
+    "https://discord.gg/zaEMvWuxu",
+  );
+});
+
+test("/api placeholder renders with status chip + summary + links", async ({
+  page,
+}) => {
+  await page.goto("/api");
+  await expect(page.getByTestId("api-page")).toBeVisible();
+  await expect(page.getByTestId("api-page-status-chip")).toContainText(
+    /public testnet beta/i,
+  );
+  await expect(page.getByTestId("api-page-summary")).toBeVisible();
+  await expect(page.getByTestId("api-page-disclaimers")).toBeVisible();
+  await expect(page.getByTestId("api-page-roadmap")).toBeVisible();
+  await expect(page.getByTestId("api-page-link-docs")).toHaveAttribute(
+    "href",
+    "/docs",
+  );
+  await expect(page.getByTestId("api-page-link-github")).toHaveAttribute(
+    "href",
+    "https://github.com/DeOpt",
+  );
+  await expect(page.getByTestId("api-page-link-feedback")).toHaveAttribute(
+    "href",
+    "/feedback",
+  );
+});
+
+test("/fees does not contain positive-claim language or sensitive leaks", async ({
+  page,
+}) => {
+  await page.goto("/fees");
+  const html = await page.content();
+  expect(html).not.toMatch(/\baudited\b/i);
+  expect(html).not.toMatch(/mainnet[- ]ready/i);
+  expect(html).not.toMatch(/production[- ]ready/i);
+  expect(html).not.toMatch(/safe for real funds/i);
+  expect(html).not.toMatch(/\bguaranteed\b/i);
+  expect(html).not.toMatch(/Bearer\s+[A-Za-z0-9_.-]{16,}/);
+  expect(html).not.toMatch(/alchemy\.com\/v2\//);
+  expect(html).not.toMatch(/infura\.io\/v3\//);
+  expect(html).not.toMatch(/DATABASE_URL/);
+  expect(html).not.toMatch(/\/admin\//);
+});
+
+test("/api does not contain positive-claim language or sensitive leaks", async ({
+  page,
+}) => {
+  await page.goto("/api");
+  const html = await page.content();
+  expect(html).not.toMatch(/\baudited\b/i);
+  expect(html).not.toMatch(/mainnet[- ]ready/i);
+  expect(html).not.toMatch(/production[- ]ready/i);
+  expect(html).not.toMatch(/safe for real funds/i);
+  expect(html).not.toMatch(/\bguaranteed\b/i);
+  expect(html).not.toMatch(/Bearer\s+[A-Za-z0-9_.-]{16,}/);
+  expect(html).not.toMatch(/alchemy\.com\/v2\//);
+  expect(html).not.toMatch(/infura\.io\/v3\//);
+  expect(html).not.toMatch(/DATABASE_URL/);
+  expect(html).not.toMatch(/\/admin\//);
+});
+
+test("Hamburger → Portfolio link routes to /portfolio and renders the page", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByTestId("hamburger-button").click();
+  await page.getByTestId("hamburger-link-portfolio").click();
+  await page.waitForURL("**/portfolio");
+  await expect(page.getByTestId("portfolio-testnet-only-banner")).toBeVisible();
+});
+
+test("Hamburger → API link routes to /api placeholder", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("hamburger-button").click();
+  await page.getByTestId("hamburger-link-api").click();
+  await page.waitForURL("**/api");
+  await expect(page.getByTestId("api-page")).toBeVisible();
+});
+
+test("Hamburger → Fees link routes to /fees placeholder", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("hamburger-button").click();
+  await page.getByTestId("hamburger-link-fees").click();
+  await page.waitForURL("**/fees");
+  await expect(page.getByTestId("fees-page")).toBeVisible();
+});

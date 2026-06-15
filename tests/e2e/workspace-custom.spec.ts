@@ -54,7 +54,7 @@ test("Remove control inside a widget still removes it", async ({ page }) => {
   await expect(page.getByTestId("widget-feedback")).toHaveCount(0);
 });
 
-test("localStorage stores V2 grid-coord bucket with no secrets", async ({
+test("localStorage stores V6 pct-geometry bucket with no secrets", async ({
   page,
 }) => {
   await page.goto("/custom");
@@ -88,12 +88,12 @@ test("localStorage stores V2 grid-coord bucket with no secrets", async ({
   }
 
   const parsed = JSON.parse(bucket["deopt:v2:workspace:anon"]);
-  expect(parsed.version).toBe(5);
+  expect(parsed.version).toBe(7);
   const widget = parsed.workspaces["custom-1"].widgets[0];
-  expect(typeof widget.x).toBe("number");
-  expect(typeof widget.y).toBe("number");
-  expect(typeof widget.w).toBe("number");
-  expect(typeof widget.h).toBe("number");
+  expect(typeof widget.xPct).toBe("number");
+  expect(typeof widget.yPct).toBe("number");
+  expect(typeof widget.wPct).toBe("number");
+  expect(typeof widget.hPct).toBe("number");
 });
 
 test("/custom does NOT render the PublicBetaFooter (terminal route)", async ({

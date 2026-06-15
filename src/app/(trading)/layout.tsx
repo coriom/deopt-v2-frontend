@@ -86,24 +86,12 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
               Markets
             </Link>
             <Link
-              href="/portfolio"
-              data-testid="navbar-link-portfolio"
-              className="text-zinc-400 hover:text-emerald-300"
-            >
-              Portfolio
-            </Link>
-            <Link
               href="/custom"
               data-testid="navbar-link-custom"
               className="text-zinc-400 hover:text-emerald-300"
             >
               Custom
             </Link>
-            <ComingSoonNavLink
-              label="API"
-              testid="navbar-link-api"
-              title="DeOpt public API documentation — coming soon in the testnet beta cycle"
-            />
             <ComingSoonNavLink
               label="DeOpt Académie"
               testid="navbar-link-academie"

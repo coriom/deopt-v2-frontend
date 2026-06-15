@@ -1,11 +1,18 @@
-// LocalStorage persistence for the Workspace V1 system.
+// LocalStorage persistence for the Workspace V7 pixel canvas.
+//
+// V7 adds strict per-widget validation on load: any layout containing
+// NaN/Infinity geometry, out-of-range percentages, sub-readable
+// widget sizes, or unknown widget types is rejected and replaced with
+// the default. This prevents the "collapsed widgets in top-left"
+// rendering bug that V6 exhibited when canvasSize stayed at (0, 0)
+// during first paint.
 //
 // Safety guarantees enforced by this module:
 //   - never writes secrets, RPC URLs, private keys, bearer tokens,
 //     DATABASE_URL, or signatures.
 //   - never blocks SSR — every `window.localStorage` access is guarded.
 //   - prunes expired buckets on load.
-//   - re-initialises corrupted / wrong-version buckets.
+//   - re-initialises corrupted / wrong-version / invalid-geometry buckets.
 //   - normalises wallet addresses to lower-case.
 
 import {
@@ -14,6 +21,7 @@ import {
   WALLET_LAYOUT_TTL_MS,
   WORKSPACE_LAYOUT_VERSION,
   WORKSPACE_STORAGE_PREFIX,
+  isValidWorkspaceLayout,
   type StoredWorkspaces,
   type WorkspaceId,
   type WorkspaceLayout,
@@ -26,7 +34,6 @@ function isBrowser(): boolean {
   );
 }
 
-/** Convert a wallet address to the storage key segment. `null` → `anon`. */
 export function walletKeyFor(address: string | null): string {
   if (!address) return ANON_WALLET_KEY;
   const trimmed = address.trim();
@@ -46,7 +53,6 @@ function nowMs(): number {
   return Date.now();
 }
 
-/** Returns a fresh empty bucket. */
 function emptyBucket(walletKey: string): StoredWorkspaces {
   return {
     version: WORKSPACE_LAYOUT_VERSION,
@@ -66,8 +72,6 @@ function isStoredWorkspaces(value: unknown): value is StoredWorkspaces {
   );
 }
 
-/** Load the entire bucket for `walletKey`, pruning expired layouts and
- *  refusing to return any other wallet's data. */
 export function loadBucket(walletKey: string): StoredWorkspaces {
   if (!isBrowser()) return emptyBucket(walletKey);
   const raw = window.localStorage.getItem(storageKeyFor(walletKey));
@@ -89,10 +93,35 @@ export function loadBucket(walletKey: string): StoredWorkspaces {
   }
   const now = nowMs();
   const kept: Partial<Record<WorkspaceId, WorkspaceLayout>> = {};
+  let droppedAny = false;
   for (const [wid, layout] of Object.entries(parsed.workspaces)) {
     if (!layout) continue;
-    if (typeof layout.expiresAt !== "number" || layout.expiresAt <= now) continue;
+    if (typeof layout.expiresAt !== "number" || layout.expiresAt <= now) {
+      droppedAny = true;
+      continue;
+    }
+    if (!isValidWorkspaceLayout(layout)) {
+      // Geometry / shape failed strict validation — drop just this
+      // workspace, keep the rest of the bucket valid.
+      droppedAny = true;
+      continue;
+    }
     kept[wid as WorkspaceId] = layout;
+  }
+  if (droppedAny) {
+    const cleaned: StoredWorkspaces = {
+      version: WORKSPACE_LAYOUT_VERSION,
+      walletKey,
+      workspaces: kept,
+    };
+    try {
+      window.localStorage.setItem(
+        storageKeyFor(walletKey),
+        JSON.stringify(cleaned),
+      );
+    } catch {
+      // ignore — pruning is best-effort.
+    }
   }
   return {
     version: WORKSPACE_LAYOUT_VERSION,
@@ -112,15 +141,28 @@ export function saveWorkspaceLayout(
   walletKey: string,
   workspaceId: WorkspaceId,
   widgets: WorkspaceLayout["widgets"],
-  cols: number,
+  canvasWidthPx: number,
+  canvasHeightPx: number,
 ): WorkspaceLayout | null {
   if (!isBrowser()) return null;
+  // Refuse to persist a layout while the canvas is still measuring —
+  // saving zero canvas dimensions would let `findFreeSlot` and other
+  // helpers see (0, 0) on next load before ResizeObserver fires.
+  if (
+    !Number.isFinite(canvasWidthPx) ||
+    !Number.isFinite(canvasHeightPx) ||
+    canvasWidthPx <= 0 ||
+    canvasHeightPx <= 0
+  ) {
+    return null;
+  }
   const bucket = loadBucket(walletKey);
   const now = nowMs();
   const layout: WorkspaceLayout = {
     workspaceId,
     widgets,
-    cols,
+    canvasWidthPx,
+    canvasHeightPx,
     updatedAt: now,
     expiresAt: now + defaultTtl(walletKey),
   };
@@ -131,7 +173,6 @@ export function saveWorkspaceLayout(
       JSON.stringify(bucket),
     );
   } catch {
-    // Storage quota / disabled — silently fall back to in-memory.
     return null;
   }
   return layout;
@@ -152,6 +193,32 @@ export function resetWorkspaceLayout(
   } catch {
     // ignore
   }
+}
+
+/** Recovery helper: wipe every workspace layout bucket under our
+ *  prefix, for every wallet stored on this device. Exposed for
+ *  manual console use (`__deoptClearWorkspaceLayouts()`); no UI
+ *  surface in the terminal. */
+export function clearWorkspaceLayouts(): number {
+  if (!isBrowser()) return 0;
+  const keys: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const k = window.localStorage.key(i);
+    if (k && k.startsWith(WORKSPACE_STORAGE_PREFIX)) keys.push(k);
+  }
+  for (const k of keys) {
+    window.localStorage.removeItem(k);
+  }
+  return keys.length;
+}
+
+/** Recovery helper scoped to a single workspace under the active
+ *  wallet key. */
+export function clearWorkspaceLayoutForWorkspace(
+  walletKey: string,
+  workspaceId: WorkspaceId,
+): void {
+  resetWorkspaceLayout(walletKey, workspaceId);
 }
 
 /** Prune expired buckets across every key under our prefix. Safe to
@@ -182,6 +249,8 @@ export function pruneExpiredLayouts(): void {
     for (const [wid, layout] of Object.entries(parsed.workspaces)) {
       if (!layout) continue;
       if (typeof layout.expiresAt !== "number" || layout.expiresAt <= now) {
+        delete parsed.workspaces[wid as WorkspaceId];
+      } else if (!isValidWorkspaceLayout(layout)) {
         delete parsed.workspaces[wid as WorkspaceId];
       } else {
         anyKept = true;

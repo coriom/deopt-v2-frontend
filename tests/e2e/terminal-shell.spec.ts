@@ -1,5 +1,5 @@
 /**
- * terminal-shell.spec.ts — FRONTEND-TERMINAL-WORKSPACE-RESIZABLE-V2
+ * terminal-shell.spec.ts — FRONTEND-PIXEL-CANVAS-WORKSPACE-V6
  *
  * Covers the full-screen terminal shell:
  *   - /trade, /perps, /custom render `trading-main-terminal` (no
@@ -7,8 +7,8 @@
  *   - No PublicBetaFooter on terminal routes
  *   - Non-terminal trading routes (/, /markets, /portfolio) still
  *     render `trading-main` (page mode) + footer
- *   - Widget chrome carries a drag handle and remove button (resize
- *     handle comes from react-grid-layout in the bottom-right corner)
+ *   - Widget chrome carries a drag handle and remove button (V6 pixel
+ *     canvas renders its own resize handle as `widget-resize-handle-*`)
  */
 import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
@@ -54,15 +54,13 @@ test("widget chrome carries a drag handle + remove button on /custom", async ({
   await expect(remove).toBeVisible();
 });
 
-test("resize handle from react-grid-layout is rendered in the bottom-right of each widget on /custom", async ({
+test("V6 pixel-canvas resize handle is rendered for each widget on /custom", async ({
   page,
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
   await page.getByTestId("navbar-widget-option-docs-help").click();
   await expect(page.getByTestId("widget-docs-help")).toBeVisible();
-  // react-grid-layout always renders `.react-resizable-handle` on each
-  // grid item by default.
-  const handles = page.locator(".react-resizable-handle");
-  await expect(handles.first()).toBeAttached();
+  const handles = page.locator("[data-testid^='widget-resize-handle-']");
+  await expect(handles.first()).toBeVisible();
 });

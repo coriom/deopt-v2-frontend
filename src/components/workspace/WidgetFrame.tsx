@@ -1,5 +1,6 @@
 "use client";
 
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { WidgetInstance } from "@/lib/workspace-types";
 import type { WidgetDef } from "./registry";
 
@@ -7,14 +8,22 @@ interface WidgetFrameProps {
   instance: WidgetInstance;
   def: WidgetDef;
   onRemove: () => void;
+  /** Begin a drag-move gesture. The header captures pointer down and
+   *  forwards it to the parent Workspace, which owns the pointer move
+   *  / up listeners (so the gesture survives the cursor leaving the
+   *  widget's bounding rect). */
+  onDragStart: (e: ReactPointerEvent) => void;
+  /** Begin a resize gesture from the bottom-right corner handle. */
+  onResizeStart: (e: ReactPointerEvent) => void;
 }
 
-/** Widget chrome. The header doubles as the drag handle via the
- *  `deopt-widget-drag-handle` className (react-grid-layout looks for
- *  this selector — set via the Workspace's `draggableHandle` prop).
- *  The resize handle is rendered by react-grid-layout itself in the
- *  bottom-right corner. */
-export function WidgetFrame({ instance, def, onRemove }: WidgetFrameProps) {
+export function WidgetFrame({
+  instance,
+  def,
+  onRemove,
+  onDragStart,
+  onResizeStart,
+}: WidgetFrameProps) {
   const Render = def.Render;
   return (
     <section
@@ -22,20 +31,21 @@ export function WidgetFrame({ instance, def, onRemove }: WidgetFrameProps) {
       data-widget-id={instance.id}
       data-widget-implemented={def.implemented ? "true" : "false"}
       aria-label={def.title}
-      className="flex h-full w-full flex-col gap-1 rounded border border-zinc-800 bg-zinc-950"
+      className="flex h-full w-full flex-col rounded border border-zinc-800 bg-zinc-950"
     >
       <header
-        className="deopt-widget-drag-handle flex items-center justify-between gap-2 border-b border-zinc-900 px-2 py-1"
         data-testid={`widget-drag-handle-${instance.id}`}
+        onPointerDown={onDragStart}
+        className="flex shrink-0 cursor-move items-center justify-between gap-2 overflow-hidden border-b border-zinc-900 px-2 py-1 select-none"
       >
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[10px] uppercase tracking-[0.18em] text-emerald-300">
             {def.title}
           </span>
           {!def.implemented ? (
             <span
               data-testid={`widget-status-${instance.type}`}
-              className="rounded border border-emerald-500/30 px-1 py-0 text-[9px] text-emerald-200"
+              className="shrink-0 rounded border border-emerald-500/30 px-1 py-0 text-[9px] text-emerald-200"
             >
               coming later
             </span>
@@ -43,11 +53,11 @@ export function WidgetFrame({ instance, def, onRemove }: WidgetFrameProps) {
         </div>
         <button
           type="button"
-          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={onRemove}
           data-testid={`widget-remove-${instance.id}`}
           aria-label="Remove widget"
-          className="rounded border border-transparent px-1 text-[10px] text-zinc-500 hover:border-zinc-700 hover:text-emerald-200"
+          className="shrink-0 rounded border border-transparent px-1 text-[10px] text-zinc-500 hover:border-zinc-700 hover:text-emerald-200"
         >
           ✕
         </button>
@@ -58,6 +68,14 @@ export function WidgetFrame({ instance, def, onRemove }: WidgetFrameProps) {
       >
         <Render />
       </div>
+      <div
+        data-testid={`widget-resize-handle-${instance.id}`}
+        onPointerDown={onResizeStart}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize widget"
+        className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize border-r border-b border-emerald-500/40 hover:border-emerald-300"
+      />
     </section>
   );
 }

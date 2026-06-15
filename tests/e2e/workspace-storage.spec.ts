@@ -10,11 +10,13 @@
  */
 import { test, expect } from "@playwright/test";
 
-// V4 bumped layout schema to version=3. The version-bump-wipe path
-// still wipes any older bucket on load and replaces it with the new
-// default. The "wrong-version (future)" test uses version=999.
+// V7 bumped the layout schema to version=7 (hydration + strict
+// geometry validation fix on top of V6's pixel canvas). The
+// version-bump-wipe path still wipes any older bucket on load and
+// replaces it with the new default. The "wrong-version (future)"
+// test uses version=999.
 
-test("V1 bucket (size enum) is wiped when the V3 loader sees it", async ({
+test("V1 bucket (size enum) is wiped when the V7 loader sees it", async ({
   page,
 }) => {
   await page.goto("/custom");
@@ -40,18 +42,27 @@ test("V1 bucket (size enum) is wiped when the V3 loader sees it", async ({
   await expect(page.getByTestId("workspace-empty-custom-1")).toBeVisible();
 });
 
-test("expired V2 anon bucket is pruned on next page load", async ({ page }) => {
+test("expired V7 anon bucket is pruned on next page load", async ({ page }) => {
   await page.goto("/custom");
   await page.evaluate(() => {
     const bucket = {
-      version: 5,
+      version: 7,
       walletKey: "anon",
       workspaces: {
         "custom-1": {
           workspaceId: "custom-1",
           widgets: [
-            { id: "w-stale", type: "docs-help", x: 0, y: 0, w: 3, h: 6 },
+            {
+              id: "w-stale",
+              type: "docs-help",
+              xPct: 0,
+              yPct: 0,
+              wPct: 0.25,
+              hPct: 0.25,
+            },
           ],
+          canvasWidthPx: 1920,
+          canvasHeightPx: 980,
           updatedAt: Date.now() - 48 * 60 * 60 * 1000,
           expiresAt: Date.now() - 1000,
         },
@@ -78,8 +89,17 @@ test("wrong-version (future) bucket is wiped and replaced with the default", asy
         "custom-1": {
           workspaceId: "custom-1",
           widgets: [
-            { id: "w-future", type: "docs-help", x: 0, y: 0, w: 3, h: 6 },
+            {
+              id: "w-future",
+              type: "docs-help",
+              xPct: 0,
+              yPct: 0,
+              wPct: 0.25,
+              hPct: 0.25,
+            },
           ],
+          canvasWidthPx: 1920,
+          canvasHeightPx: 980,
           updatedAt: Date.now(),
           expiresAt: Date.now() + 60_000,
         },
@@ -94,7 +114,7 @@ test("wrong-version (future) bucket is wiped and replaced with the default", asy
   await expect(page.getByTestId("workspace-empty-custom-1")).toBeVisible();
 });
 
-test("saved layout survives a reload (V2)", async ({ page }) => {
+test("saved layout survives a reload (V7)", async ({ page }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
   await page.getByTestId("navbar-widget-option-docs-help").click();
@@ -103,7 +123,7 @@ test("saved layout survives a reload (V2)", async ({ page }) => {
   await expect(page.getByTestId("widget-docs-help")).toBeVisible();
 });
 
-test("anon layout expiresAt is bounded by 24h (V2)", async ({ page }) => {
+test("anon layout expiresAt is bounded by 24h (V7)", async ({ page }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
   await page.getByTestId("navbar-widget-option-docs-help").click();
