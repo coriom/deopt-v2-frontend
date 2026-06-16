@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DeOpt v2",
-  description: "DeOpt v2 frontend",
+  title: "DeOpt",
+  description: "DeOpt — programmable derivatives infrastructure.",
   icons: {
     icon: "/favicon.png",
   },

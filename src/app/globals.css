@@ -1,5 +1,69 @@
 @import "tailwindcss";
 
+/*
+ * Cosmic landing animations
+ *
+ * Drives the slow drift of the dot field and the dash-offset stream on
+ * the landing-page backdrop. `prefers-reduced-motion: reduce` disables
+ * both so users with motion sensitivity see the static layer the
+ * server renders.
+ */
+.deopt-cosmic-dotfield {
+  background-image: radial-gradient(
+    circle,
+    rgba(110, 231, 183, 0.06) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
+  background-position: 0 0;
+  animation: deopt-cosmic-drift 40s linear infinite;
+  will-change: background-position;
+}
+
+.deopt-cosmic-stream {
+  animation: deopt-cosmic-stream-flow 18s linear infinite;
+}
+
+@keyframes deopt-cosmic-drift {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 56px; }
+}
+
+@keyframes deopt-cosmic-stream-flow {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -240; }
+}
+
+/*
+ * Section reveal — used by the landing scroll story to fade each
+ * section in as it enters the viewport. Falls back to "always
+ * visible" when JS is disabled OR reduced motion is requested.
+ */
+.deopt-section-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 600ms ease-out,
+    transform 600ms ease-out;
+  will-change: opacity, transform;
+}
+.deopt-section-reveal[data-revealed="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deopt-cosmic-dotfield,
+  .deopt-cosmic-stream {
+    animation: none !important;
+  }
+  .deopt-section-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
