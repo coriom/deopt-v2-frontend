@@ -4,37 +4,30 @@ import Image from "next/image";
 import { WalletProvider } from "@/lib/wallet";
 import {
   MainnetDisabledBanner,
-  NetworkBadge,
   TestnetUnauditedBanner,
   WrongNetworkBanner,
 } from "@/components/banners";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
+import { PrimaryNavLinks } from "@/components/PrimaryNavLinks";
 import { TradingShell } from "@/components/TradingShell";
 import { WorkspaceBridgeProvider } from "@/lib/workspace-bridge";
 import { WidgetMenuButton } from "@/components/workspace/WidgetMenuButton";
 
-function ComingSoonNavLink({
-  label,
-  testid,
-  title,
-}: {
-  label: string;
+interface NavItem {
   testid: string;
-  title: string;
-}) {
-  return (
-    <span
-      data-testid={testid}
-      data-placeholder="true"
-      aria-disabled="true"
-      title={title}
-      className="cursor-not-allowed text-zinc-600"
-    >
-      {label}
-    </span>
-  );
+  label: string;
+  href: string;
 }
+
+const PRIMARY_NAV: NavItem[] = [
+  { testid: "navbar-link-options",      label: "Options",        href: "/trade" },
+  { testid: "navbar-link-perps",        label: "Perps",          href: "/perps" },
+  { testid: "navbar-link-markets",      label: "Markets",        href: "/markets" },
+  { testid: "navbar-link-rfq-strategy", label: "RFQ/Strategy",   href: "/rfq-strategy" },
+  { testid: "navbar-link-custom",       label: "Custom",         href: "/custom" },
+  { testid: "navbar-link-academy",      label: "DeOpt Academy",  href: "/docs" },
+];
 
 export default function TradingLayout({ children }: { children: ReactNode }) {
   return (
@@ -44,10 +37,14 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
         <TestnetUnauditedBanner />
         <MainnetDisabledBanner />
         <WrongNetworkBanner />
-        <header className="flex flex-wrap items-center justify-between gap-y-1 border-b border-zinc-900 bg-zinc-950 px-3 py-2">
+        <header
+          data-testid="terminal-navbar"
+          style={{ fontFamily: "var(--app-font-nav)" }}
+          className="flex flex-wrap items-center justify-between gap-y-1 border-b border-zinc-900 bg-zinc-950 px-3 py-2"
+        >
           <nav
             aria-label="Primary"
-            className="flex items-center gap-2 text-[13px] sm:gap-3"
+            className="flex items-center gap-2 text-[15px] sm:gap-3"
           >
             <Link
               href="/"
@@ -64,45 +61,15 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
               />
               <span className="tracking-tight">DeOpt</span>
             </Link>
-            <Link
-              href="/trade"
-              data-testid="navbar-link-options"
-              className="text-zinc-400 hover:text-emerald-300"
-            >
-              Options
-            </Link>
-            <Link
-              href="/perps"
-              data-testid="navbar-link-perps"
-              className="text-zinc-400 hover:text-emerald-300"
-            >
-              Perps
-            </Link>
-            <Link
-              href="/markets"
-              data-testid="navbar-link-markets"
-              className="text-zinc-400 hover:text-emerald-300"
-            >
-              Markets
-            </Link>
-            <Link
-              href="/custom"
-              data-testid="navbar-link-custom"
-              className="text-zinc-400 hover:text-emerald-300"
-            >
-              Custom
-            </Link>
-            <ComingSoonNavLink
-              label="DeOpt Académie"
-              testid="navbar-link-academie"
-              title="DeOpt Académie — educational tracks coming soon in the testnet beta cycle"
-            />
-          </nav>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <NetworkBadge />
-            <WalletConnectButton />
-            <WidgetMenuButton />
             <HamburgerMenu />
+            <PrimaryNavLinks items={PRIMARY_NAV} />
+          </nav>
+          <div
+            data-testid="terminal-navbar-actions"
+            className="flex flex-wrap items-center gap-2 sm:gap-3"
+          >
+            <WidgetMenuButton />
+            <WalletConnectButton />
           </div>
         </header>
         <TradingShell>{children}</TradingShell>

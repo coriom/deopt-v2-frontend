@@ -99,14 +99,15 @@ test("/api does not contain positive-claim language or sensitive leaks", async (
   expect(html).not.toMatch(/\/admin\//);
 });
 
-test("Hamburger → Portfolio link routes to /portfolio and renders the page", async ({
+test("Portfolio route remains reachable via direct URL (Portfolio is no longer in the hamburger after FRONTEND-NAVBAR-IA-V1)", async ({
   page,
 }) => {
+  await page.goto("/portfolio");
+  await expect(page.getByTestId("portfolio-testnet-only-banner")).toBeVisible();
+  // Confirm the drawer no longer carries a Portfolio link.
   await page.goto("/");
   await page.getByTestId("hamburger-button").click();
-  await page.getByTestId("hamburger-link-portfolio").click();
-  await page.waitForURL("**/portfolio");
-  await expect(page.getByTestId("portfolio-testnet-only-banner")).toBeVisible();
+  await expect(page.getByTestId("hamburger-link-portfolio")).toHaveCount(0);
 });
 
 test("Hamburger → API link routes to /api placeholder", async ({ page }) => {

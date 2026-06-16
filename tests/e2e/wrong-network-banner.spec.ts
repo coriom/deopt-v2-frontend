@@ -24,10 +24,10 @@ test("wrong-network banner appears when wallet reports an unsupported chain", as
   });
   await page.goto("/");
   await page.getByRole("button", { name: /Connect wallet/i }).click();
-  // Full-width banner is visible.
+  // Full-width banner is visible — the navbar chip was removed by
+  // FRONTEND-NAVBAR-IA-V1, so the banner is the only wrong-network
+  // surface in the trading shell.
   await expect(page.getByTestId("wrong-network-banner")).toBeVisible();
-  // Header network badge also calls out wrong-network.
-  await expect(page.getByTestId("network-badge-wrong-network")).toBeVisible();
   // Switch action button is rendered.
   await expect(page.getByTestId("switch-network-action")).toBeVisible();
 });
@@ -42,7 +42,6 @@ test("wrong-network banner hidden when wallet is on expected Base Sepolia chain"
   await page.goto("/");
   await page.getByRole("button", { name: /Connect wallet/i }).click();
   await expect(page.getByTestId("wrong-network-banner")).toHaveCount(0);
-  await expect(page.getByTestId("network-badge-ok")).toBeVisible();
 });
 
 test("switch-to-base-sepolia button triggers wallet_switchEthereumChain", async ({
@@ -57,8 +56,6 @@ test("switch-to-base-sepolia button triggers wallet_switchEthereumChain", async 
   await expect(page.getByTestId("switch-network-action")).toBeVisible();
   await page.getByTestId("switch-network-action").click();
   // After the mock wallet processes wallet_switchEthereumChain, chain id
-  // becomes 84532, the wrong-network banner disappears, and the OK badge
-  // shows up.
-  await expect(page.getByTestId("network-badge-ok")).toBeVisible();
+  // becomes 84532 and the wrong-network banner disappears.
   await expect(page.getByTestId("wrong-network-banner")).toHaveCount(0);
 });

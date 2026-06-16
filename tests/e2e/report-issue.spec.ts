@@ -24,7 +24,7 @@ import {
   BASE_SEPOLIA_CHAIN_ID,
 } from "./wallet-fixture";
 
-test("hamburger Feedback link visible on every trading route", async ({
+test("hamburger Support link visible on every trading route", async ({
   page,
 }) => {
   await installMockWallet(page, {
@@ -35,7 +35,13 @@ test("hamburger Feedback link visible on every trading route", async ({
   for (const route of routes) {
     await page.goto(route);
     await page.getByTestId("hamburger-button").first().click();
-    await expect(page.getByTestId("hamburger-link-feedback")).toBeVisible();
+    // Support replaces the old Feedback drawer item but still points at
+    // /feedback (renamed in FRONTEND-NAVBAR-IA-V1).
+    await expect(page.getByTestId("hamburger-link-support")).toBeVisible();
+    await expect(page.getByTestId("hamburger-link-support")).toHaveAttribute(
+      "href",
+      "/feedback",
+    );
     await expect(page.getByTestId("hamburger-link-discord")).toBeVisible();
     await expect(page.getByTestId("hamburger-link-github")).toBeVisible();
     await page.getByTestId("hamburger-close-button").click();
@@ -56,13 +62,13 @@ test("landing Report-feedback CTA navigates to /feedback (internal)", async ({
   await expect(reportLink).toHaveAttribute("data-target", "internal");
 });
 
-test("hamburger Feedback link points at /feedback internal route", async ({
+test("hamburger Support link points at /feedback internal route", async ({
   page,
 }) => {
   await installMockWallet(page);
   await page.goto("/");
   await page.getByTestId("hamburger-button").click();
-  const feedback = page.getByTestId("hamburger-link-feedback");
-  await expect(feedback).toHaveAttribute("href", "/feedback");
-  await expect(feedback).toHaveAttribute("data-target", "internal");
+  const support = page.getByTestId("hamburger-link-support");
+  await expect(support).toHaveAttribute("href", "/feedback");
+  await expect(support).toHaveAttribute("data-target", "internal");
 });

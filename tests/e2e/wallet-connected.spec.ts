@@ -5,7 +5,7 @@ import {
   ANVIL_CHAIN_ID,
 } from "./wallet-fixture";
 
-test("wallet connected state renders shortened address + network badge", async ({
+test("wallet connected state renders the shortened address on the wallet button", async ({
   page,
 }) => {
   await installMockWallet(page, {
@@ -17,6 +17,7 @@ test("wallet connected state renders shortened address + network badge", async (
   await page.getByRole("button", { name: /Connect wallet/i }).click();
   // After connect the button shows the shortened address.
   await expect(page.locator("button", { hasText: /0xf39F…2266/i })).toBeVisible();
-  // NetworkBadge shows the chain short-name. Anvil is "anvil".
-  await expect(page.getByText(/anvil/i).first()).toBeVisible();
+  // The standalone navbar chain chip was removed by
+  // FRONTEND-NAVBAR-IA-V1. The wrong-network / mainnet-disabled
+  // banners (separate components) still surface chain-id problems.
 });

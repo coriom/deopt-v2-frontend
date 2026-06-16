@@ -37,8 +37,17 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  --app-font-sans: Arial, Helvetica, sans-serif;
-  --app-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  /*
+   * `--app-font-sans` / `--app-font-mono` are populated by `next/font`
+   * on the <html> element (`src/app/layout.tsx` wires Manrope +
+   * JetBrains Mono via their `.variable` className). The `:root`
+   * fallbacks below are only used by environments that strip the
+   * className (e.g. server snapshots before hydration).
+   */
+  --app-font-sans: "Manrope", system-ui, -apple-system, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  --app-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular",
+    Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 @theme inline {
