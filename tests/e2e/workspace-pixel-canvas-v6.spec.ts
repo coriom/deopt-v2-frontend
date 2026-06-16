@@ -92,7 +92,7 @@ test("Options defaults fill the canvas horizontally (no right gutter)", async ({
       (w: { type: string }) => w.type === "options-chain",
     );
     const details = widgets.find(
-      (w: { type: string }) => w.type === "option-details",
+      (w: { type: string }) => w.type === "trade",
     );
     const dock = widgets.find(
       (w: { type: string }) => w.type === "bottom-dock",

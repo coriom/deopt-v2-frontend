@@ -1,16 +1,16 @@
 /**
- * options-chain-terminal.spec.ts — public testnet beta V1 terminal
+ * options-chain-terminal.spec.ts — refreshed for FRONTEND-TRADE-WIDGET-V1
  *
  * Covers /trade options-chain terminal:
  *   - chain structure (Calls | Strike | Puts) headers
- *   - clicking an option opens / updates the right detail panel
- *   - detail panel tabs render Trade / Payoff / Greeks / Details / Risk
- *   - Greeks tab surfaces honest "coming soon" copy
+ *   - clicking an option updates the right `trade` widget instrument title
+ *   - the Trade widget exposes Payoff / Greeks / Trades / Book tabs
+ *   - Greeks tab surfaces an honest "local mock" disclaimer
  *   - Payoff tab renders the SVG placeholder
  *   - backend-unavailable state renders the MarketsFallbackCard
  *   - no fake liquidity claim ("live", "guaranteed", etc.)
  *   - no mainnet link / admin bearer / RPC URL / DATABASE_URL
- *   - no amber/yellow brand styling
+ *   - no amber / yellow / orange brand styling
  *   - no positive-claim drift
  */
 import { test, expect } from "@playwright/test";
@@ -170,71 +170,61 @@ test("/trade renders the chain structure (Calls | Strike | Puts)", async ({
   await expect(page.getByText("Puts", { exact: false }).first()).toBeVisible();
 });
 
-test("clicking a Call cell updates the detail panel", async ({ page }) => {
-  await setupChain(page);
-  await installMockWallet(page);
-  await page.goto("/trade");
-  await expect(page.getByTestId("detail-panel-empty")).toBeVisible();
-  const callCell = page.locator('[data-testid^="chain-call-300000000000"]').first();
-  await expect(callCell).toBeVisible({ timeout: 10000 });
-  await callCell.click();
-  await expect(page.getByTestId("detail-panel")).toBeVisible();
-  await expect(page.getByTestId("detail-type-badge")).toHaveText(/CALL/);
-});
-
-test("detail panel tabs render Trade / Payoff / Greeks / Details / Risk", async ({
+test("clicking a Call cell updates the Trade widget instrument title", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/trade");
+  // The trade widget is visible up-front, with a placeholder instrument
+  // until a chain row is picked.
+  await expect(page.getByTestId("widget-trade")).toBeVisible();
+  await expect(page.getByTestId("trade-instrument-title")).toBeVisible();
+  const beforeTitle = await page
+    .getByTestId("trade-instrument-title")
+    .innerText();
   const callCell = page.locator('[data-testid^="chain-call-300000000000"]').first();
-  await callCell.click({ timeout: 10000 });
+  await expect(callCell).toBeVisible({ timeout: 10000 });
+  await callCell.click();
+  const afterTitle = await page
+    .getByTestId("trade-instrument-title")
+    .innerText();
+  expect(afterTitle).not.toBe(beforeTitle);
+  expect(afterTitle).toMatch(/Call/);
+});
 
-  for (const id of ["trade", "payoff", "greeks", "details", "risk"]) {
-    await page.getByTestId(`detail-tab-${id}`).click();
+test("Trade widget tabs render Payoff / Greeks / Trades / Book", async ({
+  page,
+}) => {
+  await setupChain(page);
+  await installMockWallet(page);
+  await page.goto("/trade");
+  for (const id of ["payoff", "greeks", "trades", "book"]) {
+    await page.getByTestId(`trade-tab-${id}`).click();
     await expect(
-      page.getByTestId(`detail-panel-content-${id}`),
+      page.getByTestId(`trade-panel-content-${id}`),
     ).toBeVisible();
   }
 });
 
-test("Greeks tab surfaces honest 'coming soon' copy", async ({ page }) => {
+test("Greeks tab surfaces an honest local-mock disclaimer", async ({ page }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/trade");
-  const callCell = page.locator('[data-testid^="chain-call-300000000000"]').first();
-  await callCell.click({ timeout: 10000 });
-  await page.getByTestId("detail-tab-greeks").click();
-  const greeks = page.getByTestId("detail-greeks");
+  await page.getByTestId("trade-tab-greeks").click();
+  const greeks = page.getByTestId("trade-greeks-body");
   await expect(greeks).toBeVisible();
-  await expect(greeks).toContainText(/Greeks — coming soon in the testnet beta/i);
-  await expect(greeks).toContainText(/not exposed by the current backend/i);
+  await expect(
+    page.getByTestId("trade-greeks-mock-disclaimer"),
+  ).toContainText(/local mock values/i);
 });
 
 test("Payoff tab renders the SVG placeholder", async ({ page }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/trade");
-  const callCell = page.locator('[data-testid^="chain-call-300000000000"]').first();
-  await callCell.click({ timeout: 10000 });
-  await page.getByTestId("detail-tab-payoff").click();
+  await page.getByTestId("trade-tab-payoff").click();
   await expect(page.getByTestId("payoff-svg")).toBeVisible();
-});
-
-test("Risk tab surfaces testnet/unaudited/no-real-funds disclosures", async ({
-  page,
-}) => {
-  await setupChain(page);
-  await installMockWallet(page);
-  await page.goto("/trade");
-  const callCell = page.locator('[data-testid^="chain-call-300000000000"]').first();
-  await callCell.click({ timeout: 10000 });
-  await page.getByTestId("detail-tab-risk").click();
-  const risk = page.getByTestId("detail-risk");
-  await expect(risk).toContainText(/Testnet only/i);
-  await expect(risk).toContainText(/Unaudited/i);
-  await expect(risk).toContainText(/No real funds/i);
 });
 
 test("backend-unavailable state renders MarketsFallbackCard on /trade", async ({
@@ -289,16 +279,16 @@ test("/trade page DOM has no amber/yellow brand class + no admin/RPC leak", asyn
   expect(html).not.toMatch(/mainnet\.base\.org/);
 });
 
-test("detail panel CTA links to underlying product page (internal)", async ({
-  page,
-}) => {
+test("Trade widget exposes the Book/RFQ mode selector", async ({ page }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/trade");
-  const callCell = page.locator('[data-testid^="chain-call-300000000000"]').first();
-  await callCell.click({ timeout: 10000 });
-  const cta = page.getByTestId("detail-open-trade-ticket-cta");
-  await expect(cta).toBeVisible();
-  const href = await cta.getAttribute("href");
-  expect(href).toBe(`/markets/${PRODUCT_CALL}`);
+  const select = page.getByTestId("trade-mode-select");
+  await expect(select).toBeVisible();
+  await expect(select).toHaveValue("book");
+  await select.selectOption("rfq");
+  await expect(page.getByTestId("trade-body-rfq")).toBeVisible();
+  await expect(page.getByTestId("trade-body-book")).toHaveCount(0);
+  await select.selectOption("book");
+  await expect(page.getByTestId("trade-body-book")).toBeVisible();
 });

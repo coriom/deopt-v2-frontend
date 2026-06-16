@@ -43,7 +43,7 @@ test("Options default layout fills the canvas horizontally (no right dead zone)"
 }) => {
   await page.goto("/trade");
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
-  await expect(page.getByTestId("widget-option-details")).toBeVisible();
+  await expect(page.getByTestId("widget-trade")).toBeVisible();
   const widgets = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return null;
@@ -56,7 +56,7 @@ test("Options default layout fills the canvas horizontally (no right dead zone)"
       (w: { type: string }) => w.type === "options-chain",
     );
     const details = widgets.find(
-      (w: { type: string }) => w.type === "option-details",
+      (w: { type: string }) => w.type === "trade",
     );
     const dock = widgets.find(
       (w: { type: string }) => w.type === "bottom-dock",

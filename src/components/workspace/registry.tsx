@@ -14,7 +14,6 @@ import {
   EventsWidget,
   FeedbackWidget,
   GreeksWidget,
-  OptionDetailsWidget,
   OptionsChainWidget,
   OrdersWidget,
   PayoffWidget,
@@ -24,6 +23,7 @@ import {
   PerpsTradeFeedWidget,
   PerpsTradeFormWidget,
   PositionsWidget,
+  TradeWidget,
   TradesWidget,
 } from "./widgets";
 
@@ -55,12 +55,12 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     defaultWPct: 0.7, defaultHPct: 0.7, minWPx: 360, minHPx: 240,
     implemented: true, Render: OptionsChainWidget,
   },
-  "option-details": {
-    type: "option-details", title: "Trade · detail",
-    description: "5-tab panel: Trade / Payoff / Greeks / Details / Risk.",
+  trade: {
+    type: "trade", title: "Trade",
+    description: "Options order ticket — Buy/Sell, Limit, Post, GTC, Payoff/Greeks/Trades/Book tabs.",
     workspaces: OPTIONS_WS,
-    defaultWPct: 0.3, defaultHPct: 0.7, minWPx: 280, minHPx: 240,
-    implemented: true, Render: OptionDetailsWidget,
+    defaultWPct: 0.3, defaultHPct: 0.7, minWPx: 300, minHPx: 360,
+    implemented: true, Render: TradeWidget,
   },
   "bottom-dock": {
     type: "bottom-dock", title: "Account dock",
@@ -71,7 +71,7 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
   },
   payoff: {
     type: "payoff", title: "Payoff",
-    description: "Schematic payoff for the selected option (also a tab inside Trade · detail).",
+    description: "Schematic payoff for the selected option (also a tab inside Trade).",
     workspaces: OPTIONS_WS,
     defaultWPct: 0.3, defaultHPct: 0.3, minWPx: 240, minHPx: 160,
     implemented: true, Render: PayoffWidget,
@@ -106,7 +106,7 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
   },
   greeks: {
     type: "greeks", title: "Greeks",
-    description: "Portfolio greeks — coming later (also a tab inside Trade · detail).",
+    description: "Portfolio greeks — coming later (also a tab inside Trade).",
     workspaces: ALL_WS,
     defaultWPct: 0.3, defaultHPct: 0.25, minWPx: 240, minHPx: 120,
     implemented: false, Render: GreeksWidget,
@@ -191,12 +191,12 @@ export interface DefaultPlacement {
 export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] {
   switch (workspaceId) {
     case "options":
-      // chain ≈ 70% wide, details ≈ 30%, both occupy the top 70%; the
-      // bottom dock fills the remaining 30% across the full width.
+      // chain ≈ 70% wide, trade ticket ≈ 30%, both occupy the top 70%;
+      // the bottom dock fills the remaining 30% across the full width.
       return [
-        { type: "options-chain",  xPct: 0,    yPct: 0,    wPct: 0.7, hPct: 0.7 },
-        { type: "option-details", xPct: 0.7,  yPct: 0,    wPct: 0.3, hPct: 0.7 },
-        { type: "bottom-dock",    xPct: 0,    yPct: 0.7,  wPct: 1.0, hPct: 0.3 },
+        { type: "options-chain", xPct: 0,    yPct: 0,    wPct: 0.7, hPct: 0.7 },
+        { type: "trade",         xPct: 0.7,  yPct: 0,    wPct: 0.3, hPct: 0.7 },
+        { type: "bottom-dock",   xPct: 0,    yPct: 0.7,  wPct: 1.0, hPct: 0.3 },
       ];
     case "perps":
       return [

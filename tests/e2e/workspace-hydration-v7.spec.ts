@@ -33,17 +33,15 @@ test("default Options layout renders 3 readable widgets at 1920×1080", async ({
 }) => {
   await page.goto("/trade");
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
-  await expect(page.getByTestId("widget-option-details")).toBeVisible();
+  await expect(page.getByTestId("widget-trade")).toBeVisible();
   await expect(page.getByTestId("widget-bottom-dock")).toBeVisible();
   // Every widget should have non-zero width and height in the DOM.
   const chainBox = await page
     .getByTestId("widget-options-chain")
     .boundingBox();
-  const detailsBox = await page
-    .getByTestId("widget-option-details")
-    .boundingBox();
+  const tradeBox = await page.getByTestId("widget-trade").boundingBox();
   const dockBox = await page.getByTestId("widget-bottom-dock").boundingBox();
-  for (const box of [chainBox, detailsBox, dockBox]) {
+  for (const box of [chainBox, tradeBox, dockBox]) {
     expect(box).not.toBeNull();
     if (box) {
       expect(box.width).toBeGreaterThan(200);
@@ -163,7 +161,7 @@ test.describe("invalid layouts are rejected and default is restored", () => {
       await page.evaluate(
         ({ widgets }) => {
           const bucket = {
-            version: 7,
+            version: 8,
             walletKey: "anon",
             workspaces: {
               "custom-1": {
@@ -240,7 +238,7 @@ test("__deoptClearWorkspaceLayouts is exposed on window for console recovery", a
   expect(after).toBeNull();
 });
 
-test("Saved bucket carries the V7 version field", async ({ page }) => {
+test("Saved bucket carries the V8 version field", async ({ page }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
   await page.getByTestId("navbar-widget-option-docs-help").click();
@@ -250,5 +248,51 @@ test("Saved bucket carries the V7 version field", async ({ page }) => {
     if (!raw) return null;
     return JSON.parse(raw)?.version ?? null;
   });
-  expect(version).toBe(7);
+  expect(version).toBe(8);
+});
+
+test("V7 buckets carrying the legacy `option-details` type are dropped on load", async ({
+  page,
+}) => {
+  await page.goto("/trade");
+  await expect(page.getByTestId("widget-trade")).toBeVisible();
+  // Plant a V7 bucket with the old type and reload.
+  await page.evaluate(() => {
+    const bucket = {
+      version: 7,
+      walletKey: "anon",
+      workspaces: {
+        options: {
+          workspaceId: "options",
+          widgets: [
+            {
+              id: "legacy",
+              type: "option-details",
+              xPct: 0,
+              yPct: 0,
+              wPct: 0.5,
+              hPct: 0.5,
+            },
+          ],
+          canvasWidthPx: 1920,
+          canvasHeightPx: 980,
+          updatedAt: Date.now(),
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+    };
+    window.localStorage.setItem(
+      "deopt:v2:workspace:anon",
+      JSON.stringify(bucket),
+    );
+  });
+  await page.reload();
+  await expect(page.getByTestId("widget-trade")).toBeVisible();
+  await expect(page.locator('[data-widget-type="option-details"]')).toHaveCount(0);
+  const version = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
+    if (!raw) return null;
+    return JSON.parse(raw)?.version ?? null;
+  });
+  expect(version).toBe(8);
 });

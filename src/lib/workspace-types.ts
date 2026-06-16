@@ -1,16 +1,18 @@
-// Workspace V7 — pixel/percentage canvas + strict geometry validation.
+// Workspace V8 — pixel/percentage canvas + strict geometry validation.
 //
-// V7 builds on V6's pixel/percentage freeform canvas by adding hard
-// validation and clamping at every load/render boundary so a stale or
-// corrupted layout cannot render as a stack of collapsed 0×0 widgets
-// in the top-left corner.
+// V8 renames the legacy `option-details` widget to `trade` to reflect
+// the FRONTEND-TRADE-WIDGET-V1 redesign (compact options order ticket
+// with Book / RFQ modes). Buckets persisted under V7 may still carry
+// the old type string, so the version bump alone invalidates them at
+// load time and the workspace falls back to its default layout — which
+// now seeds a `trade` widget instead of `option-details`.
 //
 // Posture: localStorage-only persistence. NO secrets, NO private keys,
 // NO RPC URLs, NO bearer tokens, NO DATABASE_URL, NO signatures.
 
 export type WidgetType =
   | "options-chain"
-  | "option-details"
+  | "trade"
   | "payoff"
   | "balances"
   | "positions"
@@ -37,7 +39,7 @@ export type WorkspaceId =
 /** Set of WidgetType values for runtime validation of loaded layouts. */
 export const KNOWN_WIDGET_TYPES: ReadonlySet<WidgetType> = new Set<WidgetType>([
   "options-chain",
-  "option-details",
+  "trade",
   "payoff",
   "balances",
   "positions",
@@ -81,9 +83,11 @@ export interface StoredWorkspaces {
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
 }
 
-// V7 bump invalidates any in-flight V6 bucket that may have been saved
-// with the broken hydration-render geometry (rect 0×0 at top-left).
-export const WORKSPACE_LAYOUT_VERSION = 7;
+// V8 bump invalidates any V7 bucket that still references the
+// legacy `option-details` widget type — the rename to `trade` is not
+// backwards-compatible at the type-string layer, so the cleanest
+// migration is a version bump + fall-back to the default layout.
+export const WORKSPACE_LAYOUT_VERSION = 8;
 export const WORKSPACE_STORAGE_PREFIX = "deopt:v2:workspace:";
 export const ANON_WALLET_KEY = "anon";
 export const WALLET_LAYOUT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days

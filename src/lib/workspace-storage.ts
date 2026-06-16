@@ -1,11 +1,10 @@
-// LocalStorage persistence for the Workspace V7 pixel canvas.
+// LocalStorage persistence for the Workspace V8 pixel canvas.
 //
-// V7 adds strict per-widget validation on load: any layout containing
-// NaN/Infinity geometry, out-of-range percentages, sub-readable
-// widget sizes, or unknown widget types is rejected and replaced with
-// the default. This prevents the "collapsed widgets in top-left"
-// rendering bug that V6 exhibited when canvasSize stayed at (0, 0)
-// during first paint.
+// V8 (FRONTEND-TRADE-WIDGET-V1) bumps the layout version so any V7
+// bucket that still carries the legacy `option-details` widget type
+// is dropped on load and the workspace reseeds the default — which
+// now ships the renamed `trade` widget. The V7 strict per-widget
+// validation introduced in the previous milestone is unchanged.
 //
 // Safety guarantees enforced by this module:
 //   - never writes secrets, RPC URLs, private keys, bearer tokens,

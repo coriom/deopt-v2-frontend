@@ -1,11 +1,10 @@
 /**
- * options-terminal-bottom-dock.spec.ts — FRONTEND-TERMINAL-WORKSPACE-RESIZABLE-V2
+ * options-terminal-bottom-dock.spec.ts — updated for FRONTEND-TRADE-WIDGET-V1
  *
- * V2 collapses the per-tab widgets back into a single `bottom-dock`
- * widget (Balances / Positions / Orders / Trades / Greeks / Events
- * tabs). The Options workspace ships a 3-widget default: options-chain
- * (left), option-details (right with 5 tabs incl. Payoff + Greeks),
- * bottom-dock (full-width below).
+ * The Options workspace ships a 3-widget default: options-chain (left),
+ * `trade` (right — compact options order ticket with Payoff / Greeks /
+ * Trades / Book tabs), bottom-dock (full-width below). The `trade`
+ * widget replaces the legacy `option-details` widget.
  */
 import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
@@ -122,20 +121,20 @@ test("/trade renders the 3-widget default Options workspace", async ({
   await expect(page.getByTestId("workspace-options")).toBeVisible();
   await expect(page.getByTestId("workspace-toolbar-options")).toBeVisible();
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
-  await expect(page.getByTestId("widget-option-details")).toBeVisible();
+  await expect(page.getByTestId("widget-trade")).toBeVisible();
   await expect(page.getByTestId("widget-bottom-dock")).toBeVisible();
 });
 
-test("/trade option-details widget exposes Trade/Payoff/Greeks/Details/Risk tabs", async ({
+test("/trade Trade widget exposes Payoff/Greeks/Trades/Book tabs", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/trade");
-  const detail = page.getByTestId("widget-option-details");
-  await expect(detail).toBeVisible();
-  for (const id of ["trade", "payoff", "greeks", "details", "risk"]) {
-    await expect(detail.getByTestId(`detail-tab-${id}`)).toBeVisible();
+  const trade = page.getByTestId("widget-trade");
+  await expect(trade).toBeVisible();
+  for (const id of ["payoff", "greeks", "trades", "book"]) {
+    await expect(trade.getByTestId(`trade-tab-${id}`)).toBeVisible();
   }
 });
 
@@ -145,9 +144,9 @@ test("Payoff and Greeks are NOT default separate widgets on /trade", async ({
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/trade");
-  // They live as tabs inside the option-details widget, not as their
-  // own widget frames (the frame would carry the data-testid
-  // `widget-payoff` / `widget-greeks`).
+  // They live as tabs inside the trade widget, not as their own widget
+  // frames (the frame would carry the data-testid `widget-payoff` /
+  // `widget-greeks`).
   await expect(page.getByTestId("widget-payoff")).toHaveCount(0);
   await expect(page.getByTestId("widget-greeks")).toHaveCount(0);
 });

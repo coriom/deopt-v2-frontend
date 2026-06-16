@@ -11,8 +11,8 @@ import { PositionsTable } from "@/components/trading/PositionsTable";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
 import { BottomPanel } from "@/components/trading/terminal/BottomPanel";
 import { OptionsChainTerminalCore } from "@/components/trading/terminal/OptionsChainTerminalCore";
-import { OptionDetailPanel } from "@/components/trading/terminal/OptionDetailPanel";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
+import { TradeTicketPanel } from "@/components/trading/terminal/TradeTicketPanel";
 import { useSelectedOption } from "@/lib/workspace-selected-option";
 import Link from "next/link";
 
@@ -35,15 +35,8 @@ export function BottomDockWidget() {
   return <BottomPanel />;
 }
 
-export function OptionDetailsWidget() {
-  const { selected } = useSelectedOption();
-  return (
-    <OptionDetailPanel
-      leg={selected?.leg ?? null}
-      row={selected?.row ?? null}
-      productId={selected?.productId ?? null}
-    />
-  );
+export function TradeWidget() {
+  return <TradeTicketPanel />;
 }
 
 export function PayoffWidget() {
