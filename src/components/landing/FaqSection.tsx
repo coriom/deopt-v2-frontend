@@ -9,6 +9,7 @@
 //
 // Black / deep-green DeOpt identity — no orange / amber / yellow.
 
+import Image from "next/image";
 import Link from "next/link";
 
 interface FaqItem {
@@ -124,13 +125,41 @@ export function FaqSection() {
       data-testid="landing-faq-section"
       className="relative px-4 py-32 sm:py-40"
     >
-      <header className="mx-auto mb-12 flex max-w-3xl flex-col items-center gap-3 text-center sm:mb-16">
+      {/* Ambient Greek silhouettes — pointer-events-none, low opacity. */}
+      <div
+        aria-hidden="true"
+        data-testid="landing-greek-silhouette-theta-faq"
+        className="pointer-events-none absolute -left-20 top-16 h-48 w-48 select-none opacity-[0.05] sm:h-72 sm:w-72 sm:opacity-[0.07]"
+      >
+        <Image
+          src="/greeks/Logo_Theta.png"
+          alt=""
+          width={300}
+          height={300}
+          className="h-full w-full object-contain"
+        />
+      </div>
+      <div
+        aria-hidden="true"
+        data-testid="landing-greek-silhouette-rho-faq"
+        className="pointer-events-none absolute -right-16 bottom-20 h-40 w-40 select-none opacity-[0.05] sm:h-56 sm:w-56 sm:opacity-[0.07]"
+      >
+        <Image
+          src="/greeks/Logo_Rho.png"
+          alt=""
+          width={300}
+          height={300}
+          className="h-full w-full object-contain"
+        />
+      </div>
+
+      <header className="relative mx-auto mb-12 flex max-w-3xl flex-col items-center gap-3 text-center sm:mb-16">
         <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-300">
           <span className="h-px w-6 bg-emerald-500/50" />
           FAQ
         </span>
         <h2 className="text-3xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
-          Frequently asked.
+          Some Questions
         </h2>
       </header>
 
