@@ -14,11 +14,25 @@ import { PublicBetaFooter } from "@/components/PublicBetaFooter";
  * /markets, /portfolio:    trading utility surfaces with their own
  *                          dense layouts; the bottom marketing footer
  *                          is unwanted here per operator feedback.
+ * /history:                dense terminal-style history screen
+ *                          (FRONTEND-BACKEND-HISTORY-V1) — the bottom
+ *                          marketing footer is removed per operator
+ *                          feedback so the table can use the full
+ *                          viewport height.
  *
- * /, /history, /health and all routes outside the (trading) group
- * stay in "page mode" with the original max-w-screen-2xl + footer.
+ * /, /health and all routes outside the (trading) group stay in
+ * "page mode" with the original max-w-screen-2xl + footer.
  */
-const TERMINAL_ROUTES = ["/trade", "/perps", "/custom", "/markets", "/portfolio"];
+const TERMINAL_ROUTES = [
+  "/trade",
+  "/perps",
+  "/custom",
+  "/markets",
+  "/portfolio",
+  "/history",
+  "/leaderboard",
+  "/api",
+];
 
 function isTerminalRoute(pathname: string | null): boolean {
   if (!pathname) return false;

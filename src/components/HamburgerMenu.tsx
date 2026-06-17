@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
+const DRAWER_ANIM_MS = 180;
 
 interface DrawerEntry {
   id: string;
@@ -54,12 +56,59 @@ function isActive(pathname: string | null, href: string): boolean {
 
 export function HamburgerMenu() {
   const [open, setOpen] = useState(false);
+  // `exiting` keeps the drawer in the DOM through the close animation
+  // window; `mounted` is derived so we never call setState directly
+  // inside an effect to flip a presence flag.
+  const [exiting, setExiting] = useState(false);
+  const [topOffset, setTopOffset] = useState(0);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const pathname = usePathname();
+
+  const mounted = open || exiting;
+
+  const openDrawer = () => {
+    setOpen(true);
+    // Cancel any pending exit so the user can re-open mid-animation
+    // without waiting for the timer.
+    setExiting(false);
+  };
+  const closeDrawer = () => {
+    setOpen(false);
+    setExiting(true);
+  };
+
+  // When the user closes the drawer, keep it mounted until the exit
+  // animation finishes. The setTimeout callback fires asynchronously,
+  // so this effect body never calls setState synchronously.
+  useEffect(() => {
+    if (!exiting) return;
+    const t = window.setTimeout(() => setExiting(false), DRAWER_ANIM_MS);
+    return () => window.clearTimeout(t);
+  }, [exiting]);
+
+  // Anchor the drawer below the navbar header so it never overlaps the
+  // top bar. We walk up from the hamburger button to its nearest
+  // <header> and use that element's bottom edge as the drawer's top.
+  useEffect(() => {
+    if (!mounted) return;
+    function measure() {
+      const btn = buttonRef.current;
+      if (!btn) return;
+      const header = btn.closest("header");
+      if (header) {
+        const r = header.getBoundingClientRect();
+        setTopOffset(Math.max(0, Math.round(r.bottom)));
+      }
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [mounted]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") closeDrawer();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -68,8 +117,11 @@ export function HamburgerMenu() {
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openDrawer}
+        onMouseEnter={openDrawer}
+        onFocus={openDrawer}
         aria-label="Open menu"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -90,20 +142,28 @@ export function HamburgerMenu() {
           <line x1="2" y1="10" x2="12" y2="10" />
         </svg>
       </button>
-      {open && (
+      {mounted && (
         <div
           role="dialog"
           aria-modal="true"
           aria-label="Menu"
+          aria-hidden={open ? undefined : true}
           data-testid="hamburger-drawer"
           data-drawer-side="left"
-          className="fixed inset-0 z-50 flex justify-start bg-black/60"
-          onClick={() => setOpen(false)}
+          data-drawer-state={open ? "open" : "closing"}
+          className={`${
+            open ? "deopt-drawer-backdrop-enter" : "deopt-drawer-backdrop-exit"
+          } fixed inset-x-0 bottom-0 z-50 flex justify-start bg-black/60`}
+          style={{ top: `${topOffset}px` }}
+          onClick={closeDrawer}
         >
           <aside
             data-testid="hamburger-drawer-panel"
-            className="flex h-full w-72 max-w-[90vw] flex-col gap-3 overflow-y-auto border-r border-emerald-500/30 bg-zinc-950 p-5 text-zinc-100 shadow-[0_0_30px_rgba(16,185,129,0.08)]"
+            className={`${
+              open ? "deopt-drawer-panel-enter" : "deopt-drawer-panel-exit"
+            } flex h-full w-72 max-w-[90vw] flex-col gap-3 overflow-y-auto border-r border-emerald-500/30 bg-zinc-950 p-5 text-zinc-100 shadow-[0_0_30px_rgba(16,185,129,0.08)]`}
             onClick={(e) => e.stopPropagation()}
+            onMouseLeave={closeDrawer}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
@@ -111,7 +171,7 @@ export function HamburgerMenu() {
               </span>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={closeDrawer}
                 aria-label="Close menu"
                 data-testid="hamburger-close-button"
                 className="rounded border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-200"
@@ -135,7 +195,7 @@ export function HamburgerMenu() {
                     data-target="internal"
                     data-active={active ? "true" : "false"}
                     aria-current={active ? "page" : undefined}
-                    onClick={() => setOpen(false)}
+                    onClick={closeDrawer}
                     className={
                       active
                         ? "rounded bg-emerald-500/10 px-2 py-1.5 text-[13px] text-emerald-300"
@@ -163,7 +223,7 @@ export function HamburgerMenu() {
                   rel="noopener noreferrer"
                   data-testid={`hamburger-link-${e.id}`}
                   data-target="external"
-                  onClick={() => setOpen(false)}
+                  onClick={closeDrawer}
                   className="rounded border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-200"
                 >
                   {e.label}

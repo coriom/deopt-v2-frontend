@@ -69,7 +69,8 @@ test("safety-copy bullets are present on every page-mode trading route", async (
   // V3: /markets and /portfolio joined the terminal route set and no
   // longer render the footer; the testnet/unaudited posture is now
   // carried by the top banner + per-widget chips on those routes.
-  const routes = ["/", "/history", "/health"];
+  // FRONTEND-BACKEND-HISTORY-V1: /history joined the same set.
+  const routes = ["/", "/health"];
   for (const route of routes) {
     await page.goto(route);
     await expect(

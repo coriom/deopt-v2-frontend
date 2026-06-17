@@ -34,6 +34,71 @@
   }
 }
 
+/*
+ * Hamburger drawer enter / exit animations.
+ *   - Backdrop fades to/from the static bg-black/60.
+ *   - Panel slides in from / out to the left with a slight fade.
+ * Enter ends at the static className; exit `forwards`-fills its final
+ * frame so the panel is invisible during the deferred unmount window.
+ */
+@keyframes deopt-drawer-backdrop-in {
+  from {
+    background-color: rgba(0, 0, 0, 0);
+  }
+  to {
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+}
+@keyframes deopt-drawer-backdrop-out {
+  from {
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+  to {
+    background-color: rgba(0, 0, 0, 0);
+  }
+}
+@keyframes deopt-drawer-panel-in {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes deopt-drawer-panel-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+.deopt-drawer-backdrop-enter {
+  animation: deopt-drawer-backdrop-in 180ms ease-out;
+}
+.deopt-drawer-backdrop-exit {
+  animation: deopt-drawer-backdrop-out 180ms ease-in forwards;
+}
+.deopt-drawer-panel-enter {
+  animation: deopt-drawer-panel-in 180ms ease-out;
+}
+.deopt-drawer-panel-exit {
+  animation: deopt-drawer-panel-out 180ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deopt-drawer-backdrop-enter,
+  .deopt-drawer-backdrop-exit,
+  .deopt-drawer-panel-enter,
+  .deopt-drawer-panel-exit {
+    animation: none !important;
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

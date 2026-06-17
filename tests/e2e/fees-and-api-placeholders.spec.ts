@@ -40,30 +40,9 @@ test("/fees placeholder renders with status chip + summary + links", async ({
   );
 });
 
-test("/api placeholder renders with status chip + summary + links", async ({
-  page,
-}) => {
-  await page.goto("/api");
-  await expect(page.getByTestId("api-page")).toBeVisible();
-  await expect(page.getByTestId("api-page-status-chip")).toContainText(
-    /public testnet beta/i,
-  );
-  await expect(page.getByTestId("api-page-summary")).toBeVisible();
-  await expect(page.getByTestId("api-page-disclaimers")).toBeVisible();
-  await expect(page.getByTestId("api-page-roadmap")).toBeVisible();
-  await expect(page.getByTestId("api-page-link-docs")).toHaveAttribute(
-    "href",
-    "/docs",
-  );
-  await expect(page.getByTestId("api-page-link-github")).toHaveAttribute(
-    "href",
-    "https://github.com/DeOpt",
-  );
-  await expect(page.getByTestId("api-page-link-feedback")).toHaveAttribute(
-    "href",
-    "/feedback",
-  );
-});
+// `/api` placeholder testids were removed in FRONTEND-API-PAGE-V1. The
+// page now renders the full developer reference (`api-shell`), covered
+// by `api-v1.spec.ts`.
 
 test("/fees does not contain positive-claim language or sensitive leaks", async ({
   page,
@@ -110,12 +89,12 @@ test("Portfolio route remains reachable via direct URL (Portfolio is no longer i
   await expect(page.getByTestId("hamburger-link-portfolio")).toHaveCount(0);
 });
 
-test("Hamburger → API link routes to /api placeholder", async ({ page }) => {
+test("Hamburger → API link routes to /api", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("hamburger-button").click();
   await page.getByTestId("hamburger-link-api").click();
   await page.waitForURL("**/api");
-  await expect(page.getByTestId("api-page")).toBeVisible();
+  await expect(page.getByTestId("api-shell")).toBeVisible();
 });
 
 test("Hamburger → Fees link routes to /fees placeholder", async ({ page }) => {

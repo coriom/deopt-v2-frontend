@@ -1,10 +1,13 @@
-import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
+import { HistoryShell } from "@/components/history/HistoryShell";
+
+export const metadata = {
+  title: "History — DeOpt public testnet beta",
+};
 
 export default function HistoryPage() {
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">History</h1>
-      <TradeHistoryTable />
+    <div className="flex h-full min-h-0 flex-col">
+      <HistoryShell />
     </div>
   );
 }

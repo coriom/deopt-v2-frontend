@@ -13,10 +13,20 @@
 import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
 
-// V3: /markets and /portfolio joined the terminal set (no footer).
-const TERMINAL_ROUTES = ["/trade", "/perps", "/custom", "/markets", "/portfolio"];
-// /, /history, /health still render the page-mode shell + footer.
-const PAGE_ROUTES = ["/", "/history", "/health"];
+// FRONTEND-BACKEND-HISTORY-V1: /history joined the terminal set so the
+// dense table can use the full viewport (no marketing footer).
+// FRONTEND-BACKEND-LEADERBOARD-V1: /leaderboard joined for the same reason.
+const TERMINAL_ROUTES = [
+  "/trade",
+  "/perps",
+  "/custom",
+  "/markets",
+  "/portfolio",
+  "/history",
+  "/leaderboard",
+];
+// /, /health still render the page-mode shell + footer.
+const PAGE_ROUTES = ["/", "/health"];
 
 test.describe("terminal routes use the full-screen shell", () => {
   for (const route of TERMINAL_ROUTES) {

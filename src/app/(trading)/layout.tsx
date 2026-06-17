@@ -9,6 +9,7 @@ import {
 } from "@/components/banners";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
+import { NavbarRouteIndicator } from "@/components/NavbarRouteIndicator";
 import { PrimaryNavLinks } from "@/components/PrimaryNavLinks";
 import { TradingShell } from "@/components/TradingShell";
 import { WorkspaceBridgeProvider } from "@/lib/workspace-bridge";
@@ -63,6 +64,7 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
             </Link>
             <HamburgerMenu />
             <PrimaryNavLinks items={PRIMARY_NAV} />
+            <NavbarRouteIndicator />
           </nav>
           <div
             data-testid="terminal-navbar-actions"

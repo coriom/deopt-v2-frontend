@@ -275,6 +275,127 @@ export function fetchHistory(
   );
 }
 
+// FRONTEND-BACKEND-HISTORY-V1 — tabbed history payload.
+export type HistoryTab =
+  | "trades"
+  | "transactions"
+  | "orders"
+  | "settlement"
+  | "funding"
+  | "interest"
+  | "liquidations";
+
+export type HistoryRange =
+  | "last_day"
+  | "last_week"
+  | "last_month"
+  | "last_quarter"
+  | "all";
+
+export interface HistoryV2Item {
+  time_ms: number;
+  instrument?: string;
+  side?: string;
+  amount?: string;
+  price?: string;
+  total?: string;
+  pnl?: string;
+  fees?: string;
+  status?: string;
+  kind?: string;
+  role?: string;
+  tx_hash?: string;
+  asset?: string;
+  action?: string;
+  block?: number;
+  gas?: string;
+  order_type?: string;
+  limit_price?: string;
+  filled?: string;
+  settlement_type?: string;
+  market?: string;
+  position?: string;
+  rate?: string;
+  payment?: string;
+  principal?: string;
+  interest?: string;
+  size?: string;
+  liquidation_price?: string;
+  penalty?: string;
+}
+
+export interface HistoryV2Data {
+  address: string;
+  chain: string;
+  chain_id: number;
+  range: string;
+  tab: string;
+  page: number;
+  page_size: number;
+  total_records: number;
+  items: HistoryV2Item[];
+}
+
+export function fetchHistoryV2(
+  address: string,
+  opts: {
+    tab: HistoryTab;
+    range: HistoryRange;
+    page: number;
+    pageSize: number;
+    signal?: AbortSignal;
+  },
+): Promise<Envelope<HistoryV2Data>> {
+  const qs = new URLSearchParams();
+  qs.set("tab", opts.tab);
+  qs.set("range", opts.range);
+  qs.set("page", String(opts.page));
+  qs.set("page_size", String(opts.pageSize));
+  return request<HistoryV2Data>(
+    "GET",
+    `/accounts/${address}/history/v2?${qs.toString()}`,
+    undefined,
+    opts.signal,
+  );
+}
+
+// FRONTEND-BACKEND-LEADERBOARD-V1.
+export interface LeaderboardItem {
+  rank: number;
+  address: string;
+  trade_count: number;
+  volume_1e8: string;
+  realized_pnl_1e8?: string;
+}
+
+export interface LeaderboardData {
+  chain: string;
+  chain_id: number;
+  range: string;
+  page: number;
+  page_size: number;
+  total_records: number;
+  items: LeaderboardItem[];
+}
+
+export function fetchLeaderboard(opts: {
+  range: HistoryRange;
+  page: number;
+  pageSize: number;
+  signal?: AbortSignal;
+}): Promise<Envelope<LeaderboardData>> {
+  const qs = new URLSearchParams();
+  qs.set("range", opts.range);
+  qs.set("page", String(opts.page));
+  qs.set("page_size", String(opts.pageSize));
+  return request<LeaderboardData>(
+    "GET",
+    `/leaderboard?${qs.toString()}`,
+    undefined,
+    opts.signal,
+  );
+}
+
 // ---------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------
