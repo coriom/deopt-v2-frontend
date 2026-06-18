@@ -165,19 +165,10 @@ export function HamburgerMenu() {
             onClick={(e) => e.stopPropagation()}
             onMouseLeave={closeDrawer}
           >
-            <div className="flex items-center justify-between">
+            <div className="flex items-center">
               <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
                 Menu
               </span>
-              <button
-                type="button"
-                onClick={closeDrawer}
-                aria-label="Close menu"
-                data-testid="hamburger-close-button"
-                className="rounded border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-200"
-              >
-                ✕
-              </button>
             </div>
 
             <nav

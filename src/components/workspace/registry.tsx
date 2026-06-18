@@ -17,6 +17,7 @@ import {
   OptionsChainWidget,
   OrdersWidget,
   PayoffWidget,
+  PerpsBookFeedWidget,
   PerpsChartWidget,
   PerpsOrderbookWidget,
   PerpsStatsWidget,
@@ -123,35 +124,42 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     description: "Underlying / mark / 24h / volume / funding / OI — not live.",
     workspaces: PERPS_WS,
     defaultWPct: 1.0, defaultHPct: 0.1, minWPx: 360, minHPx: 60,
-    implemented: false, Render: PerpsStatsWidget,
+    implemented: true, Render: PerpsStatsWidget,
   },
   "perps-chart": {
     type: "perps-chart", title: "Perps chart",
     description: "Schematic sparkline — not live.",
     workspaces: PERPS_WS,
     defaultWPct: 0.6, defaultHPct: 0.45, minWPx: 360, minHPx: 200,
-    implemented: false, Render: PerpsChartWidget,
+    implemented: true, Render: PerpsChartWidget,
   },
   "perps-orderbook": {
     type: "perps-orderbook", title: "Perps order book",
     description: "5-row Bid/Size/Ask placeholder — not live.",
     workspaces: PERPS_WS,
     defaultWPct: 0.4, defaultHPct: 0.3, minWPx: 240, minHPx: 160,
-    implemented: false, Render: PerpsOrderbookWidget,
+    implemented: true, Render: PerpsOrderbookWidget,
   },
   "perps-trade-form": {
-    type: "perps-trade-form", title: "Perps trade ticket",
+    type: "perps-trade-form", title: "Trade Perps",
     description: "Long/Short/size/leverage — disabled in this testnet beta.",
     workspaces: PERPS_WS,
-    defaultWPct: 0.4, defaultHPct: 0.35, minWPx: 240, minHPx: 200,
-    implemented: false, Render: PerpsTradeFormWidget,
+    defaultWPct: 0.28, defaultHPct: 0.92, minWPx: 240, minHPx: 240,
+    implemented: true, Render: PerpsTradeFormWidget,
   },
   "perps-trade-feed": {
-    type: "perps-trade-feed", title: "Perps trade feed",
+    type: "perps-trade-feed", title: "Perps Feed",
     description: "Public trade feed — not live.",
     workspaces: PERPS_WS,
-    defaultWPct: 0.6, defaultHPct: 0.25, minWPx: 280, minHPx: 140,
-    implemented: false, Render: PerpsTradeFeedWidget,
+    defaultWPct: 0.4, defaultHPct: 0.4, minWPx: 240, minHPx: 160,
+    implemented: true, Render: PerpsTradeFeedWidget,
+  },
+  "perps-book-feed": {
+    type: "perps-book-feed", title: "Order Book / Feed",
+    description: "Combined orderbook ladder + perps trade feed with internal tabs.",
+    workspaces: PERPS_WS,
+    defaultWPct: 0.22, defaultHPct: 0.62, minWPx: 220, minHPx: 200,
+    implemented: true, Render: PerpsBookFeedWidget,
   },
   "docs-help": {
     type: "docs-help", title: "Docs · help",
@@ -191,21 +199,62 @@ export interface DefaultPlacement {
 export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] {
   switch (workspaceId) {
     case "options":
-      // chain ≈ 70% wide, trade ticket ≈ 30%, both occupy the top 70%;
-      // the bottom dock fills the remaining 30% across the full width.
+      // Mirrors the reference Derive Options screenshot:
+      //
+      //   ┌───────────────────────┬──────────────┐
+      //   │  OPTIONS CHAIN        │  TRADE       │
+      //   │  (calls │ str │ puts) │  TICKET      │
+      //   │  72% × 72%            │  28% × 58%   │
+      //   │                       │              │
+      //   │                       ├──────────────┤
+      //   │                       │  PAYOFF      │
+      //   ├───────────────────────│  /Greeks/    │
+      //   │  BOTTOM DOCK          │  Trades/Book │
+      //   │  (Bal/Pos/Ord/Greeks) │  28% × 42%   │
+      //   │  72% × 28%            │              │
+      //   └───────────────────────┴──────────────┘
+      //
+      // Trade ticket is taller than payoff (matches the visual
+      // emphasis in the reference). Bottom dock sits only under the
+      // chain, not full-width, so the right column stays uninterrupted.
+      // Existing users keep their saved layout — only first-time
+      // visitors and explicit resets land on this seed.
       return [
-        { type: "options-chain", xPct: 0,    yPct: 0,    wPct: 0.7, hPct: 0.7 },
-        { type: "trade",         xPct: 0.7,  yPct: 0,    wPct: 0.3, hPct: 0.7 },
-        { type: "bottom-dock",   xPct: 0,    yPct: 0.7,  wPct: 1.0, hPct: 0.3 },
+        { type: "options-chain", xPct: 0,    yPct: 0,     wPct: 0.72, hPct: 0.72 },
+        { type: "bottom-dock",   xPct: 0,    yPct: 0.72,  wPct: 0.72, hPct: 0.28 },
+        { type: "trade",         xPct: 0.72, yPct: 0,     wPct: 0.28, hPct: 0.58 },
+        { type: "payoff",        xPct: 0.72, yPct: 0.58,  wPct: 0.28, hPct: 0.42 },
       ];
     case "perps":
+      // 3-column layout. The combined Order Book / Perps Feed widget
+      // sits between the chart and the trade ticket, with internal
+      // tabs to switch between the two views. The Trade Perps column
+      // spans the full height from under the stats bar down to the
+      // bottom edge — bottom dock only sits under the chart + book/
+      // feed area.
+      //
+      //   ┌──────────────────────────────┬────────────┐
+      //   │ Stats top (100% × 8%)        │            │
+      //   ├──────────────┬───────────────│            │
+      //   │ Chart        │ OB / Feed     │ Trade      │
+      //   │ 50% × 62%    │ 22% × 62%     │ Perps      │
+      //   │              │ (tabs)        │ (full      │
+      //   ├──────────────┴───────────────│  height,   │
+      //   │ Bottom dock                  │  28% × 92%)│
+      //   │ 72% × 30%                    │            │
+      //   └──────────────────────────────┴────────────┘
       return [
-        { type: "perps-stats",      xPct: 0,    yPct: 0,    wPct: 1.0, hPct: 0.1 },
-        { type: "perps-chart",      xPct: 0,    yPct: 0.1,  wPct: 0.6, hPct: 0.45 },
-        { type: "perps-orderbook",  xPct: 0.6,  yPct: 0.1,  wPct: 0.4, hPct: 0.3 },
-        { type: "perps-trade-form", xPct: 0.6,  yPct: 0.4,  wPct: 0.4, hPct: 0.3 },
-        { type: "perps-trade-feed", xPct: 0,    yPct: 0.55, wPct: 0.6, hPct: 0.15 },
-        { type: "bottom-dock",      xPct: 0,    yPct: 0.7,  wPct: 1.0, hPct: 0.3 },
+        // Stats top — slim 6% bar.
+        { type: "perps-stats",      xPct: 0,     yPct: 0,     wPct: 1.0,  hPct: 0.06 },
+        // Center dominates: chart 55% + OB/Feed 20% take ~78% of the
+        // vertical space, matching the Derive reference where the
+        // central content dwarfs the surrounding chrome.
+        { type: "perps-chart",      xPct: 0,     yPct: 0.06,  wPct: 0.55, hPct: 0.78 },
+        { type: "perps-book-feed",  xPct: 0.55,  yPct: 0.06,  wPct: 0.20, hPct: 0.78 },
+        // Trade Perps — slimmer 25% column, full height under stats.
+        { type: "perps-trade-form", xPct: 0.75,  yPct: 0.06,  wPct: 0.25, hPct: 0.94 },
+        // Bottom dock — thin 16% strip, only under chart + book/feed.
+        { type: "bottom-dock",      xPct: 0,     yPct: 0.84,  wPct: 0.75, hPct: 0.16 },
       ];
     case "custom-1":
     case "custom-2":

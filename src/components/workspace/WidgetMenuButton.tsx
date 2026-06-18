@@ -56,10 +56,25 @@ export function WidgetMenuButton() {
           role="menu"
           aria-label="Add widget"
           data-testid="navbar-widget-menu"
-          className="absolute right-0 top-7 z-30 flex max-h-[70vh] w-72 flex-col gap-1 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-2"
+          className="deopt-scroll-dark absolute right-0 top-7 z-30 flex max-h-[70vh] w-72 flex-col gap-1 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-2"
         >
-          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">
-            Add widget
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">
+              Add widget
+            </span>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="navbar-widget-reset"
+              title="Re-seed this workspace from the default layout (your customisations will be lost)."
+              onClick={() => {
+                active.resetLayout();
+                setOpen(false);
+              }}
+              className="rounded border border-zinc-800 bg-black/40 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-200"
+            >
+              Reset layout
+            </button>
           </div>
           {options.map((w) => (
             <button

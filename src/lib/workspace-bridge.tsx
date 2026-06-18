@@ -29,6 +29,9 @@ import type { WidgetType, WorkspaceId } from "./workspace-types";
 interface ActiveWorkspace {
   workspaceId: WorkspaceId;
   addWidget: (type: WidgetType) => void;
+  /** Re-seed the workspace from `defaultWidgetsFor(workspaceId)` and
+   *  persist the new layout. Called by the navbar's `Widget` menu. */
+  resetLayout: () => void;
 }
 
 interface WorkspaceBridgeValue {

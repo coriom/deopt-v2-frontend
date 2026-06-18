@@ -1,28 +1,34 @@
 "use client";
 
-// FRONTEND-FUNDINGS-PAGE-V1 — minimal, honest funding landing.
+// FRONTEND-FUNDINGS-PAGE-V1 — minimal honest DeOpt funding overview.
 //
-// Perps are not live in this build, so the market funding table shows
-// `Planned` rows with `—` placeholders for every numeric cell. No fake
-// rates, no synthetic timestamps. The account table renders an honest
-// empty state until a per-wallet funding-history endpoint ships on
-// the backend.
+// The page intentionally surfaces only DeOpt's own funding (no
+// multi-venue comparison). Backend has no funding-rate endpoint
+// today, so every numeric cell renders `—` and every row carries a
+// single muted `Planned` pill. Symbols mirror the perp markets
+// seeded by `~/DEOPT/deopt-v2-backend/src/engine/state.rs::default_markets()`
+// — exactly BTC-PERP + ETH-PERP — so the page never speculates
+// about coverage that doesn't exist.
 //
-// Long-form methodology and formulas live in `deopt-v2-docs`; this
-// page links there rather than duplicating content locally.
+// When the backend ships a per-market funding endpoint, swap the
+// static rows for a live fetch; the layout stays.
 
 import Link from "next/link";
 import { useWallet } from "@/lib/wallet";
 import { docsPath } from "@/lib/docs-url";
 
 interface MarketRow {
-  market: string;
+  symbol: string; // mirrors backend default_markets() seed
 }
 
-const MARKET_ROWS: MarketRow[] = [
-  { market: "BTC-PERP" },
-  { market: "ETH-PERP" },
+const MARKETS: MarketRow[] = [
+  { symbol: "BTC-PERP" },
+  { symbol: "ETH-PERP" },
 ];
+
+const PERIODS = ["1H", "8H", "1D", "30D", "1Y"] as const;
+type Period = (typeof PERIODS)[number];
+const DEFAULT_PERIOD: Period = "1Y";
 
 export function FundingsShell() {
   const { address } = useWallet();
@@ -33,10 +39,9 @@ export function FundingsShell() {
       className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-8 text-zinc-200"
     >
       <Header />
-      <StatusStrip connected={connected} />
-      <MarketFundingTable />
-      <AccountFundingTable connected={connected} />
-      <MethodologyCard />
+      <OverviewTable />
+      <AccountFundingPanel connected={connected} />
+      <MethodologyNote />
     </div>
   );
 }
@@ -57,130 +62,80 @@ function Header() {
             periodic funding.
           </p>
         </div>
-        <nav
-          aria-label="Funding quick links"
-          data-testid="fundings-quicklinks"
-          className="flex flex-wrap items-center gap-1.5 text-[11px]"
-        >
-          <a
-            href={docsPath("/")}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="fundings-quicklink-docs"
-            className="rounded border border-zinc-800 bg-black/40 px-2 py-1 text-zinc-200 hover:border-emerald-500/40 hover:text-emerald-200"
-          >
-            Docs
-          </a>
-          <Link
-            href="/perps"
-            data-testid="fundings-quicklink-perps"
-            className="rounded border border-zinc-800 bg-black/40 px-2 py-1 text-zinc-200 hover:border-emerald-500/40 hover:text-emerald-200"
-          >
-            Perps
-          </Link>
-          <Link
-            href="/fees"
-            data-testid="fundings-quicklink-fees"
-            className="rounded border border-zinc-800 bg-black/40 px-2 py-1 text-zinc-200 hover:border-emerald-500/40 hover:text-emerald-200"
-          >
-            Fees
-          </Link>
-        </nav>
+        <PeriodSelector />
       </div>
     </header>
   );
 }
 
-function StatusStrip({ connected }: { connected: boolean }) {
+function PeriodSelector() {
+  // Selector is rendered to mirror the live UX, but stays disabled
+  // until the backend exposes funding history. No data flows through
+  // the dropdown — switching it cannot change what the table shows.
   return (
-    <section
-      data-testid="fundings-status-strip"
-      aria-label="Current status"
-      className="grid gap-2 rounded-lg border border-zinc-800 bg-black p-4 sm:grid-cols-3"
+    <label
+      data-testid="fundings-period-selector"
+      className="flex items-center gap-2 text-[11px] text-zinc-500"
     >
-      <StatusCell
-        testid="fundings-status-perps"
-        label="Perps Funding"
-        value="Not live"
-        tone="muted"
-      />
-      <StatusCell
-        testid="fundings-status-options"
-        label="Options"
-        value="No funding"
-        tone="muted"
-      />
-      <StatusCell
-        testid="fundings-status-account"
-        label="Account Funding"
-        value={connected ? "No payments found" : "Wallet not connected"}
-        tone="muted"
-      />
-    </section>
-  );
-}
-
-function StatusCell({
-  testid,
-  label,
-  value,
-  tone,
-}: {
-  testid: string;
-  label: string;
-  value: string;
-  tone: "muted" | "ok";
-}) {
-  return (
-    <div data-testid={testid} className="flex flex-col gap-1">
-      <span className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
-        {label}
-      </span>
-      <span
-        className={
-          tone === "muted"
-            ? "text-[14px] text-zinc-300"
-            : "text-[14px] text-emerald-200"
-        }
+      <span className="uppercase tracking-[0.12em]">Period</span>
+      <select
+        disabled
+        aria-disabled="true"
+        defaultValue={DEFAULT_PERIOD}
+        title="Activates when DeOpt funding history lands on the backend."
+        className="cursor-not-allowed rounded border border-zinc-800 bg-black/40 px-2 py-1 text-[12px] text-zinc-300 disabled:opacity-60"
       >
-        {value}
-      </span>
-    </div>
+        {PERIODS.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
-function MarketFundingTable() {
+function OverviewTable() {
   return (
     <section
-      data-testid="fundings-market-section"
-      aria-labelledby="fundings-market-heading"
+      data-testid="fundings-overview"
+      aria-labelledby="fundings-overview-heading"
       className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-black p-5"
     >
-      <h2
-        id="fundings-market-heading"
-        className="text-[16px] font-semibold text-zinc-100"
-      >
-        Market Funding
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2
+          id="fundings-overview-heading"
+          className="text-[16px] font-semibold text-zinc-100"
+        >
+          Overview
+        </h2>
+        <span
+          data-testid="fundings-overview-source"
+          className="text-[11px] text-zinc-500"
+        >
+          Source: DeOpt
+        </span>
+      </div>
       <div className="overflow-x-auto">
         <table
-          data-testid="fundings-market-table"
+          data-testid="fundings-overview-table"
           className="w-full min-w-full border-separate border-spacing-0 text-[13px]"
         >
           <thead className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
             <tr>
-              <Th>Market</Th>
+              <Th>Symbol</Th>
               <Th align="right">Funding Rate</Th>
+              <Th align="right">Annualized</Th>
               <Th align="right">Next Funding</Th>
-              <Th align="right">24h Avg</Th>
               <Th align="right">Status</Th>
+              <Th align="right">Trade</Th>
             </tr>
           </thead>
           <tbody>
-            {MARKET_ROWS.map((r, i) => (
+            {MARKETS.map((r, i) => (
               <tr
-                key={r.market}
-                data-testid={`fundings-market-row-${i}`}
+                key={r.symbol}
+                data-testid={`fundings-overview-row-${i}`}
                 className="hover:bg-zinc-900/40"
               >
                 <Td>
@@ -188,7 +143,7 @@ function MarketFundingTable() {
                     style={{ fontFamily: "var(--app-font-mono)" }}
                     className="text-zinc-100"
                   >
-                    {r.market}
+                    {r.symbol}
                   </span>
                 </Td>
                 <Td align="right" mono muted>
@@ -201,92 +156,92 @@ function MarketFundingTable() {
                   —
                 </Td>
                 <Td align="right">
-                  <StatusPill kind="planned">Planned</StatusPill>
+                  <PlannedPill />
+                </Td>
+                <Td align="right">
+                  <RowActions symbol={r.symbol} />
                 </Td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <p className="text-[11px] text-zinc-500">
+        Live DeOpt funding rates land when the perps executor and the
+        funding endpoint ship. Until then every cell renders `—`.
+      </p>
     </section>
   );
 }
 
-function AccountFundingTable({ connected }: { connected: boolean }) {
+function RowActions({ symbol }: { symbol: string }) {
+  const underlying = symbol.replace(/-PERP$/, "");
+  // Internal links only — both routes already exist in the trading
+  // shell. The underlying segment is informational and gets dropped
+  // by the destination route if it is not a recognised filter.
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Link
+        href={`/perps?symbol=${encodeURIComponent(symbol)}`}
+        data-testid={`fundings-action-perps-${symbol}`}
+        className="rounded border border-zinc-800 bg-black/40 px-2 py-0.5 text-[11px] text-zinc-200 hover:border-emerald-500/40 hover:text-emerald-200"
+      >
+        Perps
+      </Link>
+      <Link
+        href={`/trade?underlying=${encodeURIComponent(underlying)}`}
+        data-testid={`fundings-action-options-${symbol}`}
+        className="rounded border border-zinc-800 bg-black/40 px-2 py-0.5 text-[11px] text-zinc-200 hover:border-emerald-500/40 hover:text-emerald-200"
+      >
+        Options
+      </Link>
+    </span>
+  );
+}
+
+function AccountFundingPanel({ connected }: { connected: boolean }) {
   return (
     <section
-      data-testid="fundings-account-section"
-      aria-labelledby="fundings-account-heading"
-      className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-black p-5"
+      data-testid="fundings-account-panel"
+      aria-label="Account funding"
+      className="flex flex-col gap-1 rounded-lg border border-zinc-800 bg-black p-4 text-[13px]"
     >
-      <h2
-        id="fundings-account-heading"
-        className="text-[16px] font-semibold text-zinc-100"
-      >
-        Account Funding
-      </h2>
-      <div className="overflow-x-auto">
-        <table
-          data-testid="fundings-account-table"
-          className="w-full min-w-full border-separate border-spacing-0 text-[13px]"
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+          Account Funding
+        </span>
+        <span
+          data-testid="fundings-account-state"
+          className="text-zinc-300"
         >
-          <thead className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
-            <tr>
-              <Th>Time</Th>
-              <Th>Market</Th>
-              <Th>Position</Th>
-              <Th align="right">Rate</Th>
-              <Th align="right">Payment</Th>
-              <Th align="right">Status</Th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td
-                colSpan={6}
-                data-testid="fundings-account-empty"
-                className="px-3 py-6 text-center text-[13px] text-zinc-500"
-              >
-                {connected
-                  ? "No funding payments found"
-                  : "Connect wallet to view account funding payments."}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          {connected
+            ? "No payments found"
+            : "Connect wallet to view account funding payments."}
+        </span>
       </div>
     </section>
   );
 }
 
-function MethodologyCard() {
+function MethodologyNote() {
   return (
-    <section
-      data-testid="fundings-methodology"
-      aria-label="Funding methodology"
-      className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-black p-5"
+    <p
+      data-testid="fundings-methodology-note"
+      className="text-[12px] text-zinc-500"
     >
-      <h2 className="text-[16px] font-semibold text-zinc-100">Methodology</h2>
-      <ul className="flex flex-col gap-1 text-[13px] text-zinc-300">
-        <li>
-          Funding is used by perpetual markets to align mark price with
-          index / oracle price.
-        </li>
-        <li>
-          Longs or shorts may pay depending on the funding rate direction.
-        </li>
-        <li>Options positions do not pay periodic funding.</li>
-      </ul>
+      Funding aligns perp mark price with index / oracle price. Longs or
+      shorts may pay depending on the direction of the rate. Options
+      positions do not pay periodic funding.{" "}
       <a
         href={docsPath("/protocol")}
         target="_blank"
         rel="noopener noreferrer"
         data-testid="fundings-methodology-docs-link"
-        className="text-[12px] text-emerald-300 underline-offset-2 hover:underline"
+        className="text-emerald-300 underline-offset-2 hover:underline"
       >
         Read funding docs →
       </a>
-    </section>
+    </p>
   );
 }
 
@@ -335,22 +290,13 @@ function Td({
   );
 }
 
-function StatusPill({
-  kind,
-  children,
-}: {
-  kind: "planned";
-  children: React.ReactNode;
-}) {
-  const klass =
-    kind === "planned"
-      ? "border-zinc-700 bg-zinc-900 text-zinc-300"
-      : "border-zinc-700 bg-zinc-900 text-zinc-300";
+function PlannedPill() {
   return (
     <span
-      className={`inline-block rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${klass}`}
+      data-testid="fundings-planned-pill"
+      className="inline-block rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-400"
     >
-      {children}
+      Planned
     </span>
   );
 }

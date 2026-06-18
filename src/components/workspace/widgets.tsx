@@ -15,6 +15,13 @@ import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
 import { TradeTicketPanel } from "@/components/trading/terminal/TradeTicketPanel";
 import { useSelectedOption } from "@/lib/workspace-selected-option";
 import Link from "next/link";
+// FRONTEND-PERPS-POLISH-V1 — perps widgets live in their own files now.
+import { PerpsStatsWidget as PerpsStatsBody } from "@/components/trading/perps/PerpsStats";
+import { PerpsChartWidget as PerpsChartBody } from "@/components/trading/perps/PerpsChart";
+import { PerpsOrderbookWidget as PerpsOrderbookBody } from "@/components/trading/perps/PerpsOrderbook";
+import { PerpsTradeFormWidget as PerpsTradeFormBody } from "@/components/trading/perps/PerpsTradeForm";
+import { PerpsTradeFeedWidget as PerpsTradeFeedBody } from "@/components/trading/perps/PerpsTradeFeed";
+import { PerpsBookFeedWidget as PerpsBookFeedBody } from "@/components/trading/perps/PerpsBookFeed";
 
 function PlaceholderBody({ title, body }: { title: string; body: string }) {
   return (
@@ -105,165 +112,25 @@ export function EventsWidget() {
   );
 }
 
+// Perps widget bodies moved to `src/components/trading/perps/*` —
+// this file only re-exports them for the workspace registry.
 export function PerpsStatsWidget() {
-  const cells = [
-    { id: "underlying", label: "Underlying" },
-    { id: "mark", label: "Mark" },
-    { id: "change-24h", label: "24h Δ" },
-    { id: "volume-24h", label: "24h Vol" },
-    { id: "funding", label: "Funding" },
-    { id: "open-interest", label: "OI" },
-  ];
-  return (
-    <div
-      data-testid="widget-perps-stats-body"
-      className="grid grid-cols-2 overflow-hidden rounded border border-zinc-800 bg-zinc-950 sm:grid-cols-3 lg:grid-cols-6"
-    >
-      {cells.map((c) => (
-        <div
-          key={c.id}
-          data-testid={`widget-perps-stat-${c.id}`}
-          className="flex flex-col gap-0.5 border-r border-zinc-900 px-3 py-1.5 last:border-r-0"
-        >
-          <span className="text-[9px] uppercase tracking-[0.18em] text-zinc-500">
-            {c.label}
-          </span>
-          <span className="font-mono text-[13px] text-zinc-400">—</span>
-          <span className="text-[9px] text-zinc-600">not live</span>
-        </div>
-      ))}
-    </div>
-  );
+  return <PerpsStatsBody />;
 }
-
 export function PerpsChartWidget() {
-  return (
-    <div
-      data-testid="widget-perps-chart-body"
-      className="flex h-56 flex-col gap-2 rounded border border-zinc-800 bg-zinc-950 p-3"
-    >
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-        <span>Chart</span>
-        <span className="text-emerald-300">schematic only</span>
-      </div>
-      <svg
-        data-testid="widget-perps-chart-svg"
-        viewBox="0 0 600 200"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-        className="h-full w-full"
-      >
-        <defs>
-          <pattern
-            id="perps-widget-grid"
-            width="40"
-            height="40"
-            patternUnits="userSpaceOnUse"
-          >
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgb(24 24 27)" strokeWidth="1" />
-          </pattern>
-        </defs>
-        <rect width="600" height="200" fill="url(#perps-widget-grid)" />
-        <path
-          d="M0,140 C60,135 100,150 140,120 S220,80 260,110 S360,160 420,90 S520,40 600,70"
-          fill="none"
-          stroke="rgb(52 211 153)"
-          strokeOpacity="0.45"
-          strokeWidth="1.5"
-        />
-      </svg>
-      <p className="text-[10px] text-zinc-500">
-        Perps are not live in this testnet beta yet. No real price feed.
-      </p>
-    </div>
-  );
+  return <PerpsChartBody />;
 }
-
 export function PerpsOrderbookWidget() {
-  return (
-    <div
-      data-testid="widget-perps-orderbook-body"
-      className="flex flex-col gap-1 rounded border border-zinc-800 bg-zinc-950 p-2"
-    >
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-        <span>Order book</span>
-        <span className="text-emerald-300">not live</span>
-      </div>
-      <div className="grid grid-cols-3 text-[10px] text-zinc-500">
-        <span className="text-right">Bid</span>
-        <span className="text-center">Size</span>
-        <span className="text-right">Ask</span>
-      </div>
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          className="grid grid-cols-3 border-b border-zinc-900 py-1 font-mono text-[11px] text-zinc-700 last:border-b-0"
-        >
-          <span className="text-right">—</span>
-          <span className="text-center">—</span>
-          <span className="text-right">—</span>
-        </div>
-      ))}
-    </div>
-  );
+  return <PerpsOrderbookBody />;
 }
-
 export function PerpsTradeFormWidget() {
-  return (
-    <div
-      data-testid="widget-perps-trade-form-body"
-      className="flex flex-col gap-2 rounded border border-zinc-800 bg-zinc-950 p-3"
-    >
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-        <span>Trade ticket</span>
-        <span className="text-emerald-300">not live</span>
-      </div>
-      <div className="flex gap-1" role="group" aria-label="Side">
-        <button
-          type="button"
-          disabled
-          className="flex-1 cursor-not-allowed rounded border border-emerald-500/30 bg-black/40 py-1.5 text-[11px] text-emerald-200/60"
-        >
-          Long
-        </button>
-        <button
-          type="button"
-          disabled
-          className="flex-1 cursor-not-allowed rounded border border-zinc-800 bg-black/40 py-1.5 text-[11px] text-zinc-500"
-        >
-          Short
-        </button>
-      </div>
-      <input
-        type="text"
-        disabled
-        placeholder="Size"
-        className="cursor-not-allowed rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-[11px] text-zinc-500"
-      />
-      <input
-        type="text"
-        disabled
-        placeholder="Leverage"
-        className="cursor-not-allowed rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-[11px] text-zinc-500"
-      />
-      <button
-        type="button"
-        disabled
-        className="cursor-not-allowed rounded border border-zinc-800 bg-black/40 py-1.5 text-[11px] text-zinc-500"
-      >
-        Perps trading not live
-      </button>
-    </div>
-  );
+  return <PerpsTradeFormBody />;
 }
-
 export function PerpsTradeFeedWidget() {
-  return (
-    <PlaceholderBody
-      title="Perps trade feed — not live"
-      body="The public trade feed for perps will land alongside the perps backend. No fake prints in this beta."
-    />
-  );
+  return <PerpsTradeFeedBody />;
+}
+export function PerpsBookFeedWidget() {
+  return <PerpsBookFeedBody />;
 }
 
 export function DocsHelpWidget() {

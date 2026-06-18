@@ -1,10 +1,10 @@
 /**
  * fundings-v1.spec.ts — FRONTEND-FUNDINGS-PAGE-V1
  *
- * The `/fundings` page is a minimal honest landing. Perps are not
- * live, so the Market Funding table renders `Planned` rows with `—`
- * placeholders and the Account Funding table is empty. No fake
- * rates, no synthetic timestamps, no marketing copy.
+ * The `/fundings` page is a minimal DeOpt funding overview. Backend
+ * has no funding endpoint yet, so every numeric cell renders `—`
+ * and every row carries a single muted `Planned` pill. Symbols match
+ * the backend's seeded perp markets exactly (BTC-PERP + ETH-PERP).
  */
 import { test, expect } from "@playwright/test";
 
@@ -13,81 +13,67 @@ test("/fundings renders the four shell sections", async ({ page }) => {
   for (const id of [
     "fundings-page",
     "fundings-page-header",
-    "fundings-quicklinks",
-    "fundings-status-strip",
-    "fundings-market-section",
-    "fundings-market-table",
-    "fundings-account-section",
-    "fundings-account-table",
-    "fundings-methodology",
+    "fundings-period-selector",
+    "fundings-overview",
+    "fundings-overview-table",
+    "fundings-account-panel",
+    "fundings-methodology-note",
   ]) {
     await expect(page.getByTestId(id)).toBeVisible();
   }
 });
 
-test("/fundings header carries the required quick links", async ({ page }) => {
+test("/fundings period selector is rendered disabled", async ({ page }) => {
   await page.goto("/fundings");
-  const docs = await page.getByTestId("fundings-quicklink-docs").getAttribute("href");
-  expect(docs ?? "").toMatch(/^https?:\/\//);
-  await expect(page.getByTestId("fundings-quicklink-perps")).toHaveAttribute(
-    "href",
-    "/perps",
-  );
-  await expect(page.getByTestId("fundings-quicklink-fees")).toHaveAttribute(
-    "href",
-    "/fees",
-  );
+  const select = page.getByTestId("fundings-period-selector").locator("select");
+  await expect(select).toBeDisabled();
 });
 
-test("/fundings status strip shows honest defaults", async ({ page }) => {
-  await page.goto("/fundings");
-  await expect(page.getByTestId("fundings-status-perps")).toContainText(/Not live/);
-  await expect(page.getByTestId("fundings-status-options")).toContainText(
-    /No funding/,
-  );
-  await expect(page.getByTestId("fundings-status-account")).toContainText(
-    /Wallet not connected/,
-  );
-});
-
-test("/fundings Market table lists BTC-PERP and ETH-PERP as Planned with `—` cells", async ({
+test("/fundings overview table lists BTC-PERP + ETH-PERP with `—` cells and Planned pill", async ({
   page,
 }) => {
   await page.goto("/fundings");
-  for (const [i, market] of [
+  for (const [i, symbol] of [
     [0, "BTC-PERP"],
     [1, "ETH-PERP"],
   ] as const) {
-    const row = page.getByTestId(`fundings-market-row-${i}`);
-    await expect(row).toContainText(market);
+    const row = page.getByTestId(`fundings-overview-row-${i}`);
+    await expect(row).toContainText(symbol);
+    // Three numeric cells, all `—`
+    const text = (await row.textContent()) ?? "";
+    expect((text.match(/—/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    // Row carries a Planned pill and both action buttons.
     await expect(row).toContainText(/Planned/);
-    // Three `—` cells (rate / next / 24h avg).
-    const dashes = (await row.textContent()) ?? "";
-    expect((dashes.match(/—/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    await expect(
+      page.getByTestId(`fundings-action-perps-${symbol}`),
+    ).toHaveAttribute("href", new RegExp(`/perps\\?symbol=${symbol}`));
+    await expect(
+      page.getByTestId(`fundings-action-options-${symbol}`),
+    ).toHaveAttribute(
+      "href",
+      new RegExp(`/trade\\?underlying=${symbol.replace("-PERP", "")}`),
+    );
   }
 });
 
-test("/fundings Account table shows the wallet-disconnected empty state", async ({
+test("/fundings account panel shows the wallet-disconnected hint", async ({
   page,
 }) => {
   await page.goto("/fundings");
-  await expect(page.getByTestId("fundings-account-empty")).toContainText(
+  await expect(page.getByTestId("fundings-account-state")).toContainText(
     /Connect wallet to view account funding payments/i,
   );
 });
 
-test("/fundings Methodology card shows 3 bullets + docs link", async ({
-  page,
-}) => {
+test("/fundings methodology note + docs link", async ({ page }) => {
   await page.goto("/fundings");
-  const m = page.getByTestId("fundings-methodology");
-  await expect(m).toContainText(/perpetual markets/i);
-  await expect(m).toContainText(/Longs or shorts may pay/i);
-  await expect(m).toContainText(/Options positions do not pay/i);
-  const docsHref = await page
+  await expect(page.getByTestId("fundings-methodology-note")).toContainText(
+    /Options positions do not pay periodic funding/i,
+  );
+  const href = await page
     .getByTestId("fundings-methodology-docs-link")
     .getAttribute("href");
-  expect(docsHref ?? "").toMatch(/^https?:\/\//);
+  expect(href ?? "").toMatch(/^https?:\/\//);
 });
 
 test("/fundings does not render the bottom public-beta marketing footer", async ({

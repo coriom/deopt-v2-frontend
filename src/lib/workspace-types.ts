@@ -26,6 +26,7 @@ export type WidgetType =
   | "perps-orderbook"
   | "perps-trade-form"
   | "perps-trade-feed"
+  | "perps-book-feed"
   | "docs-help"
   | "feedback";
 
@@ -53,6 +54,7 @@ export const KNOWN_WIDGET_TYPES: ReadonlySet<WidgetType> = new Set<WidgetType>([
   "perps-orderbook",
   "perps-trade-form",
   "perps-trade-feed",
+  "perps-book-feed",
   "docs-help",
   "feedback",
 ]);
@@ -96,7 +98,7 @@ export const ANON_LAYOUT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** Pixel snap step for both drag/resize AND the visible dotted
  *  backdrop. Keep them equal — they MUST share this constant so the
  *  user sees the same grid they land on. */
-export const CANVAS_SNAP_PX = 24;
+export const CANVAS_SNAP_PX = 32;
 
 /** Default per-widget minimum sizes when the widget registry does not
  *  override them. Prevents widgets from collapsing below a usable
@@ -117,6 +119,12 @@ export const MIN_CANVAS_HEIGHT_PX = 240;
 export const MIN_WIDGET_PCT = 0.04; // 4% — ~77px on a 1920px canvas
 export const MAX_GEOMETRY_OVERFLOW = 0.01; // tolerate 1% float drift
 
+/** Upper bound on a widget's vertical position. The workspace
+ *  canvas grows downward to fit; 50 viewport-heights is plenty for
+ *  any realistic scroll session and still guards against runaway
+ *  values from corrupted state. */
+export const MAX_Y_PCT = 50;
+
 export function snapPx(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.round(value / CANVAS_SNAP_PX) * CANVAS_SNAP_PX;
@@ -127,7 +135,9 @@ export function pxToPct(px: number, canvasPx: number): number {
   if (!Number.isFinite(px)) return 0;
   const pct = px / canvasPx;
   if (!Number.isFinite(pct)) return 0;
-  return Math.max(0, Math.min(1, pct));
+  // Lower clamp only — Y positions may legitimately exceed 1 since
+  // the workspace canvas scrolls vertically.
+  return Math.max(0, pct);
 }
 
 export function pctToPx(pct: number, canvasPx: number): number {
@@ -180,7 +190,10 @@ export function isValidWidgetInstance(value: unknown): value is WidgetInstance {
   if (wPct < MIN_WIDGET_PCT || hPct < MIN_WIDGET_PCT) return false;
   if (wPct > 1 + MAX_GEOMETRY_OVERFLOW || hPct > 1 + MAX_GEOMETRY_OVERFLOW) return false;
   if (xPct + wPct > 1 + MAX_GEOMETRY_OVERFLOW) return false;
-  if (yPct + hPct > 1 + MAX_GEOMETRY_OVERFLOW) return false;
+  // Y can extend past the initial viewport — the canvas scrolls. We
+  // still bound it so corrupted state can't claim absurd positions.
+  if (yPct > MAX_Y_PCT) return false;
+  if (yPct + hPct > MAX_Y_PCT + 1 + MAX_GEOMETRY_OVERFLOW) return false;
   if (w.minWPx !== undefined && (typeof w.minWPx !== "number" || w.minWPx < 0)) {
     return false;
   }
@@ -234,7 +247,11 @@ export function clampRectToCanvas(
   const reqX = Number.isFinite(rect.x) ? rect.x : 0;
   const reqY = Number.isFinite(rect.y) ? rect.y : 0;
   const x = Math.max(0, Math.min(reqX, Math.max(0, cw - w)));
-  const y = Math.max(0, Math.min(reqY, Math.max(0, ch - h)));
+  // Y is intentionally not clamped against the canvas bottom — the
+  // workspace canvas grows vertically to fit the lowest widget, so a
+  // user can drag a widget past the initial viewport and the page
+  // scrolls down.
+  const y = Math.max(0, reqY);
   return { x, y, w, h };
 }
 
@@ -274,4 +291,30 @@ export function resolveWidgetRect(
   const minW = widget.minWPx ?? DEFAULT_MIN_W_PX;
   const minH = widget.minHPx ?? DEFAULT_MIN_H_PX;
   return clampRectToCanvas(raw, canvas, minW, minH);
+}
+
+/** Snap a widget's percentage geometry to the canvas grid so its
+ *  pixel rect lands exactly on `CANVAS_SNAP_PX` multiples. Used at
+ *  seed time and on hydration so every widget — not just the ones
+ *  the user drags or resizes — visually aligns with the backdrop
+ *  dot grid. */
+export function snapWidgetGeometry(
+  widget: WidgetInstance,
+  canvas: CanvasSize,
+): WidgetInstance {
+  if (!isCanvasReady(canvas)) return widget;
+  const raw = geometryToRect(widget, canvas);
+  const minW = widget.minWPx ?? DEFAULT_MIN_W_PX;
+  const minH = widget.minHPx ?? DEFAULT_MIN_H_PX;
+  const snapped: PixelRect = {
+    x: snapPx(raw.x),
+    y: snapPx(raw.y),
+    w: Math.max(snapPx(raw.w), Math.ceil(minW / CANVAS_SNAP_PX) * CANVAS_SNAP_PX),
+    h: Math.max(snapPx(raw.h), Math.ceil(minH / CANVAS_SNAP_PX) * CANVAS_SNAP_PX),
+  };
+  const clamped = clampRectToCanvas(snapped, canvas, minW, minH);
+  return {
+    ...widget,
+    ...rectToPctGeometry(clamped, canvas),
+  };
 }

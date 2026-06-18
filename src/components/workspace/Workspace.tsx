@@ -23,6 +23,7 @@ import {
   rectToPctGeometry,
   resolveWidgetRect,
   snapPx,
+  snapWidgetGeometry,
   type CanvasSize,
   type WidgetInstance,
   type WidgetType,
@@ -88,10 +89,13 @@ function findFreeSlot(
       }
     }
   }
+  // No free slot inside the viewport — drop the new widget on the
+  // next row below the lowest existing widget. The canvas grows
+  // vertically and the wrapper scrolls.
   const maxBottom = rects.reduce((m, e) => Math.max(m, e.y + e.h), 0);
   return {
     xPct: 0,
-    yPct: Math.min(1 - hPct, maxBottom / Math.max(1, canvas.height)),
+    yPct: maxBottom / Math.max(1, canvas.height),
     wPct,
     hPct,
   };
@@ -157,6 +161,41 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
     });
   }, [walletKey, workspaceId]);
 
+  // Snap pass — runs once the canvas is measured. Aligns every widget
+  // (seed positions + stored layouts that pre-date the snap step)
+  // onto the `CANVAS_SNAP_PX` grid so widget edges land exactly on
+  // the dot backdrop. No-op when nothing actually moved.
+  useEffect(() => {
+    if (!hydrated || !widgets) return;
+    if (!isCanvasReady(canvasSize)) return;
+    let changed = false;
+    const snapped = widgets.map((w) => {
+      const next = snapWidgetGeometry(w, canvasSize);
+      if (
+        next.xPct !== w.xPct ||
+        next.yPct !== w.yPct ||
+        next.wPct !== w.wPct ||
+        next.hPct !== w.hPct
+      ) {
+        changed = true;
+      }
+      return next;
+    });
+    if (changed) {
+      setWidgets(snapped);
+      // Persist the snapped layout so the next reload skips the
+      // re-snap pass.
+      const c = canvasSize;
+      if (isCanvasReady(c)) {
+        saveWorkspaceLayout(walletKey, workspaceId, snapped, c.width, c.height);
+      }
+    }
+    // We deliberately don't depend on `widgets` here — only on the
+    // hydration moment and the canvas size. Re-running on every
+    // widget mutation would loop forever (drag → snap → drag).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, canvasSize.width, canvasSize.height, walletKey, workspaceId]);
+
   const persist = useCallback(
     (next: WidgetInstance[]) => {
       const c = canvasSizeRef.current;
@@ -175,19 +214,17 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
         const def = WIDGET_REGISTRY[type];
         const c = canvasSizeRef.current;
         const slot = findFreeSlot(cur, c, def.defaultWPct, def.defaultHPct);
-        const next: WidgetInstance[] = [
-          ...cur,
-          {
-            id: newId(),
-            type,
-            xPct: slot.xPct,
-            yPct: slot.yPct,
-            wPct: slot.wPct,
-            hPct: slot.hPct,
-            minWPx: def.minWPx,
-            minHPx: def.minHPx,
-          },
-        ];
+        const raw: WidgetInstance = {
+          id: newId(),
+          type,
+          xPct: slot.xPct,
+          yPct: slot.yPct,
+          wPct: slot.wPct,
+          hPct: slot.hPct,
+          minWPx: def.minWPx,
+          minHPx: def.minHPx,
+        };
+        const next: WidgetInstance[] = [...cur, snapWidgetGeometry(raw, c)];
         persist(next);
         return next;
       });
@@ -289,44 +326,98 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
     });
   }, [persist]);
 
+  const resetLayout = useCallback(() => {
+    const c = canvasSizeRef.current;
+    const seeded: WidgetInstance[] = defaultWidgetsFor(workspaceId).map((d) => {
+      const def = WIDGET_REGISTRY[d.type];
+      const raw: WidgetInstance = {
+        id: newId(),
+        type: d.type,
+        xPct: d.xPct,
+        yPct: d.yPct,
+        wPct: d.wPct,
+        hPct: d.hPct,
+        minWPx: def.minWPx,
+        minHPx: def.minHPx,
+      };
+      return snapWidgetGeometry(raw, c);
+    });
+    setWidgets(seeded);
+    persist(seeded);
+  }, [workspaceId, persist]);
+
   const bridgeHandle = useMemo(
-    () => ({ workspaceId, addWidget }),
-    [workspaceId, addWidget],
+    () => ({ workspaceId, addWidget, resetLayout }),
+    [workspaceId, addWidget, resetLayout],
   );
   useRegisterWorkspace(bridgeHandle);
 
   const ready = isCanvasReady(canvasSize);
   const renderWidgets = hydrated && widgets !== null && ready;
 
+  // Derive-style snap-to-grid backdrop: visible emerald dots at the
+  // exact `CANVAS_SNAP_PX` spacing so the user can see what their
+  // widgets are aligning to. Slightly brighter than V1 — still subtle
+  // against zinc-950 widgets but legible against the bare canvas.
   const backdropStyle: React.CSSProperties = ready
     ? {
         backgroundImage:
-          "radial-gradient(circle, rgba(110, 231, 183, 0.10) 1px, transparent 1px)",
+          "radial-gradient(circle, rgba(110, 231, 183, 0.22) 1px, transparent 1.4px)",
         backgroundSize: `${CANVAS_SNAP_PX}px ${CANVAS_SNAP_PX}px`,
         backgroundPosition: "0 0",
       }
     : {};
 
+  // Virtual canvas height — grows to fit the lowest widget so the
+  // workspace can scroll vertically beyond the initial viewport.
+  // `canvasRef` is now attached to the SCROLLING wrapper (which is
+  // what we measure for percentage math); the inner canvas div gets a
+  // computed pixel height that extends below the viewport when widgets
+  // are placed there.
+  const virtualHeightPx = useMemo(() => {
+    const baseline = canvasSize.height;
+    if (!widgets || baseline <= 0) return baseline;
+    let lowestBottom = 0;
+    for (const w of widgets) {
+      const r = resolveWidgetRect(w, canvasSize);
+      if (r.y + r.h > lowestBottom) lowestBottom = r.y + r.h;
+    }
+    // A small buffer so the user can drop a new widget below the
+    // current bottom without immediately hitting the edge.
+    const buffer = CANVAS_SNAP_PX * 4;
+    return Math.max(baseline, lowestBottom + buffer);
+  }, [widgets, canvasSize]);
+
   return (
     <SelectedOptionProvider>
       <div
+        ref={canvasRef}
         data-testid={`workspace-${workspaceId}`}
         data-wallet-key={walletKey}
         data-workspace-title={title}
         data-workspace-subtitle={subtitle ?? ""}
-        className="relative flex h-full min-h-0 w-full flex-col overflow-hidden"
+        className="deopt-scroll-dark relative flex h-full min-h-0 w-full flex-col overflow-y-auto overflow-x-hidden"
+        // `scrollbar-gutter: stable` reserves space for the vertical
+        // scrollbar even when it's not visible, so the canvas inner
+        // width stays constant. Without this the rightmost widget's
+        // resize handle ends up sitting under the scrollbar gutter
+        // and pointer events get hijacked by the browser scrollbar.
+        style={{ scrollbarGutter: "stable" }}
       >
         <div
-          ref={canvasRef}
           data-testid={`workspace-canvas-${workspaceId}`}
           data-canvas-width={Math.round(canvasSize.width)}
           data-canvas-height={Math.round(canvasSize.height)}
+          data-virtual-height={Math.round(virtualHeightPx)}
           data-canvas-snap-px={CANVAS_SNAP_PX}
           data-canvas-ready={ready ? "true" : "false"}
           data-hydrated={hydrated ? "true" : "false"}
           data-widget-count={widgets?.length ?? 0}
-          className="relative h-full w-full"
-          style={backdropStyle}
+          className="relative w-full"
+          style={{
+            ...backdropStyle,
+            height: ready ? `${virtualHeightPx}px` : "100%",
+          }}
           onPointerMove={onPointerMoveCanvas}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}

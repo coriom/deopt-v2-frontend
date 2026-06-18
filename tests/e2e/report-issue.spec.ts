@@ -44,7 +44,10 @@ test("hamburger Support link visible on every trading route", async ({
     );
     await expect(page.getByTestId("hamburger-link-discord")).toBeVisible();
     await expect(page.getByTestId("hamburger-link-github")).toBeVisible();
-    await page.getByTestId("hamburger-close-button").click();
+    // Close the drawer by moving the cursor off the panel — the close
+    // button was removed in FRONTEND-NAVBAR-IA-V2 (hover-to-open /
+    // leave-to-close drawer).
+    await page.mouse.move(0, 0);
   }
 });
 
