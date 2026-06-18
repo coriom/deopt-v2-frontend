@@ -32,6 +32,8 @@ const TERMINAL_ROUTES = [
   "/history",
   "/leaderboard",
   "/api",
+  "/fees",
+  "/fundings",
 ];
 
 function isTerminalRoute(pathname: string | null): boolean {

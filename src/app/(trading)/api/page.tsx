@@ -1,13 +1,16 @@
-import { ApiShell } from "@/components/api/ApiShell";
+import { DevelopersConsole } from "@/components/api/DevelopersConsole";
 
 export const metadata = {
-  title: "API — DeOpt public testnet beta",
+  title: "Developers — DeOpt",
 };
 
 export default function ApiPage() {
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <ApiShell />
+    <div
+      data-testid="api-scroll"
+      className="deopt-scroll-dark flex h-full min-h-0 flex-col overflow-y-auto"
+    >
+      <DevelopersConsole />
     </div>
   );
 }

@@ -275,3 +275,34 @@ body {
 .prose-deopt tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.02);
 }
+
+/*
+ * Dark scrollbar utility for the terminal Developers + sandbox
+ * routes. The default OS scrollbar reads as bright white on the
+ * black background; this restyles WebKit/Blink and Firefox to a
+ * muted zinc track + thumb. The class is applied to the page-level
+ * scroll container so the bar sits flush against the viewport's
+ * right edge instead of in the centered max-w-* content gutter.
+ */
+.deopt-scroll-dark {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a #000000;
+}
+.deopt-scroll-dark::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.deopt-scroll-dark::-webkit-scrollbar-track {
+  background: #000000;
+}
+.deopt-scroll-dark::-webkit-scrollbar-thumb {
+  background: #27272a; /* zinc-800 */
+  border: 2px solid #000000;
+  border-radius: 6px;
+}
+.deopt-scroll-dark::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46; /* zinc-700 */
+}
+.deopt-scroll-dark::-webkit-scrollbar-corner {
+  background: #000000;
+}

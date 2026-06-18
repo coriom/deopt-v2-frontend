@@ -1,129 +1,139 @@
 /**
- * api-v1.spec.ts — FRONTEND-API-PAGE-V1
+ * api-v1.spec.ts — FRONTEND-DEVELOPERS-CONSOLE-V1 (minimal layout)
  *
- * Covers the terminal-style `/api` developer reference:
- *   - hero chips, sections, code examples, channel tables present
- *   - public + deferred WS channel tables list the documented set
- *   - private account table marks 4 live + 5 reserved channels
- *   - WS Quick Test panel renders, with default URL + control buttons
- *   - no production URL hardcoded
- *   - no `Deribit` / `Derive` references
- *   - no positive-claim language (audited / mainnet-ready / etc.)
- *   - no amber / yellow / orange brand classes
- *   - no admin bearer / RPC / DATABASE_URL / mainnet exposure
- *   - no bottom marketing footer on /api
+ * The `/api` page is the in-app Developers landing. It must be:
+ *   - sparse: title + 4 icon links + Wallet/Signer row + Mint Tokens
+ *     card + Session Keys card + Subaccounts card + footer
+ *   - free of long-form documentation
+ *   - free of any environment / HTTP / WS / MM status panels
+ *   - free of fake session keys / subaccounts / mint endpoints
+ *   - linked out to the docs site through the configurable docs URL
+ *   - linked to `/api/sandbox` for the live WebSocket sandbox
  */
 import { test, expect } from "@playwright/test";
 
-test("/api renders the developer-reference shell with all sections", async ({
-  page,
-}) => {
+test("/api renders the simplified Developers landing", async ({ page }) => {
   await page.goto("/api");
-  await expect(page.getByTestId("api-shell")).toBeVisible();
   for (const id of [
-    "api-hero",
-    "api-architecture",
-    "api-http",
-    "api-ws",
-    "api-auth",
-    "api-private-channels",
-    "api-intents",
-    "api-mm-gateway",
-    "api-profiles",
-    "api-examples",
-    "api-quick-test",
+    "developers-console",
+    "developers-console-header",
+    "developers-console-quicklinks",
+    "developers-console-identity",
+    "developers-console-mint",
+    "developers-console-session-keys",
+    "developers-console-subaccounts",
+    "developers-console-footer",
+    "developers-console-sandbox-link",
   ]) {
     await expect(page.getByTestId(id)).toBeVisible();
   }
 });
 
-test("/api hero chips include the five required labels", async ({ page }) => {
+test("/api header quick links route to docs / GitHub", async ({ page }) => {
   await page.goto("/api");
-  const chips = page.getByTestId("api-hero-chips");
-  for (const label of [
-    "Public HTTP",
-    "Public WebSocket",
-    "Wallet Auth",
-    "MM WebTransport",
-    "Testnet Beta",
-  ]) {
-    await expect(chips).toContainText(label);
+  const expectations: Array<[string, RegExp]> = [
+    ["developers-quicklink-guides", /\/quickstart$/],
+    ["developers-quicklink-api-reference", /\/developers$/],
+    ["developers-quicklink-github", /github\.com\/DeOpt$/],
+    ["developers-quicklink-environment", /\/limitations$/],
+  ];
+  for (const [id, re] of expectations) {
+    const href = await page.getByTestId(id).getAttribute("href");
+    expect(href ?? "").toMatch(re);
   }
 });
 
-test("/api HTTP endpoint table lists the documented public routes", async ({
+test("/api wallet + signer cells show 'Not connected' / 'Not available' by default", async ({
   page,
 }) => {
   await page.goto("/api");
-  const table = page.getByTestId("api-http-endpoint-table");
-  for (const path of [
-    "/trading/health",
-    "/options/products",
-    "/options/execution-intents",
-    "/accounts/{address}/positions",
-    "/accounts/{address}/history/v2",
-    "/leaderboard",
+  await expect(page.getByTestId("identity-wallet")).toContainText(/Not connected/);
+  await expect(page.getByTestId("identity-signer")).toContainText(/Not available/);
+});
+
+test("/api Mint Tokens card carries the planned chip and no live action", async ({
+  page,
+}) => {
+  await page.goto("/api");
+  await expect(page.getByTestId("mint-tokens-action")).toBeDisabled();
+  await expect(page.getByTestId("mint-tokens-action")).toContainText(
+    /Mint UI planned/,
+  );
+});
+
+test("/api Session Keys card is empty with disabled register button", async ({
+  page,
+}) => {
+  await page.goto("/api");
+  const btn = page.getByTestId("session-keys-register");
+  await expect(btn).toBeDisabled();
+  await expect(btn).toContainText(/Register Session Key/);
+  await expect(page.getByTestId("session-keys-table-empty")).toContainText(
+    /No session keys registered/,
+  );
+});
+
+test("/api Subaccounts card is empty with disabled create button", async ({
+  page,
+}) => {
+  await page.goto("/api");
+  const btn = page.getByTestId("subaccounts-create");
+  await expect(btn).toBeDisabled();
+  await expect(btn).toContainText(/Create Subaccount/);
+  await expect(page.getByTestId("subaccounts-table-empty")).toContainText(
+    /No subaccounts configured/,
+  );
+});
+
+test("/api footer carries the MM Gateway note + link to the sandbox", async ({
+  page,
+}) => {
+  await page.goto("/api");
+  await expect(page.getByTestId("developers-console-mm-note")).toContainText(
+    /operator-whitelisted/i,
+  );
+  await expect(page.getByTestId("developers-console-mm-link")).toHaveAttribute(
+    "href",
+    /\/developers\/mm-gateway$/,
+  );
+  await expect(page.getByTestId("developers-console-sandbox-link")).toHaveAttribute(
+    "href",
+    "/api/sandbox",
+  );
+});
+
+test("/api no longer carries the long-form documentation or status dump", async ({
+  page,
+}) => {
+  await page.goto("/api");
+  for (const removed of [
+    "api-shell",
+    "api-http-endpoint-table",
+    "api-ws-method-table",
+    "api-private-channel-table",
+    "api-auth-canonical",
+    "api-mm-explicit",
+    "api-profile-table",
+    "dev-panel",
+    "developers-console-environment",
+    "card-public-api",
+    "card-wallet-auth",
+    "api-ws-quick-test",
   ]) {
-    await expect(table).toContainText(path);
+    await expect(page.getByTestId(removed)).toHaveCount(0);
   }
 });
 
-test("/api documents the canonical EIP-191 auth message", async ({ page }) => {
-  await page.goto("/api");
-  const canonical = page.getByTestId("api-auth-canonical");
-  await expect(canonical).toContainText("DeOpt Public WebSocket Authentication");
-  await expect(canonical).toContainText("Domain: deopt-v2-public-ws");
-});
-
-test("/api private-channel table marks 4 LIVE and 5 RESERVED", async ({
+test("/api/sandbox renders the WebSocket sandbox with a back link", async ({
   page,
 }) => {
-  await page.goto("/api");
-  const table = page.getByTestId("api-private-channel-table");
-  await expect(table).toContainText("account.positions");
-  await expect(table).toContainText("account.portfolio");
-  await expect(table).toContainText("account.balances");
-  await expect(table).toContainText("account.history");
-  await expect(table).toContainText("account.orders");
-  await expect(table).toContainText("account.fills");
-  await expect(table).toContainText("account.intent_status");
-  await expect(table).toContainText("account.settlements");
-  await expect(table).toContainText("account.liquidations");
-});
-
-test("/api lists deferred public WS channels honestly", async ({ page }) => {
-  await page.goto("/api");
-  const table = page.getByTestId("api-ws-deferred-channels");
-  for (const c of [
-    "options.orderbook",
-    "options.trades",
-    "options.ticker",
-    "oracle.price",
-    "mark.price",
-  ]) {
-    await expect(table).toContainText(c);
-  }
-});
-
-test("/api describes MM Gateway as separate and operator-whitelisted", async ({
-  page,
-}) => {
-  await page.goto("/api");
-  const block = page.getByTestId("api-mm-explicit");
-  await expect(block).toContainText(/public API does not expose WebTransport/i);
-  await expect(block).toContainText(/MM Gateway is not a public WebSocket API/i);
-});
-
-test("/api WebSocket Quick Test panel renders with controls + default URL", async ({
-  page,
-}) => {
-  await page.goto("/api");
-  const panel = page.getByTestId("api-ws-quick-test");
-  await expect(panel).toBeVisible();
-  await expect(page.getByTestId("api-ws-quick-test-url")).toBeVisible();
+  await page.goto("/api/sandbox");
+  await expect(page.getByTestId("api-sandbox-page")).toBeVisible();
+  await expect(page.getByTestId("api-sandbox-back")).toHaveAttribute("href", "/api");
   for (const id of [
+    "api-ws-quick-test",
+    "api-ws-quick-test-url",
     "api-ws-quick-test-connect",
-    "api-ws-quick-test-disconnect",
     "api-ws-quick-test-ping",
     "api-ws-quick-test-sub-trading.health",
     "api-ws-quick-test-sub-options.products",
@@ -132,27 +142,8 @@ test("/api WebSocket Quick Test panel renders with controls + default URL", asyn
   ]) {
     await expect(page.getByTestId(id)).toBeVisible();
   }
-  // Default URL must be a ws[s]:// URL; no production host assumed.
   const url = await page.getByTestId("api-ws-quick-test-url").inputValue();
   expect(url).toMatch(/^ws(s)?:\/\//);
-});
-
-test("/api code examples are present and copyable", async ({ page }) => {
-  await page.goto("/api");
-  for (const id of [
-    "api-example-curl",
-    "api-example-ws-subscribe",
-    "api-example-ws-auth",
-    "api-example-ws-private",
-    "api-http-envelope-ok",
-    "api-http-envelope-err",
-    "api-ws-req-subscribe",
-    "api-ws-ack-subscribe",
-    "api-ws-push",
-  ]) {
-    await expect(page.getByTestId(id)).toBeVisible();
-    await expect(page.getByTestId(`${id}-copy`)).toBeVisible();
-  }
 });
 
 test("/api never claims mainnet/audited/production-ready/safe-for-real-funds", async ({
@@ -202,4 +193,14 @@ test("/api does not render the bottom public-beta marketing footer", async ({
 }) => {
   await page.goto("/api");
   await expect(page.getByTestId("public-beta-footer")).toHaveCount(0);
+});
+
+test("/api keeps testnet-beta disclaimer copy out of the console body", async ({
+  page,
+}) => {
+  await page.goto("/api");
+  const consoleText =
+    (await page.getByTestId("developers-console").textContent()) ?? "";
+  const matches = consoleText.match(/testnet beta/gi) ?? [];
+  expect(matches.length).toBeLessThanOrEqual(1);
 });

@@ -15,34 +15,17 @@
  */
 import { test, expect } from "@playwright/test";
 
-test("/fees placeholder renders with status chip + summary + links", async ({
-  page,
-}) => {
-  await page.goto("/fees");
-  await expect(page.getByTestId("fees-page")).toBeVisible();
-  await expect(page.getByTestId("fees-page-status-chip")).toContainText(
-    /public testnet beta/i,
-  );
-  await expect(page.getByTestId("fees-page-summary")).toBeVisible();
-  await expect(page.getByTestId("fees-page-disclaimers")).toBeVisible();
-  await expect(page.getByTestId("fees-page-roadmap")).toBeVisible();
-  await expect(page.getByTestId("fees-page-link-docs")).toHaveAttribute(
-    "href",
-    "/docs",
-  );
-  await expect(page.getByTestId("fees-page-link-feedback")).toHaveAttribute(
-    "href",
-    "/feedback",
-  );
-  await expect(page.getByTestId("fees-page-link-discord")).toHaveAttribute(
-    "href",
-    "https://discord.gg/zaEMvWuxu",
-  );
-});
+// `/fees` placeholder testids were removed in FRONTEND-FEES-PAGE-V1.
+// The page now renders the My Account card + Option Fee Tiers +
+// Perp Fee Tiers tables sourced from
+// `~/DEOPT/deopt-v2-backend/src/fees/schedule.rs::launch_fee_schedule()`.
+// Coverage lives in `fees-v1.spec.ts`.
 
-// `/api` placeholder testids were removed in FRONTEND-API-PAGE-V1. The
-// page now renders the full developer reference (`api-shell`), covered
-// by `api-v1.spec.ts`.
+// `/api` placeholder testids were removed in FRONTEND-API-PAGE-V1,
+// the full developer reference was moved to the separate docs site
+// in FRONTEND-DOCS-SPLIT-V1, and the page now renders the in-app
+// Developers Console (`developers-console`) introduced by
+// FRONTEND-DEVELOPERS-CONSOLE-V1. Coverage lives in `api-v1.spec.ts`.
 
 test("/fees does not contain positive-claim language or sensitive leaks", async ({
   page,
@@ -94,7 +77,7 @@ test("Hamburger → API link routes to /api", async ({ page }) => {
   await page.getByTestId("hamburger-button").click();
   await page.getByTestId("hamburger-link-api").click();
   await page.waitForURL("**/api");
-  await expect(page.getByTestId("api-shell")).toBeVisible();
+  await expect(page.getByTestId("developers-console")).toBeVisible();
 });
 
 test("Hamburger → Fees link routes to /fees placeholder", async ({ page }) => {
