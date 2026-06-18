@@ -22,9 +22,9 @@ import {
   isCanvasReady,
   rectToPctGeometry,
   resolveWidgetRect,
-  snapPx,
   snapWidgetGeometry,
   type CanvasSize,
+  type PixelRect,
   type WidgetInstance,
   type WidgetType,
   type WorkspaceId,
@@ -61,6 +61,111 @@ interface DragState {
   pointerId: number;
   minWPx: number;
   minHPx: number;
+}
+
+/**
+ * Compute a snap-style overlap preview for the widget currently being
+ * dragged. If the dragged widget visually intrudes into exactly one
+ * other widget's bounding box, we propose a "shrunk" rect for that
+ * obstacle along the axis with the smallest intrusion — exactly how
+ * Derive's workspace handles the same gesture.
+ *
+ * Returns:
+ *   - `obstacleId` + `obstacleRect`: the displaced obstacle, rendered
+ *     during drag so the user previews the resize visually
+ *   - `valid`: false when the shrunk obstacle would fall below its min
+ *     size OR when more than one widget would be displaced. The drag
+ *     handler converts an invalid preview into a revert on release.
+ */
+interface OverlapPreview {
+  obstacleId: string;
+  obstacleRectPx: PixelRect;
+  valid: boolean;
+}
+function computeOverlapPreview(
+  widgets: WidgetInstance[],
+  draggedId: string,
+  canvas: CanvasSize,
+): OverlapPreview | null {
+  if (!isCanvasReady(canvas)) return null;
+  const dragged = widgets.find((w) => w.id === draggedId);
+  if (!dragged) return null;
+  const dr = resolveWidgetRect(dragged, canvas);
+  let hit: { id: string; rect: PixelRect; minW: number; minH: number } | null = null;
+  for (const w of widgets) {
+    if (w.id === draggedId) continue;
+    const wr = resolveWidgetRect(w, canvas);
+    const overlapX =
+      Math.min(dr.x + dr.w, wr.x + wr.w) - Math.max(dr.x, wr.x);
+    const overlapY =
+      Math.min(dr.y + dr.h, wr.y + wr.h) - Math.max(dr.y, wr.y);
+    if (overlapX <= 0 || overlapY <= 0) continue;
+    if (hit) {
+      // Two simultaneous obstacles — too complex to resolve in V1,
+      // mark invalid so the drop is rejected.
+      return {
+        obstacleId: hit.id,
+        obstacleRectPx: hit.rect,
+        valid: false,
+      };
+    }
+    hit = {
+      id: w.id,
+      rect: wr,
+      minW: w.minWPx ?? DEFAULT_MIN_W_PX,
+      minH: w.minHPx ?? DEFAULT_MIN_H_PX,
+    };
+  }
+  if (!hit) return null;
+
+  const wr = hit.rect;
+  const overlapX = Math.min(dr.x + dr.w, wr.x + wr.w) - Math.max(dr.x, wr.x);
+  const overlapY = Math.min(dr.y + dr.h, wr.y + wr.h) - Math.max(dr.y, wr.y);
+  const draggedCenterX = dr.x + dr.w / 2;
+  const draggedCenterY = dr.y + dr.h / 2;
+  const obstacleCenterX = wr.x + wr.w / 2;
+  const obstacleCenterY = wr.y + wr.h / 2;
+
+  let shrunk: PixelRect;
+  let valid: boolean;
+  if (overlapX <= overlapY) {
+    // Push horizontally — shrink obstacle on the side the dragged
+    // widget is pushing from.
+    if (draggedCenterX < obstacleCenterX) {
+      shrunk = {
+        x: dr.x + dr.w,
+        y: wr.y,
+        w: wr.x + wr.w - (dr.x + dr.w),
+        h: wr.h,
+      };
+    } else {
+      shrunk = {
+        x: wr.x,
+        y: wr.y,
+        w: dr.x - wr.x,
+        h: wr.h,
+      };
+    }
+    valid = shrunk.w >= hit.minW;
+  } else {
+    if (draggedCenterY < obstacleCenterY) {
+      shrunk = {
+        x: wr.x,
+        y: dr.y + dr.h,
+        w: wr.w,
+        h: wr.y + wr.h - (dr.y + dr.h),
+      };
+    } else {
+      shrunk = {
+        x: wr.x,
+        y: wr.y,
+        w: wr.w,
+        h: dr.y - wr.y,
+      };
+    }
+    valid = shrunk.h >= hit.minH;
+  }
+  return { obstacleId: hit.id, obstacleRectPx: shrunk, valid };
 }
 
 function findFreeSlot(
@@ -280,18 +385,22 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
     if (!isCanvasReady(c)) return;
     const dx = e.clientX - drag.startPointerX;
     const dy = e.clientY - drag.startPointerY;
+    // During the drag the widget follows the pointer pixel-by-pixel.
+    // We only snap on `endDrag` so movement feels fluid. The visible
+    // dot grid still acts as a reference; the widget eases onto the
+    // nearest snap position once the user releases.
     let nextRect = { ...drag.startRectPx };
     if (drag.kind === "move") {
       nextRect = {
         ...drag.startRectPx,
-        x: snapPx(drag.startRectPx.x + dx),
-        y: snapPx(drag.startRectPx.y + dy),
+        x: drag.startRectPx.x + dx,
+        y: drag.startRectPx.y + dy,
       };
     } else {
       nextRect = {
         ...drag.startRectPx,
-        w: snapPx(drag.startRectPx.w + dx),
-        h: snapPx(drag.startRectPx.h + dy),
+        w: drag.startRectPx.w + dx,
+        h: drag.startRectPx.h + dy,
       };
     }
     nextRect = clampRectToCanvas(nextRect, c, drag.minWPx, drag.minHPx);
@@ -309,6 +418,10 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
       ) {
         return prev;
       }
+      // Overlap is allowed during the drag — the render pass detects
+      // it, shows a preview where the obstacle would be displaced,
+      // and `endDrag` either commits the auto-resize or reverts the
+      // whole gesture if it's not a viable resolution.
       const next = prev.slice();
       next[idx] = { ...cur, ...geom };
       return next;
@@ -321,8 +434,66 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
     dragRef.current = null;
     setDragId(null);
     setWidgets((prev) => {
-      if (prev) persist(prev);
-      return prev;
+      if (!prev) return prev;
+      const c = canvasSizeRef.current;
+      const idx = prev.findIndex((w) => w.id === drag.id);
+      if (idx === -1 || !isCanvasReady(c)) {
+        persist(prev);
+        return prev;
+      }
+      const preview = computeOverlapPreview(prev, drag.id, c);
+
+      // Invalid overlap → revert the whole gesture. The dragged widget
+      // returns to its starting rect; the obstacle was never mutated
+      // in state, only previewed.
+      if (preview && !preview.valid) {
+        const reverted: WidgetInstance = {
+          ...prev[idx],
+          ...rectToPctGeometry(drag.startRectPx, c),
+        };
+        const next = prev.slice();
+        next[idx] = reverted;
+        persist(next);
+        return next;
+      }
+
+      // Valid overlap → commit both the dragged widget AND the shrunk
+      // obstacle. We snap both to the grid before persisting.
+      if (preview && preview.valid) {
+        const snappedDragged = snapWidgetGeometry(prev[idx], c);
+        const obstacleIdx = prev.findIndex((w) => w.id === preview.obstacleId);
+        const next = prev.slice();
+        next[idx] = snappedDragged;
+        if (obstacleIdx !== -1) {
+          const obstacle = prev[obstacleIdx];
+          const draftObstacle: WidgetInstance = {
+            ...obstacle,
+            ...rectToPctGeometry(preview.obstacleRectPx, c),
+          };
+          next[obstacleIdx] = snapWidgetGeometry(draftObstacle, c);
+        }
+        persist(next);
+        return next;
+      }
+
+      // No overlap → Phase 1 behaviour: snap the dragged widget on
+      // release, re-check overlap after snap as a safety net.
+      const snapped = snapWidgetGeometry(prev[idx], c);
+      const snappedRect = resolveWidgetRect(snapped, c);
+      const overlapAfterSnap = prev.some((w, i) => {
+        if (i === idx) return false;
+        const o = resolveWidgetRect(w, c);
+        return (
+          snappedRect.x < o.x + o.w &&
+          snappedRect.x + snappedRect.w > o.x &&
+          snappedRect.y < o.y + o.h &&
+          snappedRect.y + snappedRect.h > o.y
+        );
+      });
+      const next = prev.slice();
+      next[idx] = overlapAfterSnap ? prev[idx] : snapped;
+      persist(next);
+      return next;
     });
   }, [persist]);
 
@@ -355,16 +526,18 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
   const ready = isCanvasReady(canvasSize);
   const renderWidgets = hydrated && widgets !== null && ready;
 
-  // Derive-style snap-to-grid backdrop: visible emerald dots at the
-  // exact `CANVAS_SNAP_PX` spacing so the user can see what their
-  // widgets are aligning to. Slightly brighter than V1 — still subtle
-  // against zinc-950 widgets but legible against the bare canvas.
+  // Derive-style snap-to-grid backdrop: emerald dots sitting exactly
+  // on the snap positions. `radial-gradient(circle, ...)` centers each
+  // dot in the middle of its tile by default, so we shift the
+  // background by `-SNAP/2` on both axes to land the dot centers on
+  // the widget snap grid (0, 32, 64, …) instead of in between.
+  const halfSnap = Math.round(CANVAS_SNAP_PX / 2);
   const backdropStyle: React.CSSProperties = ready
     ? {
         backgroundImage:
           "radial-gradient(circle, rgba(110, 231, 183, 0.22) 1px, transparent 1.4px)",
         backgroundSize: `${CANVAS_SNAP_PX}px ${CANVAS_SNAP_PX}px`,
-        backgroundPosition: "0 0",
+        backgroundPosition: `-${halfSnap}px -${halfSnap}px`,
       }
     : {};
 
@@ -387,6 +560,14 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
     const buffer = CANVAS_SNAP_PX * 4;
     return Math.max(baseline, lowestBottom + buffer);
   }, [widgets, canvasSize]);
+
+  // Overlap preview (Phase 2) — while a drag is in flight, propose a
+  // shrunk rect for any obstacle the dragged widget pushes against.
+  // `null` when nothing is being dragged or there is no overlap.
+  const overlapPreview = useMemo<OverlapPreview | null>(() => {
+    if (!dragId || !widgets) return null;
+    return computeOverlapPreview(widgets, dragId, canvasSize);
+  }, [dragId, widgets, canvasSize]);
 
   return (
     <SelectedOptionProvider>
@@ -453,8 +634,30 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
             ? widgets!.map((w) => {
                 const def = WIDGET_REGISTRY[w.type];
                 if (!def) return null;
-                const rect = resolveWidgetRect(w, canvasSize);
                 const isDragging = dragId === w.id;
+                const isObstacle =
+                  !!overlapPreview && overlapPreview.obstacleId === w.id;
+                // During the drag we render the obstacle at the
+                // proposed shrunk rect so the user *sees* it making
+                // room. Real state isn't touched until endDrag.
+                const rect =
+                  isObstacle && overlapPreview && overlapPreview.valid
+                    ? overlapPreview.obstacleRectPx
+                    : resolveWidgetRect(w, canvasSize);
+                // Visual indicator boxShadow:
+                //   - dragged widget + valid resolution → emerald glow
+                //   - dragged widget + invalid resolution → red glow
+                //   - obstacle being previewed → emerald dashed inset
+                let boxShadow: string | undefined;
+                let outline: string | undefined;
+                if (isDragging && overlapPreview) {
+                  boxShadow = overlapPreview.valid
+                    ? "0 0 0 1px rgb(16 185 129 / 0.6)"
+                    : "0 0 0 1px rgb(239 68 68 / 0.65)";
+                }
+                if (isObstacle && overlapPreview && overlapPreview.valid) {
+                  outline = "1px dashed rgb(16 185 129 / 0.55)";
+                }
                 return (
                   <div
                     key={w.id}
@@ -464,16 +667,31 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
                     data-y-pct={w.yPct.toFixed(4)}
                     data-w-pct={w.wPct.toFixed(4)}
                     data-h-pct={w.hPct.toFixed(4)}
+                    data-overlap-preview={
+                      isDragging && overlapPreview
+                        ? overlapPreview.valid
+                          ? "valid"
+                          : "invalid"
+                        : isObstacle
+                          ? "obstacle"
+                          : undefined
+                    }
                     className="absolute"
                     style={{
                       left: `${rect.x}px`,
                       top: `${rect.y}px`,
                       width: `${rect.w}px`,
                       height: `${rect.h}px`,
-                      zIndex: isDragging ? 30 : 10,
+                      zIndex: isDragging ? 30 : isObstacle ? 20 : 10,
                       willChange: isDragging
                         ? "left, top, width, height"
                         : undefined,
+                      boxShadow,
+                      outline,
+                      outlineOffset: outline ? "-1px" : undefined,
+                      transition: isDragging
+                        ? "none"
+                        : "left 120ms ease-out, top 120ms ease-out, width 120ms ease-out, height 120ms ease-out",
                     }}
                   >
                     <WidgetFrame

@@ -244,17 +244,15 @@ export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] 
       //   │ 72% × 30%                    │            │
       //   └──────────────────────────────┴────────────┘
       return [
-        // Stats top — slim 6% bar.
-        { type: "perps-stats",      xPct: 0,     yPct: 0,     wPct: 1.0,  hPct: 0.06 },
-        // Center dominates: chart 55% + OB/Feed 20% take ~78% of the
-        // vertical space, matching the Derive reference where the
-        // central content dwarfs the surrounding chrome.
-        { type: "perps-chart",      xPct: 0,     yPct: 0.06,  wPct: 0.55, hPct: 0.78 },
-        { type: "perps-book-feed",  xPct: 0.55,  yPct: 0.06,  wPct: 0.20, hPct: 0.78 },
-        // Trade Perps — slimmer 25% column, full height under stats.
-        { type: "perps-trade-form", xPct: 0.75,  yPct: 0.06,  wPct: 0.25, hPct: 0.94 },
-        // Bottom dock — thin 16% strip, only under chart + book/feed.
-        { type: "bottom-dock",      xPct: 0,     yPct: 0.84,  wPct: 0.75, hPct: 0.16 },
+        // Stats are merged INSIDE the chart widget (Derive-style),
+        // so the perps-stats tile is no longer part of the default
+        // seed. Chart + book-feed take the upper 80% of the canvas;
+        // bottom dock fills the lower 20%. Trade Perps spans full
+        // height on the right.
+        { type: "perps-chart",      xPct: 0,     yPct: 0,     wPct: 0.55, hPct: 0.80 },
+        { type: "perps-book-feed",  xPct: 0.55,  yPct: 0,     wPct: 0.20, hPct: 0.80 },
+        { type: "perps-trade-form", xPct: 0.75,  yPct: 0,     wPct: 0.25, hPct: 1.0  },
+        { type: "bottom-dock",      xPct: 0,     yPct: 0.80,  wPct: 0.75, hPct: 0.20 },
       ];
     case "custom-1":
     case "custom-2":

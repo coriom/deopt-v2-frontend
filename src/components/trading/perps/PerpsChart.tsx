@@ -18,6 +18,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
+import { PerpsStatsWidget } from "./PerpsStats";
 
 const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1D"] as const;
 type Timeframe = (typeof TIMEFRAMES)[number];
@@ -89,13 +90,24 @@ export function PerpsChartWidget() {
       data-testid="widget-perps-chart-body"
       className="flex h-full min-h-0 flex-col"
     >
-      <header className="flex items-center justify-between px-2 py-1">
+      {/* Merged stats bandeau (Derive-style) — sits at the top of the
+          chart widget so the workspace doesn't need a separate
+          perps-stats tile under the navbar. */}
+      <div
+        data-testid="widget-perps-chart-stats"
+        className="shrink-0 border-b border-zinc-900"
+      >
+        <PerpsStatsWidget />
+      </div>
+      {/* OHLC ticker + timeframe row. The OHLC values render `—`
+          until the backend exposes a real mark / index feed. */}
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900 px-2 py-1">
         <span
-          data-testid="widget-perps-chart-symbol"
-          className="font-mono text-[11px] text-zinc-400"
+          data-testid="widget-perps-chart-ohlc"
+          className="font-mono text-[10px] text-zinc-500"
           style={{ fontFamily: "var(--app-font-mono)" }}
         >
-          {market.symbol}
+          O — H — L — C —
         </span>
         <div
           role="tablist"
