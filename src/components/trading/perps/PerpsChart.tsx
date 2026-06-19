@@ -101,7 +101,7 @@ export function PerpsChartWidget() {
       </div>
       {/* OHLC ticker + timeframe row. The OHLC values render `—`
           until the backend exposes a real mark / index feed. */}
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900 px-2 py-1">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900 px-2 py-0.5">
         <span
           data-testid="widget-perps-chart-ohlc"
           className="font-mono text-[10px] text-zinc-500"

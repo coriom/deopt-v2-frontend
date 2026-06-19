@@ -228,31 +228,28 @@ export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] 
     case "perps":
       // 3-column layout. The combined Order Book / Perps Feed widget
       // sits between the chart and the trade ticket, with internal
-      // tabs to switch between the two views. The Trade Perps column
-      // spans the full height from under the stats bar down to the
-      // bottom edge — bottom dock only sits under the chart + book/
-      // feed area.
+      // tabs. Both side columns span the full height down to the
+      // bottom edge — bottom dock only sits under the chart.
       //
-      //   ┌──────────────────────────────┬────────────┐
-      //   │ Stats top (100% × 8%)        │            │
-      //   ├──────────────┬───────────────│            │
-      //   │ Chart        │ OB / Feed     │ Trade      │
-      //   │ 50% × 62%    │ 22% × 62%     │ Perps      │
-      //   │              │ (tabs)        │ (full      │
-      //   ├──────────────┴───────────────│  height,   │
-      //   │ Bottom dock                  │  28% × 92%)│
-      //   │ 72% × 30%                    │            │
-      //   └──────────────────────────────┴────────────┘
+      //   ┌──────────────────────┬─────────┬─────────┐
+      //   │ Chart (stats merged) │ OB /    │ Trade   │
+      //   │ 66% × 70%            │ Feed    │ Perps   │
+      //   │                      │ (tabs)  │ (full   │
+      //   │                      │ (full   │  height,│
+      //   ├──────────────────────│  height,│  17%    │
+      //   │ Bottom dock          │  17%    │  × 100%)│
+      //   │ 66% × 30%            │  × 100%)│         │
+      //   └──────────────────────┴─────────┴─────────┘
       return [
         // Stats are merged INSIDE the chart widget (Derive-style),
         // so the perps-stats tile is no longer part of the default
-        // seed. Chart + book-feed take the upper 80% of the canvas;
-        // bottom dock fills the lower 20%. Trade Perps spans full
-        // height on the right.
-        { type: "perps-chart",      xPct: 0,     yPct: 0,     wPct: 0.55, hPct: 0.80 },
-        { type: "perps-book-feed",  xPct: 0.55,  yPct: 0,     wPct: 0.20, hPct: 0.80 },
-        { type: "perps-trade-form", xPct: 0.75,  yPct: 0,     wPct: 0.25, hPct: 1.0  },
-        { type: "bottom-dock",      xPct: 0,     yPct: 0.80,  wPct: 0.75, hPct: 0.20 },
+        // seed. Chart sits top-left with bottom dock under it; both
+        // side columns (OB/Feed and Trade Perps) span the full
+        // height from top to bottom of the canvas.
+        { type: "perps-chart",      xPct: 0,     yPct: 0,     wPct: 0.66, hPct: 0.66 },
+        { type: "perps-book-feed",  xPct: 0.66,  yPct: 0,     wPct: 0.17, hPct: 1.0  },
+        { type: "perps-trade-form", xPct: 0.83,  yPct: 0,     wPct: 0.17, hPct: 1.0  },
+        { type: "bottom-dock",      xPct: 0,     yPct: 0.66,  wPct: 0.66, hPct: 0.34 },
       ];
     case "custom-1":
     case "custom-2":

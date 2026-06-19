@@ -50,8 +50,8 @@ export function PerpsStatsWidget() {
               data-active={active ? "true" : "false"}
               className={
                 active
-                  ? "rounded px-2 py-0.5 text-[12px] font-semibold text-emerald-200"
-                  : "rounded px-2 py-0.5 text-[12px] font-semibold text-zinc-400 hover:text-emerald-200"
+                  ? "rounded px-2 py-0 text-[11px] font-semibold text-emerald-200"
+                  : "rounded px-2 py-0 text-[11px] font-semibold text-zinc-400 hover:text-emerald-200"
               }
             >
               {m.symbol}
@@ -64,13 +64,13 @@ export function PerpsStatsWidget() {
         <div
           key={c.id}
           data-testid={`widget-perps-stat-${c.id}`}
-          className="flex min-w-0 shrink-0 flex-col justify-center gap-0 border-r border-zinc-900 px-3"
+          className="flex min-w-0 shrink-0 flex-col justify-center gap-0 border-r border-zinc-900 px-3 py-0.5"
         >
-          <span className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">
+          <span className="text-[9px] uppercase leading-tight tracking-[0.12em] text-zinc-500">
             {c.label}
           </span>
           <span
-            className="text-[13px] text-zinc-300"
+            className="text-[12px] leading-tight text-zinc-300"
             style={{ fontFamily: "var(--app-font-mono)" }}
           >
             —

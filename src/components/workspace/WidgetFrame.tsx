@@ -25,25 +25,56 @@ export function WidgetFrame({
   onResizeStart,
 }: WidgetFrameProps) {
   const Render = def.Render;
+  // The whole widget acts as a drag handle, but interactive descendants
+  // (buttons, inputs, tabs, links) should NOT start a drag — otherwise
+  // beginDrag's preventDefault() would swallow their click. We gate the
+  // drag start on the event target so internal controls keep working.
+  const handleSectionPointerDown = (e: ReactPointerEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest(
+        'button, input, select, textarea, a, [role="tab"], [role="button"], [data-no-drag]',
+      )
+    ) {
+      return;
+    }
+    onDragStart(e);
+  };
   return (
     <section
       data-testid={`widget-${instance.type}`}
       data-widget-id={instance.id}
       data-widget-implemented={def.implemented ? "true" : "false"}
       aria-label={def.title}
-      className="flex h-full w-full flex-col rounded border border-zinc-900 bg-zinc-950"
+      title={def.title}
+      onPointerDown={handleSectionPointerDown}
+      className="relative flex h-full w-full cursor-move flex-col rounded border border-zinc-900 bg-zinc-950 select-none"
     >
-      <header
+      {/* Full-section drag handle. pointer-events-none so events fall
+          through to <section>; tests still locate it by testid. */}
+      <span
         data-testid={`widget-drag-handle-${instance.id}`}
-        onPointerDown={onDragStart}
-        aria-label={def.title}
-        title={def.title}
-        className="flex shrink-0 cursor-move items-center justify-end gap-2 overflow-hidden px-1 py-0.5 select-none"
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0"
+      />
+      <div
+        data-testid={`widget-body-${instance.type}`}
+        className="deopt-scroll-dark min-h-0 flex-1 overflow-auto"
+      >
+        <Render />
+      </div>
+      {/* Top-right action cluster — aligns with the first row of body
+          content (status badge + close cross). Container is
+          pointer-events-none so empty space passes drags through to
+          the section; only the badge and the button capture clicks. */}
+      <div
+        data-testid={`widget-actions-${instance.id}`}
+        className="pointer-events-none absolute top-1 right-1.5 z-10 flex items-center gap-1.5"
       >
         {!def.implemented ? (
           <span
             data-testid={`widget-status-${instance.type}`}
-            className="shrink-0 rounded border border-emerald-500/30 px-1 py-0 text-[9px] text-emerald-200"
+            className="pointer-events-auto shrink-0 rounded border border-emerald-500/30 bg-zinc-950/80 px-1 py-0 text-[9px] leading-tight text-emerald-200"
           >
             coming later
           </span>
@@ -54,16 +85,10 @@ export function WidgetFrame({
           onClick={onRemove}
           data-testid={`widget-remove-${instance.id}`}
           aria-label="Remove widget"
-          className="shrink-0 rounded border border-transparent px-1 text-[10px] text-zinc-500 hover:border-zinc-700 hover:text-emerald-200"
+          className="pointer-events-auto shrink-0 rounded border border-transparent bg-zinc-950/70 px-1 text-[10px] leading-tight text-zinc-500 hover:border-zinc-700 hover:text-emerald-200"
         >
           ✕
         </button>
-      </header>
-      <div
-        data-testid={`widget-body-${instance.type}`}
-        className="deopt-scroll-dark min-h-0 flex-1 overflow-auto"
-      >
-        <Render />
       </div>
       <div
         data-testid={`widget-resize-handle-${instance.id}`}
