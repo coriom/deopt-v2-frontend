@@ -415,3 +415,71 @@ export interface OptionOrderResponse {
 export type SubmitOptionOrderResponse = OptionOrderResponse & {
   fills: OptionFillResponse[];
 };
+
+// --- OPTIONS-CONDITIONAL-ORDERS-TP-SL-V1 ----------------------------
+// Server-side TP / SL conditional exit orders bound to an existing
+// option position. Backend at `POST /accounts/:address/conditional-orders`.
+//
+// Snake_case wire format mirrors the Rust serde shape exactly.
+
+export type ConditionalType = "take_profit" | "stop_loss";
+export type TriggerSource = "underlying_oracle";
+export type TriggerCondition = "gte" | "lte";
+export type ConditionalExecutionType = "ioc_limit";
+export type PositionSide = "long" | "short";
+export type OptionKind = "call" | "put";
+export type ConditionalOrderStatusValue =
+  | "armed"
+  | "triggering"
+  | "executing"
+  | "completed"
+  | "partially_filled"
+  | "cancelled"
+  | "failed"
+  | "expired";
+
+export interface ConditionalLegRequest {
+  conditional_type: ConditionalType;
+  trigger_price_1e8: DecimalString;
+  limit_price_1e8: DecimalString;
+  /** Optional explicit comparator — must match the server-derived one
+   *  for the (option_kind, position_side, conditional_type) tuple.
+   *  Backend rejects mismatches with `InvalidTriggerDirection`. */
+  trigger_condition?: TriggerCondition;
+}
+
+export interface CreateConditionalOrderRequest {
+  option_series_id: SeriesId;
+  quantity_1e8: DecimalString;
+  legs: ConditionalLegRequest[];
+  /** True ⇒ the two legs share an `oco_group_id`. */
+  link_as_oco?: boolean;
+  expires_at_ms?: number;
+}
+
+export interface ConditionalOrderResponse {
+  id: string;
+  account: EthAddress;
+  option_series_id: SeriesId;
+  position_side: PositionSide;
+  option_kind: OptionKind;
+  conditional_type: ConditionalType;
+  trigger_source: TriggerSource;
+  trigger_condition: TriggerCondition;
+  trigger_price_1e8: DecimalString;
+  quantity_1e8: DecimalString;
+  execution_type: ConditionalExecutionType;
+  limit_price_1e8: DecimalString;
+  reduce_only: boolean;
+  oco_group_id: string | null;
+  status: ConditionalOrderStatusValue;
+  child_order_id: string | null;
+  failure_code: string | null;
+  failure_message: string | null;
+  expires_at_ms: number | null;
+  triggered_at_ms: number | null;
+  completed_at_ms: number | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+  version: number;
+}

@@ -23,7 +23,9 @@
 import { useMemo, useState } from "react";
 import type { OptionLeg, OptionsChainRow } from "@/lib/options-chain-model";
 import { useSelectedOption } from "@/lib/workspace-selected-option";
+import { useWallet } from "@/lib/wallet";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
+import { TpSlManager } from "@/components/trading/TpSlManager";
 
 type TicketMode = "orderbook" | "rfq";
 type Side = "buy" | "sell";
@@ -45,6 +47,7 @@ export function TradeTicketPanel() {
   const { selected } = useSelectedOption();
   const leg = selected?.leg ?? null;
   const row = selected?.row ?? null;
+  const { address } = useWallet();
 
   const instrumentTitle = useMemo(
     () => deriveInstrumentTitle(leg, row),
@@ -78,6 +81,7 @@ export function TradeTicketPanel() {
               key={leg?.seriesId ?? "__no_selection__"}
               initialSeriesId={leg?.seriesId ?? undefined}
             />
+            <TpSlManager address={address} seriesId={leg?.seriesId ?? null} />
           </div>
         ) : (
           <RfqTicketBody

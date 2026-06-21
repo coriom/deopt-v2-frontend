@@ -11,6 +11,8 @@
 
 import type {
   BalancesData,
+  ConditionalOrderResponse,
+  CreateConditionalOrderRequest,
   Envelope,
   ErrorEnvelope,
   ExecutionIntentStatus,
@@ -426,7 +428,7 @@ export function fetchTradingHealth(
  * so the hook layer stays uniform; M-P2c will harmonise.
  */
 async function rawRequest<T>(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   body?: unknown,
   signal?: AbortSignal,
@@ -610,6 +612,52 @@ export function fetchExecutorTransaction(
   return rawRequest<ExecutorTransaction | null>(
     "GET",
     `/executor/transactions/${intentId}`,
+    undefined,
+    signal,
+  );
+}
+
+/**
+ * OPTIONS-CONDITIONAL-ORDERS-TP-SL-V1 — server-side TP / SL.
+ *
+ * The conditional-orders worker evaluates `armed` rows against the
+ * underlying oracle and atomically claims + executes a child IOC
+ * limit order capped to the live reducible position. These calls
+ * just manage the row; they do not trigger anything client-side.
+ */
+export function createConditionalOrders(
+  address: string,
+  body: CreateConditionalOrderRequest,
+  signal?: AbortSignal,
+): Promise<ConditionalOrderResponse[]> {
+  return rawRequest<ConditionalOrderResponse[]>(
+    "POST",
+    `/accounts/${address}/conditional-orders`,
+    body,
+    signal,
+  );
+}
+
+export function listConditionalOrders(
+  address: string,
+  signal?: AbortSignal,
+): Promise<ConditionalOrderResponse[]> {
+  return rawRequest<ConditionalOrderResponse[]>(
+    "GET",
+    `/accounts/${address}/conditional-orders`,
+    undefined,
+    signal,
+  );
+}
+
+export function cancelConditionalOrder(
+  address: string,
+  id: string,
+  signal?: AbortSignal,
+): Promise<ConditionalOrderResponse> {
+  return rawRequest<ConditionalOrderResponse>(
+    "DELETE",
+    `/accounts/${address}/conditional-orders/${id}`,
     undefined,
     signal,
   );
