@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
+import { TifPopover, PostCheckbox, type Tif } from "../TifPopover";
 
 type Side = "long" | "short";
 type Mode = "market" | "limit";
@@ -22,6 +23,8 @@ export function PerpsTradeFormWidget() {
   const [limitPrice, setLimitPrice] = useState<string>("");
   const [leverage, setLeverage] = useState<number>(1);
   const [slippagePct, setSlippagePct] = useState<string>("0.5");
+  const [tif, setTif] = useState<Tif>("GTC");
+  const [postOnly, setPostOnly] = useState(false);
 
   return (
     <div
@@ -142,6 +145,23 @@ export function PerpsTradeFormWidget() {
           className="w-full accent-emerald-500"
         />
       </Field>
+
+      {/* Post-only + Time-In-Force */}
+      <div
+        data-testid="widget-perps-trade-tif-row"
+        className="flex items-center justify-between gap-2"
+      >
+        <PostCheckbox
+          checked={postOnly}
+          onChange={setPostOnly}
+          testid="widget-perps-trade-post"
+        />
+        <TifPopover
+          value={tif}
+          onChange={setTif}
+          testid="widget-perps-trade-tif"
+        />
+      </div>
 
       {/* Summary */}
       <div

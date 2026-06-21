@@ -253,6 +253,15 @@ function Footer() {
           Open the WebSocket sandbox →
         </Link>
       </p>
+      <p>
+        <Link
+          href="/api/orderbook-sandbox"
+          data-testid="developers-console-orderbook-sandbox-link"
+          className="text-emerald-300 underline-offset-2 hover:underline"
+        >
+          Open the options orderbook sandbox (GTC / IOC / FOK / post-only) →
+        </Link>
+      </p>
     </footer>
   );
 }

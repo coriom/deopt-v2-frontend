@@ -193,38 +193,15 @@ test("clicking a Call cell updates the Trade widget instrument title", async ({
   expect(afterTitle).toMatch(/Call/);
 });
 
-test("Trade widget tabs render Payoff / Greeks / Trades / Book", async ({
+test("Trade widget orderbook mode renders the shared DirectOrderbookForm", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/trade");
-  for (const id of ["payoff", "greeks", "trades", "book"]) {
-    await page.getByTestId(`trade-tab-${id}`).click();
-    await expect(
-      page.getByTestId(`trade-panel-content-${id}`),
-    ).toBeVisible();
-  }
-});
-
-test("Greeks tab surfaces an honest local-mock disclaimer", async ({ page }) => {
-  await setupChain(page);
-  await installMockWallet(page);
-  await page.goto("/trade");
-  await page.getByTestId("trade-tab-greeks").click();
-  const greeks = page.getByTestId("trade-greeks-body");
-  await expect(greeks).toBeVisible();
-  await expect(
-    page.getByTestId("trade-greeks-mock-disclaimer"),
-  ).toContainText(/local mock values/i);
-});
-
-test("Payoff tab renders the SVG placeholder", async ({ page }) => {
-  await setupChain(page);
-  await installMockWallet(page);
-  await page.goto("/trade");
-  await page.getByTestId("trade-tab-payoff").click();
-  await expect(page.getByTestId("payoff-svg")).toBeVisible();
+  // Orderbook is the default mode after the V1 redesign.
+  await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
+  await expect(page.getByTestId("direct-orderbook-form")).toBeVisible();
 });
 
 test("backend-unavailable state renders MarketsFallbackCard on /trade", async ({
@@ -279,16 +256,16 @@ test("/trade page DOM has no amber/yellow brand class + no admin/RPC leak", asyn
   expect(html).not.toMatch(/mainnet\.base\.org/);
 });
 
-test("Trade widget exposes the Book/RFQ mode selector", async ({ page }) => {
+test("Trade widget exposes the Orderbook/RFQ mode selector", async ({ page }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/trade");
   const select = page.getByTestId("trade-mode-select");
   await expect(select).toBeVisible();
-  await expect(select).toHaveValue("book");
+  await expect(select).toHaveValue("orderbook");
   await select.selectOption("rfq");
   await expect(page.getByTestId("trade-body-rfq")).toBeVisible();
-  await expect(page.getByTestId("trade-body-book")).toHaveCount(0);
-  await select.selectOption("book");
-  await expect(page.getByTestId("trade-body-book")).toBeVisible();
+  await expect(page.getByTestId("trade-body-orderbook")).toHaveCount(0);
+  await select.selectOption("orderbook");
+  await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
 });

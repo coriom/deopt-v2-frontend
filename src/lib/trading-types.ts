@@ -343,3 +343,75 @@ export interface ExecutorTransaction {
   block_timestamp_ms?: number;
   reverted_reason?: string;
 }
+
+// --- MATCHING-TIF-SEMANTICS-OPTIONS-V1 ------------------------------
+// Direct options orderbook endpoint (`POST /options/orders`). This is
+// the orderbook-direct path that honours `time_in_force` (gtc / ioc /
+// fok) and `post_only`. It is NOT the paired RFQ execution-intent
+// flow used by `TradeTicket.tsx` — that one always behaves as GTC and
+// ignores post-only.
+
+export type OptionOrderTif = "gtc" | "ioc" | "fok";
+
+export type OptionOrderStatusValue =
+  | "open"
+  | "partially_filled"
+  | "filled"
+  | "cancelled"
+  | "rejected"
+  | "expired";
+
+export type OptionOrderSide = "buy" | "sell";
+
+export interface SubmitOptionOrderRequest {
+  option_series_id: SeriesId;
+  account: EthAddress;
+  side: OptionOrderSide;
+  price_1e8: DecimalString;
+  size_1e8: DecimalString;
+  time_in_force: OptionOrderTif;
+  post_only?: boolean;
+  client_order_id?: string;
+  nonce?: number;
+  deadline_ms?: number;
+  signature?: Hex;
+}
+
+export interface OptionFillResponse {
+  fill_id: string;
+  option_series_id: SeriesId;
+  buy_order_id: string;
+  sell_order_id: string;
+  buyer: EthAddress;
+  seller: EthAddress;
+  maker_order_id: string;
+  taker_order_id: string;
+  taker_side: OptionOrderSide;
+  price_1e8: DecimalString;
+  size_1e8: DecimalString;
+  created_at_ms: number;
+}
+
+export interface OptionOrderResponse {
+  order_id: string;
+  option_series_id: SeriesId;
+  account: EthAddress;
+  side: OptionOrderSide;
+  price_1e8: DecimalString;
+  size_1e8: DecimalString;
+  remaining_size_1e8: DecimalString;
+  time_in_force: OptionOrderTif;
+  post_only: boolean;
+  client_order_id?: string | null;
+  nonce?: string | null;
+  deadline_ms?: number | null;
+  signature?: Hex | null;
+  status: OptionOrderStatusValue;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+/** Flattened response — order fields at the top level + `fills` array. */
+export type SubmitOptionOrderResponse = OptionOrderResponse & {
+  fills: OptionFillResponse[];
+};

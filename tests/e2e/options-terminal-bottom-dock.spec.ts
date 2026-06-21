@@ -125,7 +125,7 @@ test("/trade renders the 3-widget default Options workspace", async ({
   await expect(page.getByTestId("widget-bottom-dock")).toBeVisible();
 });
 
-test("/trade Trade widget exposes Payoff/Greeks/Trades/Book tabs", async ({
+test("/trade Trade widget defaults to the orderbook submit form", async ({
   page,
 }) => {
   await setupChain(page);
@@ -133,9 +133,8 @@ test("/trade Trade widget exposes Payoff/Greeks/Trades/Book tabs", async ({
   await page.goto("/trade");
   const trade = page.getByTestId("widget-trade");
   await expect(trade).toBeVisible();
-  for (const id of ["payoff", "greeks", "trades", "book"]) {
-    await expect(trade.getByTestId(`trade-tab-${id}`)).toBeVisible();
-  }
+  await expect(trade.getByTestId("trade-body-orderbook")).toBeVisible();
+  await expect(trade.getByTestId("direct-orderbook-form")).toBeVisible();
 });
 
 test("Payoff and Greeks are NOT default separate widgets on /trade", async ({

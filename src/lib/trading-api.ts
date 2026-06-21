@@ -28,6 +28,8 @@ import type {
   QuotePreview,
   SeriesDetailData,
   SigningPayload,
+  SubmitOptionOrderRequest,
+  SubmitOptionOrderResponse,
   SubmitSignaturesRequest,
   SubmitSignaturesResponse,
   TradingErrorCode,
@@ -609,6 +611,31 @@ export function fetchExecutorTransaction(
     "GET",
     `/executor/transactions/${intentId}`,
     undefined,
+    signal,
+  );
+}
+
+/**
+ * MATCHING-TIF-SEMANTICS-OPTIONS-V1 — submit a direct options
+ * orderbook order. Honours `time_in_force` (gtc/ioc/fok) and
+ * `post_only`. This is the orderbook-direct path; it is NOT the
+ * paired RFQ execution-intent flow used by `TradeTicket.tsx`.
+ *
+ * On 400 the backend returns `{"error": <message>}` — `rawRequest`
+ * rethrows as `TradingApiError` with `message` set to the body's
+ * `error` field, so callers can surface stable messages such as
+ * `fill-or-kill order is not fully fillable`, `post-only order
+ * would immediately match`, and `invalid time-in-force combination:
+ * post-only is not compatible with IOC`.
+ */
+export function submitOptionOrder(
+  body: SubmitOptionOrderRequest,
+  signal?: AbortSignal,
+): Promise<SubmitOptionOrderResponse> {
+  return rawRequest<SubmitOptionOrderResponse>(
+    "POST",
+    `/options/orders`,
+    body,
     signal,
   );
 }
