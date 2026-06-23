@@ -31,6 +31,13 @@ import type {
   ConditionalOrderResponse,
   CreateConditionalOrderRequest,
 } from "@/lib/trading-types";
+import { useWallet } from "@/lib/wallet";
+import {
+  buildAuthorization,
+  canonical,
+  canonicalPayload,
+  cv,
+} from "@/lib/write-auth";
 
 export interface TpSlManagerProps {
   /** Connected wallet address. `null` ⇒ disabled state. */
@@ -40,6 +47,7 @@ export interface TpSlManagerProps {
 }
 
 export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
+  const { signTypedData } = useWallet();
   const [includeTp, setIncludeTp] = useState(true);
   const [includeSl, setIncludeSl] = useState(false);
   const [linkAsOco, setLinkAsOco] = useState(false);
@@ -109,11 +117,39 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
       });
     }
     try {
+      // ACCOUNT-WRITE-AUTH-HARDENING-V1 — bind every field that the
+      // backend's canonical_conditional_order_create() includes, in
+      // the same order, so the digest matches on the server side.
+      const fields: Array<readonly [string, ReturnType<typeof cv.str> | ReturnType<typeof cv.bool> | ReturnType<typeof cv.u128> | ReturnType<typeof cv.addr> | ReturnType<typeof cv.null> | ReturnType<typeof cv.u64>]> = [
+        ["account", cv.addr(address)],
+        ["option_series_id", cv.str(seriesId)],
+        ["quantity_1e8", cv.str(quantity1e8)],
+        ["link_as_oco", cv.bool(ocoEffective)],
+        ["expires_at_ms", cv.null()],
+        ["leg_count", cv.u64(BigInt(legs.length))],
+      ];
+      legs.forEach((leg, idx) => {
+        const prefix = `leg${idx}_`;
+        fields.push([`${prefix}conditional_type`, cv.str(leg.conditional_type)]);
+        fields.push([`${prefix}trigger_price_1e8`, cv.str(leg.trigger_price_1e8)]);
+        fields.push([`${prefix}limit_price_1e8`, cv.str(leg.limit_price_1e8)]);
+        fields.push([
+          `${prefix}trigger_condition`,
+          leg.trigger_condition ? cv.str(leg.trigger_condition) : cv.null(),
+        ]);
+      });
+      const authorization = await buildAuthorization({
+        account: address as `0x${string}`,
+        action: "CONDITIONAL_ORDER_CREATE",
+        canonical: canonicalPayload("CONDITIONAL_ORDER_CREATE", fields),
+        signTypedData,
+      });
       const created = await createConditionalOrders(address, {
         option_series_id: seriesId,
         quantity_1e8: quantity1e8,
         legs,
         link_as_oco: ocoEffective,
+        authorization,
       });
       setOkBanner(
         ocoEffective
@@ -133,7 +169,16 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
   const handleCancel = async (id: string) => {
     if (!address) return;
     try {
-      await cancelConditionalOrder(address, id);
+      const authorization = await buildAuthorization({
+        account: address as `0x${string}`,
+        action: "CONDITIONAL_ORDER_CANCEL",
+        canonical: canonical.conditionalOrderCancel({
+          account: address as `0x${string}`,
+          conditionalOrderId: id,
+        }),
+        signTypedData,
+      });
+      await cancelConditionalOrder(address, id, { authorization });
       await refresh();
     } catch (err) {
       const message =

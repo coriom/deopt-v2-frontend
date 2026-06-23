@@ -10,6 +10,11 @@ import {
   postSignatures,
   TradingApiError,
 } from "@/lib/trading-api";
+import {
+  buildAuthorization,
+  canonicalPayload,
+  cv,
+} from "@/lib/write-auth";
 import { OrderbookPanel } from "./OrderbookPanel";
 import { QuotePreviewCard } from "./QuotePreviewCard";
 import { CreateIntentButton } from "./CreateIntentButton";
@@ -127,11 +132,39 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
     // signature (counterparty) is posted by their UI; the backend
     // composes both before broadcast. The trading UI NEVER triggers
     // broadcast itself.
-    const body =
-      side === "buy"
-        ? { buyer_signature: result.signature }
-        : { seller_signature: result.signature };
+    if (!address) {
+      setPhase("error");
+      setDetail("Wallet disconnected.");
+      return;
+    }
     try {
+      const authorization = await buildAuthorization({
+        account: address,
+        action: "OPTION_EXECUTION_INTENT_SIGNATURE_SUBMIT",
+        canonical: canonicalPayload(
+          "OPTION_EXECUTION_INTENT_SIGNATURE_SUBMIT",
+          [
+            ["submitter", cv.addr(address)],
+            ["intent_id", cv.str(intentId)],
+            ["role", cv.str(side === "buy" ? "buyer" : "seller")],
+          ],
+        ),
+        signTypedData,
+      });
+      const body =
+        side === "buy"
+          ? {
+              submitter: address,
+              role: "buyer" as const,
+              buyer_signature: result.signature,
+              authorization,
+            }
+          : {
+              submitter: address,
+              role: "seller" as const,
+              seller_signature: result.signature,
+              authorization,
+            };
       await postSignatures(intentId, body);
       setPhase("submitted");
       setDetail("Backend accepted the signature. Operator will broadcast.");

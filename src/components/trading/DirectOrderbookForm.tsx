@@ -33,6 +33,8 @@ import type {
   SubmitOptionOrderRequest,
   SubmitOptionOrderResponse,
 } from "@/lib/trading-types";
+import { useWallet } from "@/lib/wallet";
+import { buildAuthorization, canonical } from "@/lib/write-auth";
 import { TifPopover, PostCheckbox, type Tif } from "./TifPopover";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000001" as const;
@@ -52,6 +54,7 @@ export interface DirectOrderbookFormProps {
 export function DirectOrderbookForm({
   initialSeriesId,
 }: DirectOrderbookFormProps = {}) {
+  const { address: walletAddress, isExpectedChain, signTypedData } = useWallet();
   const [seriesId, setSeriesId] = useState(initialSeriesId ?? "");
   const [account, setAccount] = useState<string>(ZERO_ADDRESS);
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -81,16 +84,42 @@ export function DirectOrderbookForm({
     setPhase("submitting");
     setResponse(null);
     setErrorMessage(null);
-    const body: SubmitOptionOrderRequest = {
-      option_series_id: seriesId,
-      account: account as `0x${string}`,
-      side,
-      price_1e8: price1e8,
-      size_1e8: size1e8,
-      time_in_force: tifWire(tif),
-      post_only: postOnly,
-    };
     try {
+      if (!walletAddress) {
+        throw new Error("Connect a wallet to sign the write authorization.");
+      }
+      if (!isExpectedChain) {
+        throw new Error("Switch to Base Sepolia to sign the write authorization.");
+      }
+      if (walletAddress.toLowerCase() !== account.toLowerCase()) {
+        throw new Error(
+          "Account field must match the connected wallet address.",
+        );
+      }
+      const authorization = await buildAuthorization({
+        account: walletAddress,
+        action: "OPTION_ORDER_SUBMIT",
+        canonical: canonical.optionOrderSubmit({
+          account: walletAddress,
+          optionSeriesId: seriesId,
+          side,
+          price1e8,
+          size1e8,
+          timeInForce: tifWire(tif),
+          postOnly,
+        }),
+        signTypedData,
+      });
+      const body: SubmitOptionOrderRequest = {
+        option_series_id: seriesId,
+        account: walletAddress,
+        side,
+        price_1e8: price1e8,
+        size_1e8: size1e8,
+        time_in_force: tifWire(tif),
+        post_only: postOnly,
+        authorization,
+      };
       const res = await submitOptionOrder(body);
       setResponse(res);
       setPhase("ok");

@@ -653,12 +653,13 @@ export function listConditionalOrders(
 export function cancelConditionalOrder(
   address: string,
   id: string,
+  body: { authorization: import("./write-auth").AuthorizationEnvelope },
   signal?: AbortSignal,
 ): Promise<ConditionalOrderResponse> {
   return rawRequest<ConditionalOrderResponse>(
     "DELETE",
     `/accounts/${address}/conditional-orders/${id}`,
-    undefined,
+    body,
     signal,
   );
 }

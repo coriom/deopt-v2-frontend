@@ -312,8 +312,13 @@ export interface SigningPayload {
 }
 
 export interface SubmitSignaturesRequest {
+  submitter: EthAddress;
+  role: "buyer" | "seller";
   buyer_signature?: Hex;
   seller_signature?: Hex;
+  /** ACCOUNT-WRITE-AUTH-HARDENING-V1 — write authorization envelope.
+   * Build via `src/lib/write-auth.ts::buildAuthorization`. */
+  authorization: import("./write-auth").AuthorizationEnvelope;
 }
 
 export interface SubmitSignaturesResponse {
@@ -375,6 +380,9 @@ export interface SubmitOptionOrderRequest {
   nonce?: number;
   deadline_ms?: number;
   signature?: Hex;
+  /** ACCOUNT-WRITE-AUTH-HARDENING-V1 — write authorization envelope.
+   * Build via `src/lib/write-auth.ts::buildAuthorization`. */
+  authorization: import("./write-auth").AuthorizationEnvelope;
 }
 
 export interface OptionFillResponse {
@@ -455,6 +463,9 @@ export interface CreateConditionalOrderRequest {
   /** True ⇒ the two legs share an `oco_group_id`. */
   link_as_oco?: boolean;
   expires_at_ms?: number;
+  /** ACCOUNT-WRITE-AUTH-HARDENING-V1 — write authorization envelope.
+   * Build via `src/lib/write-auth.ts::buildAuthorization`. */
+  authorization: import("./write-auth").AuthorizationEnvelope;
 }
 
 export interface ConditionalOrderResponse {

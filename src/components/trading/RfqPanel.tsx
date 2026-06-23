@@ -9,6 +9,11 @@ import {
   TradingApiError,
 } from "@/lib/trading-api";
 import {
+  buildAuthorization,
+  canonicalPayload,
+  cv,
+} from "@/lib/write-auth";
+import {
   SigningStateModal,
   type SigningPhase,
 } from "@/components/tx/SigningStateModal";
@@ -61,11 +66,34 @@ export function RfqPanel({ seriesId }: { seriesId: string | null }) {
     }
     setPhase("submitting");
     setDetail("Posting signature…");
+    if (!address) {
+      setPhase("error");
+      setDetail("Wallet disconnected.");
+      return;
+    }
     try {
       // RFQ envelope is buyer or seller depending on role; backend
       // tells us which via `expected_signer`. UI posts buyer_signature
       // by default; counterparty submits the other side via their own UI.
-      await postSignatures(intentId, { buyer_signature: res.signature });
+      const authorization = await buildAuthorization({
+        account: address,
+        action: "OPTION_EXECUTION_INTENT_SIGNATURE_SUBMIT",
+        canonical: canonicalPayload(
+          "OPTION_EXECUTION_INTENT_SIGNATURE_SUBMIT",
+          [
+            ["submitter", cv.addr(address)],
+            ["intent_id", cv.str(intentId)],
+            ["role", cv.str("buyer")],
+          ],
+        ),
+        signTypedData,
+      });
+      await postSignatures(intentId, {
+        submitter: address,
+        role: "buyer",
+        buyer_signature: res.signature,
+        authorization,
+      });
       setPhase("submitted");
       setDetail("Backend accepted the RFQ signature.");
     } catch (e) {
