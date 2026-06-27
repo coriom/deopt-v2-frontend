@@ -24,8 +24,8 @@ import { useMemo, useState } from "react";
 import type { OptionLeg, OptionsChainRow } from "@/lib/options-chain-model";
 import { useSelectedOption } from "@/lib/workspace-selected-option";
 import { useWallet } from "@/lib/wallet";
+import { AccountLifecyclePanel } from "@/components/trading/AccountLifecyclePanel";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
-import { OpenOrdersPanel } from "@/components/trading/OpenOrdersPanel";
 import { TpSlManager } from "@/components/trading/TpSlManager";
 
 type TicketMode = "orderbook" | "rfq";
@@ -83,7 +83,7 @@ export function TradeTicketPanel() {
               initialSeriesId={leg?.seriesId ?? undefined}
             />
             <TpSlManager address={address} seriesId={leg?.seriesId ?? null} />
-            <OpenOrdersPanel address={address} />
+            <AccountLifecyclePanel address={address} />
           </div>
         ) : (
           <RfqTicketBody

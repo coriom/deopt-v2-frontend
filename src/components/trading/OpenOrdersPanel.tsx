@@ -1,18 +1,14 @@
 "use client";
 
-// ORDER-LIFECYCLE-OBSERVABILITY-V1 — Open Orders panel.
+// FRONTEND-LIFECYCLE-OBSERVABILITY-V1 — Open Orders panel.
 //
-// Real REST-backed table of the connected wallet's option orders. Polls
-// `GET /options/orders?account=...` every 5 seconds and exposes a
-// per-row cancel button that calls `POST /options/orders/:id/cancel`
-// with a freshly-signed `OPTION_ORDER_CANCEL` write-authorization
-// envelope. Live WS deltas on `account.orders` (already emitted by the
-// backend) will be wired client-side in a follow-up — until then the
-// 5 s poll + REST recovery path are the canonical source of truth.
+// REST snapshot (canonical source of truth) + live `account.orders`
+// lifecycle deltas applied on top. The per-row cancel button builds a
+// fresh EIP-712 `OPTION_ORDER_CANCEL` envelope. Reconnect triggers a
+// REST resync via the `resyncToken` from `useLifecycleStream`.
 //
-// No mock rows. No fake statuses. Empty state and error state are
-// surfaced explicitly so the user can distinguish "no orders yet"
-// from "the backend is unreachable".
+// No mock rows. No fake statuses. Empty / loading / error / disconnected
+// states are surfaced explicitly.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -23,6 +19,9 @@ import {
 } from "@/lib/trading-api";
 import { useWallet } from "@/lib/wallet";
 import { buildAuthorization, canonical } from "@/lib/write-auth";
+import { useLifecycleStream } from "@/hooks/useLifecycleStream";
+import type { LifecycleEvent } from "@/lib/lifecycle-types";
+import { LifecycleStatusBadge } from "./LifecycleStatusBadge";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -33,6 +32,7 @@ export interface OpenOrdersPanelProps {
 
 export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
   const { isExpectedChain, signTypedData } = useWallet();
+  const { status, statusDetail, resyncToken, subscribe } = useLifecycleStream();
   const [orders, setOrders] = useState<OptionOrderRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelInFlight, setCancelInFlight] = useState<string | null>(null);
@@ -73,6 +73,40 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
     };
   }, [address, refresh]);
 
+  // Reconnect → trigger an immediate REST resync to bridge any missed deltas.
+  useEffect(() => {
+    if (resyncToken === 0 || !address) return;
+    void refresh();
+  }, [resyncToken, address, refresh]);
+
+  // Apply `account.orders` deltas: merge into local state by order_id.
+  useEffect(() => {
+    if (!address) return;
+    const unsubscribe = subscribe("account.orders", (event: LifecycleEvent) => {
+      if (event.payload.type !== "order_updated") return;
+      const delta = event.payload;
+      setOrders((prev) => {
+        if (prev === null) return prev;
+        const idx = prev.findIndex((o) => o.order_id === delta.order_id);
+        if (idx < 0) {
+          // Unknown id — refetch will pick it up on next poll or
+          // on the resync triggered by reconnect. Don't fabricate a row.
+          return prev;
+        }
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          status: delta.status,
+          remaining_size_1e8: delta.remaining_size_1e8,
+          size_1e8: delta.size_1e8,
+          updated_at_ms: event.emitted_at_ms,
+        };
+        return updated;
+      });
+    });
+    return unsubscribe;
+  }, [address, subscribe]);
+
   const handleCancel = async (orderId: string, account: string) => {
     if (!isExpectedChain) {
       setCancelError("Switch to Base Sepolia to sign the cancel envelope.");
@@ -110,14 +144,17 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-300">
           Open orders
         </h3>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={!address}
-          className="rounded border border-zinc-800 bg-black/40 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-emerald-500/40 disabled:opacity-40"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <LifecycleStatusBadge status={status} detail={statusDetail} />
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={!address}
+            className="rounded border border-zinc-800 bg-black/40 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-emerald-500/40 disabled:opacity-40"
+          >
+            Refresh
+          </button>
+        </div>
       </header>
 
       {!address ? (

@@ -64,6 +64,17 @@ export interface WalletState {
   connect: () => Promise<void>;
   disconnect: () => void;
   signTypedData: (args: SignTypedDataArgs) => Promise<SignResult>;
+  /**
+   * FRONTEND-LIFECYCLE-OBSERVABILITY-V1 — EIP-191 personal-sign for
+   * the public-WS auth handshake (`auth.challenge` / `auth.verify`).
+   * Returns the same `SignResult` shape as `signTypedData` so callers
+   * have one error-handling path.
+   *
+   * NEVER logs the message bytes, the returned signature, or any
+   * intermediate viem result. The wallet provider's own UX is what
+   * shows the user what they're signing.
+   */
+  signMessage: (message: string) => Promise<SignResult>;
 }
 
 const Ctx = createContext<WalletState | null>(null);
@@ -196,6 +207,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [walletClient, address, isMainnet, isExpectedChain],
   );
 
+  const signMessage = useCallback(
+    async (message: string): Promise<SignResult> => {
+      if (!walletClient || !address) {
+        return { ok: false, reason: "no_provider" };
+      }
+      if (isMainnet || !isExpectedChain) {
+        return { ok: false, reason: "wrong_network" };
+      }
+      try {
+        const sig = await walletClient.signMessage({
+          account: address,
+          message,
+        });
+        return { ok: true, signature: sig as `0x${string}` };
+      } catch (e: unknown) {
+        const msg = (e as { message?: string }).message ?? "signature failed";
+        const code = (e as { code?: number }).code;
+        if (code === 4001) {
+          return { ok: false, reason: "rejected", message: msg };
+        }
+        return { ok: false, reason: "error", message: msg };
+      }
+    },
+    [walletClient, address, isMainnet, isExpectedChain],
+  );
+
   return (
     <Ctx.Provider
       value={{
@@ -209,6 +246,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         connect,
         disconnect,
         signTypedData,
+        signMessage,
       }}
     >
       {children}
