@@ -688,3 +688,77 @@ export function submitOptionOrder(
     signal,
   );
 }
+
+// ORDER-LIFECYCLE-OBSERVABILITY-V1 — account-scoped lifecycle reads.
+// The backend filters by `account` query param (case-insensitive on
+// the address). These return the same DB rows the `account.*` private
+// WS channels surface; the UI uses them both for initial render and as
+// the canonical recovery path after a missed WS event / reconnect.
+
+export interface OptionOrderRow {
+  order_id: string;
+  option_series_id: string;
+  account: string;
+  side: "buy" | "sell";
+  price_1e8: string;
+  size_1e8: string;
+  remaining_size_1e8: string;
+  time_in_force: string;
+  post_only: boolean;
+  client_order_id?: string | null;
+  status: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface OptionFillRow {
+  fill_id: string;
+  option_series_id: string;
+  buy_order_id: string;
+  sell_order_id: string;
+  buyer: string;
+  seller: string;
+  taker_side: "buy" | "sell";
+  price_1e8: string;
+  size_1e8: string;
+  created_at_ms: number;
+}
+
+export function listAccountOptionOrders(
+  account: string,
+  signal?: AbortSignal,
+): Promise<OptionOrderRow[]> {
+  const qs = new URLSearchParams({ account: account.toLowerCase() });
+  return rawRequest<OptionOrderRow[]>(
+    "GET",
+    `/options/orders?${qs.toString()}`,
+    undefined,
+    signal,
+  );
+}
+
+export function listAccountOptionFills(
+  account: string,
+  signal?: AbortSignal,
+): Promise<OptionFillRow[]> {
+  const qs = new URLSearchParams({ account: account.toLowerCase() });
+  return rawRequest<OptionFillRow[]>(
+    "GET",
+    `/options/fills?${qs.toString()}`,
+    undefined,
+    signal,
+  );
+}
+
+export function cancelOptionOrder(
+  orderId: string,
+  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  signal?: AbortSignal,
+): Promise<OptionOrderRow> {
+  return rawRequest<OptionOrderRow>(
+    "POST",
+    `/options/orders/${orderId}/cancel`,
+    body,
+    signal,
+  );
+}

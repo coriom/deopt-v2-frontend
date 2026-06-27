@@ -1,0 +1,234 @@
+"use client";
+
+// ORDER-LIFECYCLE-OBSERVABILITY-V1 — Open Orders panel.
+//
+// Real REST-backed table of the connected wallet's option orders. Polls
+// `GET /options/orders?account=...` every 5 seconds and exposes a
+// per-row cancel button that calls `POST /options/orders/:id/cancel`
+// with a freshly-signed `OPTION_ORDER_CANCEL` write-authorization
+// envelope. Live WS deltas on `account.orders` (already emitted by the
+// backend) will be wired client-side in a follow-up — until then the
+// 5 s poll + REST recovery path are the canonical source of truth.
+//
+// No mock rows. No fake statuses. Empty state and error state are
+// surfaced explicitly so the user can distinguish "no orders yet"
+// from "the backend is unreachable".
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  cancelOptionOrder,
+  listAccountOptionOrders,
+  TradingApiError,
+  type OptionOrderRow,
+} from "@/lib/trading-api";
+import { useWallet } from "@/lib/wallet";
+import { buildAuthorization, canonical } from "@/lib/write-auth";
+
+const POLL_INTERVAL_MS = 5_000;
+
+export interface OpenOrdersPanelProps {
+  /** Connected wallet address. `null` ⇒ disabled state. */
+  address: string | null;
+}
+
+export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
+  const { isExpectedChain, signTypedData } = useWallet();
+  const [orders, setOrders] = useState<OptionOrderRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cancelInFlight, setCancelInFlight] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const refresh = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!address) return;
+      try {
+        const rows = await listAccountOptionOrders(address, signal);
+        // Stable sort: most-recent first.
+        rows.sort((a, b) => b.created_at_ms - a.created_at_ms);
+        setOrders(rows);
+        setError(null);
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") return;
+        const message =
+          err instanceof TradingApiError ? err.message : (err as Error).message;
+        setError(message);
+      }
+    },
+    [address],
+  );
+
+  useEffect(() => {
+    if (!address) {
+      setOrders(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    void refresh(ctrl.signal);
+    const handle = window.setInterval(() => {
+      void refresh();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      ctrl.abort();
+      window.clearInterval(handle);
+    };
+  }, [address, refresh]);
+
+  const handleCancel = async (orderId: string, account: string) => {
+    if (!isExpectedChain) {
+      setCancelError("Switch to Base Sepolia to sign the cancel envelope.");
+      return;
+    }
+    setCancelInFlight(orderId);
+    setCancelError(null);
+    try {
+      const authorization = await buildAuthorization({
+        account: account as `0x${string}`,
+        action: "OPTION_ORDER_CANCEL",
+        canonical: canonical.optionOrderCancel({
+          account: account as `0x${string}`,
+          orderId,
+        }),
+        signTypedData,
+      });
+      await cancelOptionOrder(orderId, { authorization });
+      await refresh();
+    } catch (err) {
+      const message =
+        err instanceof TradingApiError ? err.message : (err as Error).message;
+      setCancelError(message);
+    } finally {
+      setCancelInFlight(null);
+    }
+  };
+
+  return (
+    <section
+      data-testid="open-orders-panel"
+      className="flex flex-col gap-2 rounded border border-zinc-800 bg-black/60 p-3 text-zinc-200"
+    >
+      <header className="flex items-center justify-between border-b border-zinc-900 pb-1">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-300">
+          Open orders
+        </h3>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          disabled={!address}
+          className="rounded border border-zinc-800 bg-black/40 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-emerald-500/40 disabled:opacity-40"
+        >
+          Refresh
+        </button>
+      </header>
+
+      {!address ? (
+        <p
+          data-testid="open-orders-disconnected"
+          className="text-[11px] text-zinc-500"
+        >
+          Connect a wallet to view your open option orders.
+        </p>
+      ) : error ? (
+        <p
+          data-testid="open-orders-error"
+          className="text-[11px] text-rose-400"
+          role="alert"
+        >
+          Failed to load orders: {error}
+        </p>
+      ) : orders === null ? (
+        <p
+          data-testid="open-orders-loading"
+          className="text-[11px] text-zinc-500"
+        >
+          Loading orders…
+        </p>
+      ) : orders.length === 0 ? (
+        <p
+          data-testid="open-orders-empty"
+          className="text-[11px] text-zinc-500"
+        >
+          No open orders. Submit one via the trade ticket and it will appear here.
+        </p>
+      ) : (
+        <table className="w-full text-[11px]" data-testid="open-orders-table">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+              <th className="py-1">Series</th>
+              <th className="py-1">Side</th>
+              <th className="py-1 text-right">Price</th>
+              <th className="py-1 text-right">Size</th>
+              <th className="py-1 text-right">Remaining</th>
+              <th className="py-1">TIF</th>
+              <th className="py-1">Status</th>
+              <th className="py-1" />
+            </tr>
+          </thead>
+          <tbody>
+            {orders.map((o) => {
+              const cancelable =
+                o.status === "open" || o.status === "partially_filled";
+              return (
+                <tr
+                  key={o.order_id}
+                  data-testid="open-orders-row"
+                  data-order-id={o.order_id}
+                  data-status={o.status}
+                  className="border-t border-zinc-900"
+                >
+                  <td
+                    className="truncate py-1 pr-2 font-mono text-[10px] text-zinc-400"
+                    title={o.option_series_id}
+                  >
+                    {o.option_series_id.slice(0, 14)}…
+                  </td>
+                  <td
+                    data-side={o.side}
+                    className={`py-1 pr-2 ${o.side === "buy" ? "text-emerald-300" : "text-rose-300"}`}
+                  >
+                    {o.side}
+                  </td>
+                  <td className="py-1 pr-2 text-right font-mono text-zinc-200">
+                    {o.price_1e8}
+                  </td>
+                  <td className="py-1 pr-2 text-right font-mono text-zinc-200">
+                    {o.size_1e8}
+                  </td>
+                  <td className="py-1 pr-2 text-right font-mono text-zinc-400">
+                    {o.remaining_size_1e8}
+                  </td>
+                  <td className="py-1 pr-2 uppercase tracking-[0.12em] text-zinc-400">
+                    {o.time_in_force}
+                  </td>
+                  <td className="py-1 pr-2">{o.status}</td>
+                  <td className="py-1 text-right">
+                    {cancelable && (
+                      <button
+                        type="button"
+                        onClick={() => void handleCancel(o.order_id, o.account)}
+                        disabled={cancelInFlight === o.order_id}
+                        data-testid="open-orders-cancel"
+                        className="rounded border border-rose-500/30 px-2 py-0.5 text-[10px] text-rose-200 hover:border-rose-400/60 hover:text-rose-100 disabled:opacity-40"
+                      >
+                        {cancelInFlight === o.order_id ? "…" : "Cancel"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {cancelError && (
+        <p
+          data-testid="open-orders-cancel-error"
+          className="text-[11px] text-rose-400"
+          role="alert"
+        >
+          Cancel failed: {cancelError}
+        </p>
+      )}
+    </section>
+  );
+}
