@@ -40,6 +40,20 @@ function deriveOrderReason(item) {
   const status = (item.status ?? "").toLowerCase();
   if (status === "" || NO_REASON.has(status)) return null;
   if (!TERMINAL_NON_SUCCESS.has(status)) return null;
+  // HISTORY-V2-TERMINAL-REASONS-V1 — persisted backend reason wins.
+  const persisted = (item.terminal_reason_code ?? "").trim();
+  if (persisted.length > 0) {
+    const r = resolveReason(persisted);
+    const rowMessage = clamp(item.terminal_reason_message);
+    const source = (item.terminal_reason_source ?? "").trim();
+    const out = {
+      code: persisted,
+      message: rowMessage ?? r.message,
+      severity: r.severity,
+    };
+    if (source.length > 0) out.source = source;
+    return out;
+  }
   const tif = (item.order_type ?? "").toLowerCase();
   const postOnly = item.post_only === true;
   const sized = parseAmount(item.amount);
@@ -212,4 +226,121 @@ test("trades/fills row with status=filled has NO derived order reason (success)"
   // A fill row always carries status=filled; we must NOT label it as
   // failed even if the parent order later had an IOC remainder cancel.
   assert.equal(deriveOrderReason({ status: "filled", order_type: "ioc" }), null);
+});
+
+// ---------- HISTORY-V2-TERMINAL-REASONS-V1: persisted backend reason ----------
+
+test("persisted user_cancelled wins for a GTC cancelled row (where inference would say bare `cancelled`)", () => {
+  const r = deriveOrderReason({
+    status: "cancelled",
+    order_type: "gtc",
+    terminal_reason_code: "user_cancelled",
+    terminal_reason_source: "user",
+  });
+  assert.equal(r.code, "user_cancelled");
+  assert.equal(r.severity, "info");
+  assert.equal(r.source, "user");
+});
+
+test("persisted reason wins even when TIF inference would have chosen a different code", () => {
+  // Row looks like an IOC cancelled with unfilled remainder (would
+  // otherwise infer `ioc_remainder_cancelled`), but backend says it
+  // was a user cancel — backend MUST win.
+  const r = deriveOrderReason({
+    status: "cancelled",
+    order_type: "ioc",
+    amount: "100",
+    filled: "30",
+    terminal_reason_code: "user_cancelled",
+    terminal_reason_source: "user",
+  });
+  assert.equal(r.code, "user_cancelled");
+  assert.equal(r.source, "user");
+});
+
+test("persisted ioc_remainder_cancelled tagged with source `tif_policy`", () => {
+  const r = deriveOrderReason({
+    status: "cancelled",
+    order_type: "ioc",
+    amount: "100",
+    filled: "30",
+    terminal_reason_code: "ioc_remainder_cancelled",
+    terminal_reason_source: "tif_policy",
+  });
+  assert.equal(r.code, "ioc_remainder_cancelled");
+  assert.equal(r.source, "tif_policy");
+});
+
+test("persisted unknown code renders raw token + warning severity (no fabrication)", () => {
+  const r = deriveOrderReason({
+    status: "cancelled",
+    order_type: "gtc",
+    terminal_reason_code: "future_unknown_code",
+    terminal_reason_source: "system",
+  });
+  assert.equal(r.code, "future_unknown_code");
+  assert.equal(r.severity, "warning");
+  assert.equal(r.message, "future_unknown_code");
+  assert.equal(r.source, "system");
+});
+
+test("persisted row prefers terminal_reason_message over the table fallback when present", () => {
+  const r = deriveOrderReason({
+    status: "cancelled",
+    order_type: "gtc",
+    terminal_reason_code: "user_cancelled",
+    terminal_reason_message: "cancelled from /options ticket",
+    terminal_reason_source: "user",
+  });
+  assert.equal(r.code, "user_cancelled");
+  assert.equal(r.message, "cancelled from /options ticket");
+});
+
+test("persisted reason on a SUCCESSFUL row is still suppressed (success has no failure)", () => {
+  // The terminal_reason_code field would be a backend bug here, but
+  // the helper's contract is "never invent a reason for success".
+  assert.equal(
+    deriveOrderReason({
+      status: "filled",
+      order_type: "gtc",
+      terminal_reason_code: "user_cancelled",
+    }),
+    null,
+  );
+});
+
+test("no persisted reason → TIF inference still applies (legacy rows continue to render)", () => {
+  // Pre-migration rows have NULL terminal_reason_* fields; the
+  // fallback inference must still produce the IOC-remainder label.
+  const r = deriveOrderReason({
+    status: "cancelled",
+    order_type: "ioc",
+    amount: "100",
+    filled: "30",
+  });
+  assert.equal(r.code, "ioc_remainder_cancelled");
+  assert.equal(r.source, undefined);
+});
+
+test("persisted reason without source omits the source field on the returned reason", () => {
+  const r = deriveOrderReason({
+    status: "cancelled",
+    order_type: "gtc",
+    terminal_reason_code: "user_cancelled",
+  });
+  assert.equal(r.code, "user_cancelled");
+  assert.equal(r.source, undefined);
+});
+
+test("long persisted terminal_reason_message is clamped to <= 240 chars", () => {
+  const long = "y".repeat(400);
+  const r = deriveOrderReason({
+    status: "cancelled",
+    order_type: "gtc",
+    terminal_reason_code: "user_cancelled",
+    terminal_reason_message: long,
+    terminal_reason_source: "user",
+  });
+  assert.ok(r.message.length <= 240);
+  assert.ok(r.message.endsWith("…"));
 });

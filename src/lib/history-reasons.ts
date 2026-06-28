@@ -1,28 +1,24 @@
-// HISTORY-V2-FAILURE-REASONS-V1 — pure helpers that map order /
-// conditional-order outcomes to a small, user-facing reason model.
+// HISTORY-V2-FAILURE-REASONS-V1 / HISTORY-V2-TERMINAL-REASONS-V1 —
+// pure helpers that map order / conditional-order outcomes to a small,
+// user-facing reason model.
 //
-// Important honest-data invariant: regular options orders do NOT
-// persist an explicit `cancel_reason` / `failure_code` column in the
-// `option_orders` table (see `migrations/0013_option_orders.sql`).
-// The matching engine surfaces stable rejection messages
-// synchronously at submit time — those orders never enter the
-// database, so we cannot recover them from history. For orders that
-// DO land in the table and later terminate, the only history-visible
-// signals we have are:
+// As of HISTORY-V2-TERMINAL-REASONS-V1 the backend persists a real
+// terminal reason on `option_orders` for the two transitions whose
+// cause is known at write-time: user cancel (`user_cancelled`) and
+// IOC remainder cancel (`ioc_remainder_cancelled`). When
+// `HistoryV2Item.terminal_reason_code` is present, the helper uses
+// that token + the optional `terminal_reason_message` /
+// `terminal_reason_source` directly.
 //
-//   * `status` (open / partially_filled / filled / cancelled /
-//     rejected / failed / expired)
-//   * `time_in_force` (gtc / ioc / fok), exposed via
-//     `HistoryV2Item.order_type` for the Orders tab
-//   * `post_only` (boolean), surfaced via `HistoryV2Item.post_only`
-//     in HISTORY-V2-FAILURE-REASONS-V1
-//
-// `deriveOrderReason` infers a user-facing label from those three
-// signals only; it NEVER fabricates a reason for a successful or
-// active order. The returned `code` is a safe canonical token (no
-// secrets, no DB identifiers). The conditional-order path delegates
-// to `failure_code` / `failure_message` which the backend already
-// persists explicitly.
+// Pre-persistence rejections (post-only would cross, FOK not
+// fillable, matching rejections) are still NOT recoverable from
+// history — they error synchronously at submit time and no row is
+// ever inserted. Equally, rows written BEFORE migration 0030 carry
+// NULL reason fields. For both of those cases the helper falls back
+// to TIF-derived inference from the historical signals we DO have on
+// the row (`status` + `order_type` (=TIF) + `post_only`). It NEVER
+// fabricates a reason for a successful or active order. The returned
+// `code` is always a safe canonical token (no secrets, no DB ids).
 
 import type { HistoryV2Item } from "./trading-api";
 
@@ -34,6 +30,14 @@ export interface HistoryReason {
   /** Pre-formatted user-facing label. */
   message: string;
   severity: ReasonSeverity;
+  /**
+   * Where the terminal transition was authored, when known. Only set
+   * for rows whose reason was persisted by the backend (i.e. NOT for
+   * rows whose reason came from TIF fallback inference). Surfaced on
+   * the DOM as `data-reason-source` for debuggability and to let
+   * tests pin the persisted-vs-inferred distinction.
+   */
+  source?: string;
 }
 
 /**
@@ -157,15 +161,38 @@ function parseAmount(s: string | undefined): bigint | null {
  * function NEVER returns a reason for a successful or active order;
  * a `null` return means "show `—`" in the UI.
  *
- * The TIF (`item.order_type`) and the post-only flag
- * (`item.post_only`) refine the message; the status alone is the
- * fallback. We never invent context the row doesn't carry.
+ * Priority (HISTORY-V2-TERMINAL-REASONS-V1):
+ *   1. `item.terminal_reason_code` — persisted backend reason. Wins
+ *      whenever it is present, even if TIF-inference would have
+ *      chosen a different code. The `source` field is carried
+ *      through.
+ *   2. TIF-derived inference from `status` + `order_type` + `post_only`
+ *      — used for rows written before migration 0030 (which left the
+ *      persisted fields NULL) and as a safety net for any
+ *      terminal-non-success row whose backend reason wasn't stamped.
+ *
+ * We never invent context the row doesn't carry.
  */
 export function deriveOrderReason(item: HistoryV2Item): HistoryReason | null {
   const status = (item.status ?? "").toLowerCase();
   if (status === "" || NO_REASON_STATUSES.has(status)) return null;
   if (!TERMINAL_NON_SUCCESS_STATUSES.has(status)) return null;
 
+  // 1) Persisted backend reason wins.
+  const persistedCode = (item.terminal_reason_code ?? "").trim();
+  if (persistedCode.length > 0) {
+    const { message: tableMessage, severity } = resolveReason(persistedCode);
+    const rowMessage = clampMessage(item.terminal_reason_message);
+    const source = (item.terminal_reason_source ?? "").trim();
+    return {
+      code: persistedCode,
+      message: rowMessage ?? tableMessage,
+      severity,
+      ...(source.length > 0 ? { source } : {}),
+    };
+  }
+
+  // 2) Fallback inference for legacy rows / pre-persistence outcomes.
   const tif = (item.order_type ?? "").toLowerCase();
   const postOnly = item.post_only === true;
   const sized = parseAmount(item.amount);

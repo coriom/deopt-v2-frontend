@@ -150,6 +150,7 @@ function renderReasonCell(reason: HistoryReason | null): React.ReactNode {
     <span
       data-reason-code={reason.code}
       data-reason-severity={reason.severity}
+      {...(reason.source ? { "data-reason-source": reason.source } : {})}
       title={reason.message}
       className={reasonClass(reason.severity)}
     >

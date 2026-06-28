@@ -332,6 +332,15 @@ export interface HistoryV2Item {
   // "Post-only would immediately match" / "IOC remainder cancelled"
   // / etc. label for terminal-non-success rows.
   post_only?: boolean;
+  // HISTORY-V2-TERMINAL-REASONS-V1 — persisted terminal reason fields.
+  // When present the frontend uses these in preference to TIF-derived
+  // inference. `terminal_reason_code` is a snake_case token
+  // (`user_cancelled`, `ioc_remainder_cancelled`, …);
+  // `terminal_reason_source` records where the transition was authored
+  // (`user`, `tif_policy`, `system`).
+  terminal_reason_code?: string;
+  terminal_reason_message?: string;
+  terminal_reason_source?: string;
 }
 
 export interface HistoryV2Data {
