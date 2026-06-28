@@ -2,7 +2,7 @@
  * terminal-shell.spec.ts — FRONTEND-PIXEL-CANVAS-WORKSPACE-V6
  *
  * Covers the full-screen terminal shell:
- *   - /trade, /perps, /custom render `trading-main-terminal` (no
+ *   - /options, /perps, /custom render `trading-main-terminal` (no
  *     marketing-style max-width gutter)
  *   - No PublicBetaFooter on terminal routes
  *   - Non-terminal trading routes (/, /markets, /portfolio) still
@@ -17,7 +17,7 @@ import { installMockWallet } from "./wallet-fixture";
 // dense table can use the full viewport (no marketing footer).
 // FRONTEND-BACKEND-LEADERBOARD-V1: /leaderboard joined for the same reason.
 const TERMINAL_ROUTES = [
-  "/trade",
+  "/options",
   "/perps",
   "/custom",
   "/markets",

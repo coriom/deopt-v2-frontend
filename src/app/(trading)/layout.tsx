@@ -22,7 +22,7 @@ interface NavItem {
 }
 
 const PRIMARY_NAV: NavItem[] = [
-  { testid: "navbar-link-options",      label: "Options",        href: "/trade" },
+  { testid: "navbar-link-options",      label: "Options",        href: "/options" },
   { testid: "navbar-link-perps",        label: "Perps",          href: "/perps" },
   { testid: "navbar-link-markets",      label: "Markets",        href: "/markets" },
   { testid: "navbar-link-rfq-strategy", label: "RFQ/Strategy",   href: "/rfq-strategy" },

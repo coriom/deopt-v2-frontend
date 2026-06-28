@@ -5,16 +5,33 @@
  * the WalletProvider in `src/lib/wallet.tsx` sees `window.ethereum`
  * just like in a real browser session.
  *
- * **No real private keys.** No real signing — `eth_signTypedData_v4`
- * returns a deterministic mock signature shape `0x` + 130 hex chars.
- * Configurable via Playwright `page.evaluate` to simulate:
- *   - connected vs disconnected (`window.__deoptMockWallet.setAccount(...)`)
- *   - chain id changes (`...setChainId(...)`)
- *   - user rejection (`...setNextSignReject(true)`)
- *   - wrong network (`...setChainId(8453)` triggers MainnetDisabledBanner)
+ * **No real private keys for funded accounts.** The fixture uses the
+ * well-known anvil[0] dev key (public, never holds real funds) so the
+ * `personal_sign` flow can produce a signature that recovers to the
+ * test account address. The key is constant + dev-only + never used
+ * outside this fixture; the file never logs the key or signatures.
+ *
+ * Capabilities:
+ *
+ *   - `eth_requestAccounts`, `eth_accounts`, `eth_chainId`,
+ *     `wallet_switchEthereumChain`
+ *   - `eth_signTypedData_v4`, `eth_signTypedData` — return a
+ *     deterministic 65-byte mock signature shape; existing write-auth
+ *     tests rely on this. The backend's EIP-712 validator runs as a
+ *     unit test against real signatures, not in these browser specs.
+ *   - `personal_sign` — produces a REAL EIP-191 secp256k1 signature
+ *     that recovers to the test account. The signer runs Node-side
+ *     via `page.exposeFunction` so we don't bundle crypto into the
+ *     browser-injected init script.
+ *
+ * Configurable via:
+ *   - `window.__deoptMockWallet.setAccount(addr | null)`
+ *   - `window.__deoptMockWallet.setChainId(id)`
+ *   - `window.__deoptMockWallet.setNextSignReject(true)`
  */
 
 import { Page } from "@playwright/test";
+import { privateKeyToAccount } from "viem/accounts";
 
 export interface MockWalletConfig {
   account?: `0x${string}`;
@@ -22,16 +39,31 @@ export interface MockWalletConfig {
   signatureRejected?: boolean;
 }
 
-export const DEFAULT_TEST_ACCOUNT: `0x${string}` =
-  "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // anvil[0] public address; well-known dev key, no funds
+// Anvil[0] — well-known, public, dev-only deterministic key. Used by
+// every Hardhat / Anvil / Foundry test in the world. Never holds real
+// funds. Required because EIP-191 `personal_sign` must produce a
+// signature that recovers to the test wallet address; a fabricated
+// signature like `0x12…` would fail any verifier the test might add.
+const TEST_PRIVATE_KEY =
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
+const TEST_ACCOUNT = privateKeyToAccount(TEST_PRIVATE_KEY);
+
+export const DEFAULT_TEST_ACCOUNT: `0x${string}` = TEST_ACCOUNT.address;
 export const ANVIL_CHAIN_ID = 31337;
 export const BASE_SEPOLIA_CHAIN_ID = 84532;
 export const BASE_MAINNET_CHAIN_ID = 8453;
 
-const MOCK_SIGNATURE =
+const MOCK_TYPED_SIGNATURE =
   "0x" +
   "12".repeat(64) +
-  "1c"; /* v = 28; total = 132 chars = 65 bytes hex-encoded with 0x prefix */
+  "1c"; /* v = 28; 65 bytes hex-encoded = 132 chars after 0x */
+
+// Page-scoped guard so `installMockWallet` can be called more than
+// once per page without re-registering the exposed function (which
+// would throw `Function "__deoptPersonalSign" has been already
+// registered`). Playwright doesn't expose a "is this name already
+// registered" check, so we track it ourselves via a WeakSet of pages.
+const exposedPages = new WeakSet<Page>();
 
 export async function installMockWallet(
   page: Page,
@@ -41,9 +73,26 @@ export async function installMockWallet(
   const chainId = cfg.chainId ?? ANVIL_CHAIN_ID;
   const signatureRejected = !!cfg.signatureRejected;
 
+  // Node-side EIP-191 signer. The browser will call this via
+  // `page.exposeFunction` whenever the WalletProvider issues a
+  // `personal_sign` (which viem's `walletClient.signMessage` does).
+  if (!exposedPages.has(page)) {
+    await page.exposeFunction(
+      "__deoptPersonalSign",
+      async (message: string): Promise<`0x${string}`> => {
+        return TEST_ACCOUNT.signMessage({ message });
+      },
+    );
+    exposedPages.add(page);
+  }
+
   await page.addInitScript(
-    ({ account, chainId, signatureRejected, MOCK_SIGNATURE }) => {
-      // Listener registry for `eth.on(...)`.
+    ({
+      account,
+      chainId,
+      signatureRejected,
+      MOCK_TYPED_SIGNATURE,
+    }) => {
       type Handler = (...args: unknown[]) => void;
       const listeners: Map<string, Handler[]> = new Map();
 
@@ -56,6 +105,15 @@ export async function installMockWallet(
       const emit = (event: string, payload: unknown) => {
         (listeners.get(event) ?? []).forEach((h) => h(payload));
       };
+
+      function hexToUtf8(hex: string): string {
+        const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+        const bytes = new Uint8Array(clean.length / 2);
+        for (let i = 0; i < bytes.length; i++) {
+          bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+        }
+        return new TextDecoder().decode(bytes);
+      }
 
       const provider = {
         async request(args: { method: string; params?: unknown[] }) {
@@ -82,7 +140,37 @@ export async function installMockWallet(
                 err.code = 4001;
                 throw err;
               }
-              return MOCK_SIGNATURE;
+              return MOCK_TYPED_SIGNATURE;
+            }
+            case "personal_sign": {
+              if (state.signatureRejected) {
+                const err: Error & { code?: number } = new Error(
+                  "User rejected the request.",
+                );
+                err.code = 4001;
+                throw err;
+              }
+              // EIP-1193 spec: `personal_sign(message, address)`. viem's
+              // `walletClient.signMessage` hex-encodes the UTF-8
+              // message before dispatching, so we decode it back here
+              // and pass the original string to the Node-side signer
+              // so the produced signature recovers to the test account.
+              const messageHex = args.params?.[0];
+              if (typeof messageHex !== "string") {
+                throw new Error("personal_sign expected a hex string message");
+              }
+              const message = /^0x[0-9a-fA-F]*$/.test(messageHex)
+                ? hexToUtf8(messageHex)
+                : messageHex;
+              const exposed = (window as unknown as {
+                __deoptPersonalSign?: (m: string) => Promise<`0x${string}`>;
+              }).__deoptPersonalSign;
+              if (!exposed) {
+                throw new Error(
+                  "test signer __deoptPersonalSign is not exposed on this page",
+                );
+              }
+              return await exposed(message);
             }
             default:
               return null;
@@ -102,7 +190,6 @@ export async function installMockWallet(
         },
       };
 
-      // Inject as both window.ethereum and a control surface.
       (window as unknown as { ethereum: typeof provider }).ethereum =
         provider;
       (window as unknown as { __deoptMockWallet: object }).__deoptMockWallet =
@@ -120,6 +207,6 @@ export async function installMockWallet(
           },
         };
     },
-    { account, chainId, signatureRejected, MOCK_SIGNATURE },
+    { account, chainId, signatureRejected, MOCK_TYPED_SIGNATURE },
   );
 }

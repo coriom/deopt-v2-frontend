@@ -11,6 +11,7 @@
  *   - linked to `/api/sandbox` for the live WebSocket sandbox
  */
 import { test, expect } from "@playwright/test";
+import { expectNoPositiveClaimsOrLeaks } from "./copy-claims";
 
 test("/api renders the simplified Developers landing", async ({ page }) => {
   await page.goto("/api");
@@ -150,12 +151,7 @@ test("/api never claims mainnet/audited/production-ready/safe-for-real-funds", a
   page,
 }) => {
   await page.goto("/api");
-  const html = await page.content();
-  expect(html).not.toMatch(/\baudited\b/i);
-  expect(html).not.toMatch(/mainnet[- ]ready/i);
-  expect(html).not.toMatch(/production[- ]ready/i);
-  expect(html).not.toMatch(/safe for real funds/i);
-  expect(html).not.toMatch(/\bguaranteed\b/i);
+  await expectNoPositiveClaimsOrLeaks(page);
 });
 
 test("/api never exposes admin / bearer / RPC / DB URLs", async ({ page }) => {

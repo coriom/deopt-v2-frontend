@@ -10,7 +10,10 @@ import { PublicBetaFooter } from "@/components/PublicBetaFooter";
  *   - PublicBetaFooter is NOT rendered
  *   - Workspace widgets can resize all the way to the right edge
  *
- * /trade, /perps, /custom: full modular workspaces.
+ * /options, /perps, /custom: full modular workspaces. (`/trade` is
+ *                          kept as a server-side redirect to
+ *                          `/options` for backwards compatibility —
+ *                          see OPTIONS-ROUTE-RENAMING-V1.)
  * /markets, /portfolio:    trading utility surfaces with their own
  *                          dense layouts; the bottom marketing footer
  *                          is unwanted here per operator feedback.
@@ -24,6 +27,7 @@ import { PublicBetaFooter } from "@/components/PublicBetaFooter";
  * "page mode" with the original max-w-screen-2xl + footer.
  */
 const TERMINAL_ROUTES = [
+  "/options",
   "/trade",
   "/perps",
   "/custom",

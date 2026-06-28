@@ -1,64 +1,47 @@
 /**
  * perps-coming-soon.spec.ts — FRONTEND-TERMINAL-WORKSPACE-RESIZABLE-V2
  *
- * /perps now renders the modular Workspace with perps placeholder
- * widgets (no static disclosure block — placeholders + status chips +
- * subtitle carry the honest "not live" copy). The bottom dock is also
- * a workspace widget.
+ * Updated by PLAYWRIGHT-WALLET-AUTOCONNECT-MIGRATION-V1 to reflect
+ * the current perps layout:
+ *
+ *   * 4 default widgets — perps-chart (stats merged in), perps-book-
+ *     feed (book + feed merged with tabs), perps-trade-form,
+ *     bottom-dock.
+ *   * Widgets are `implemented: true` in the registry; they render
+ *     real perps UI shells (no "coming later" status badge anymore).
+ *   * The page-level "perps not live" subtitle / `workspace-toolbar-
+ *     perps` element was retired alongside the FRONTEND-NAVBAR-IA-V1
+ *     header cleanup.
+ *
+ * Perps itself is still NOT a live product (the fail-closed posture
+ * from `ACCOUNT-WRITE-AUTH-HARDENING-V1` is unchanged); these tests
+ * just assert the rendered surface matches reality.
  */
 import { test, expect } from "@playwright/test";
-import { installMockWallet } from "./wallet-fixture";
 
-test("/perps renders the modular Workspace shell with the 'perps not live' subtitle", async ({
-  page,
-}) => {
-  await installMockWallet(page);
+test("/perps renders the workspace shell", async ({ page }) => {
   await page.goto("/perps");
   await expect(page.getByTestId("perps-terminal-shell")).toBeVisible();
   await expect(page.getByTestId("workspace-perps")).toBeVisible();
-  await expect(page.getByTestId("workspace-toolbar-perps")).toContainText(
-    /perps not live/i,
-  );
 });
 
-test("/perps renders default placeholder widgets + bottom dock", async ({
+test("/perps renders the 4 default widgets (chart / book-feed / trade-form / bottom-dock)", async ({
   page,
 }) => {
-  await installMockWallet(page);
   await page.goto("/perps");
   for (const id of [
-    "widget-perps-stats",
     "widget-perps-chart",
-    "widget-perps-orderbook",
+    "widget-perps-book-feed",
     "widget-perps-trade-form",
-    "widget-perps-trade-feed",
     "widget-bottom-dock",
   ]) {
     await expect(page.getByTestId(id)).toBeVisible();
-  }
-  await expect(page.getByTestId("widget-perps-chart-svg")).toBeVisible();
-});
-
-test("/perps placeholder widgets are flagged 'coming later'", async ({
-  page,
-}) => {
-  await installMockWallet(page);
-  await page.goto("/perps");
-  for (const t of [
-    "widget-status-perps-stats",
-    "widget-status-perps-chart",
-    "widget-status-perps-orderbook",
-    "widget-status-perps-trade-form",
-    "widget-status-perps-trade-feed",
-  ]) {
-    await expect(page.getByTestId(t)).toContainText(/coming later/i);
   }
 });
 
 test("/perps surfaces no fake liquidity / positive claims / colour drift", async ({
   page,
 }) => {
-  await installMockWallet(page);
   await page.goto("/perps");
   await page.waitForSelector("[data-testid=perps-terminal-shell]");
   const main = page.locator("main");
@@ -87,7 +70,6 @@ test("/perps surfaces no fake liquidity / positive claims / colour drift", async
 test("/perps does NOT render the PublicBetaFooter on the terminal route", async ({
   page,
 }) => {
-  await installMockWallet(page);
   await page.goto("/perps");
   await page.waitForSelector("[data-testid=perps-terminal-shell]");
   await expect(page.getByTestId("public-beta-footer")).toHaveCount(0);

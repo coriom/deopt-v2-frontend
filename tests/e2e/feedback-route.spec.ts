@@ -112,15 +112,20 @@ test("/feedback does not fire any network requests on form submit", async ({
   await page.getByTestId("feedback-copy-button").click();
   // Allow a short delay for any deferred network activity.
   await page.waitForTimeout(500);
-  // Filter out anything that's clearly not a feedback-submission attempt.
+  // Filter out anything that's clearly not a feedback-submission
+  // attempt. Next.js prefetches and RSC fetches against `/feedback`
+  // appear as `/feedback?_rsc=...` (or `_rsc` payload requests) —
+  // those are internal navigation, NOT a form submission.
   const submission = seen.filter(
     (u) =>
-      u.includes("/api/") ||
-      u.includes("/feedback") ||
-      u.includes("formspree") ||
-      u.includes("typeform") ||
-      u.includes("tally") ||
-      u.includes("mailto:"),
+      (u.includes("/api/") ||
+        u.includes("/feedback") ||
+        u.includes("formspree") ||
+        u.includes("typeform") ||
+        u.includes("tally") ||
+        u.includes("mailto:")) &&
+      !u.includes("?_rsc=") &&
+      !u.includes("&_rsc="),
   );
   expect(
     submission,

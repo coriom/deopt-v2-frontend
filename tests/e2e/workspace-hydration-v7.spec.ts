@@ -31,7 +31,7 @@ test("canvas-ready flag flips true once the workspace is measured", async ({
 test("default Options layout renders 3 readable widgets at 1920×1080", async ({
   page,
 }) => {
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
   await expect(page.getByTestId("widget-trade")).toBeVisible();
   await expect(page.getByTestId("widget-bottom-dock")).toBeVisible();
@@ -53,13 +53,14 @@ test("default Options layout renders 3 readable widgets at 1920×1080", async ({
 test("default Perps layout renders every placeholder widget without collapse", async ({
   page,
 }) => {
+  // Default perps layout was simplified: stats merge INSIDE the chart
+  // widget and the orderbook + trade-feed merge into one `perps-book-
+  // feed` tabbed widget. See workspace/registry.tsx.
   await page.goto("/perps");
   for (const type of [
-    "perps-stats",
     "perps-chart",
-    "perps-orderbook",
+    "perps-book-feed",
     "perps-trade-form",
-    "perps-trade-feed",
     "bottom-dock",
   ]) {
     const w = page.getByTestId(`widget-${type}`);
@@ -254,7 +255,7 @@ test("Saved bucket carries the V8 version field", async ({ page }) => {
 test("V7 buckets carrying the legacy `option-details` type are dropped on load", async ({
   page,
 }) => {
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("widget-trade")).toBeVisible();
   // Plant a V7 bucket with the old type and reload.
   await page.evaluate(() => {

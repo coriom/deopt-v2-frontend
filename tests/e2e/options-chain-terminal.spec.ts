@@ -1,7 +1,7 @@
 /**
  * options-chain-terminal.spec.ts — refreshed for FRONTEND-TRADE-WIDGET-V1
  *
- * Covers /trade options-chain terminal:
+ * Covers /options options-chain terminal:
  *   - chain structure (Calls | Strike | Puts) headers
  *   - clicking an option updates the right `trade` widget instrument title
  *   - the Trade widget exposes Payoff / Greeks / Trades / Book tabs
@@ -157,12 +157,12 @@ async function setupChain(page: import("@playwright/test").Page) {
   await mockSeries(page, SERIES_PUT_3000, PRODUCT_PUT, false, "300000000000");
 }
 
-test("/trade renders the chain structure (Calls | Strike | Puts)", async ({
+test("/options renders the chain structure (Calls | Strike | Puts)", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("options-chain-grid")).toBeVisible();
   // Header columns.
   await expect(page.getByText("Calls", { exact: false }).first()).toBeVisible();
@@ -175,7 +175,7 @@ test("clicking a Call cell updates the Trade widget instrument title", async ({
 }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   // The trade widget is visible up-front, with a placeholder instrument
   // until a chain row is picked.
   await expect(page.getByTestId("widget-trade")).toBeVisible();
@@ -198,13 +198,13 @@ test("Trade widget orderbook mode renders the shared DirectOrderbookForm", async
 }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   // Orderbook is the default mode after the V1 redesign.
   await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
   await expect(page.getByTestId("direct-orderbook-form")).toBeVisible();
 });
 
-test("backend-unavailable state renders MarketsFallbackCard on /trade", async ({
+test("backend-unavailable state renders MarketsFallbackCard on /options", async ({
   page,
 }) => {
   await page.route("**/options/products*", (route) =>
@@ -218,16 +218,16 @@ test("backend-unavailable state renders MarketsFallbackCard on /trade", async ({
     }),
   );
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("markets-fallback-card")).toBeVisible();
 });
 
-test("/trade page contains no fake liquidity / no positive claims", async ({
+test("/options page contains no fake liquidity / no positive claims", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await page.waitForSelector("[data-testid=options-chain-grid]");
   const text = await page.locator("main").innerText();
   expect(text).not.toMatch(/\bis audited\b/i);
@@ -238,12 +238,12 @@ test("/trade page contains no fake liquidity / no positive claims", async ({
   expect(text).not.toMatch(/\binstitutional-grade\b/i);
 });
 
-test("/trade page DOM has no amber/yellow brand class + no admin/RPC leak", async ({
+test("/options page DOM has no amber/yellow brand class + no admin/RPC leak", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await page.waitForSelector("[data-testid=options-chain-grid]");
   const html = await page.locator("main").innerHTML();
   expect(html).not.toMatch(/class="[^"]*\bamber-/);
@@ -259,7 +259,7 @@ test("/trade page DOM has no amber/yellow brand class + no admin/RPC leak", asyn
 test("Trade widget exposes the Orderbook/RFQ mode selector", async ({ page }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const select = page.getByTestId("trade-mode-select");
   await expect(select).toBeVisible();
   await expect(select).toHaveValue("orderbook");

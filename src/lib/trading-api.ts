@@ -326,6 +326,12 @@ export interface HistoryV2Item {
   size?: string;
   liquidation_price?: string;
   penalty?: string;
+  // HISTORY-V2-FAILURE-REASONS-V1 — only populated on the Orders tab;
+  // the frontend `deriveOrderReason` helper combines this with
+  // `status` and `order_type` (= TIF) to surface a user-facing
+  // "Post-only would immediately match" / "IOC remainder cancelled"
+  // / etc. label for terminal-non-success rows.
+  post_only?: boolean;
 }
 
 export interface HistoryV2Data {

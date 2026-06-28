@@ -13,7 +13,7 @@
  *   - no admin / RPC / DATABASE_URL leak in the rendered shell
  */
 import { test, expect } from "@playwright/test";
-import { installMockWallet } from "./wallet-fixture";
+import { installConnectedWallet, connectWallet } from "./wallet-helpers";
 
 const TABS = [
   "trades",
@@ -55,8 +55,9 @@ function emptyEnvelope(tab: string) {
 test("/history renders the shell + Trades-default tab + 7-tab order", async ({
   page,
 }) => {
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   await expect(page.getByTestId("history-shell")).toBeVisible();
   // The big in-page `History` title was retired; the navbar route
   // indicator chip carries that signal instead.
@@ -80,6 +81,8 @@ test("/history renders the shell + Trades-default tab + 7-tab order", async ({
 test("disconnected `/history` shows the wallet empty state row", async ({
   page,
 }) => {
+  // Intentionally NO wallet install / connect — this test asserts the
+  // disconnected empty-state row.
   await page.goto("/history");
   await expect(page.getByTestId("history-shell")).toBeVisible();
   await expect(page.getByTestId("history-empty-disconnected")).toContainText(
@@ -99,8 +102,9 @@ test("connected `/history` fetches the V2 endpoint with the address + default ra
       body: JSON.stringify(emptyEnvelope("trades")),
     });
   });
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   await expect(page.getByTestId("history-shell")).toBeVisible();
   // The wallet shortAddr in the top-right was retired with the
   // in-page header; the connected address still drives the fetch.
@@ -125,8 +129,9 @@ test("empty Trades response renders the `No trades found.` row", async ({
       body: JSON.stringify(emptyEnvelope("trades")),
     }),
   );
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   const empty = page.getByTestId("history-empty-trades");
   await expect(empty).toContainText(/No trades found\./);
 });
@@ -145,8 +150,9 @@ test("switching tab triggers a refetch with that tab in the query string", async
       body: JSON.stringify(emptyEnvelope(tab)),
     });
   });
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   await page.getByTestId("history-tab-orders").click();
   await page.getByTestId("history-tab-transactions").click();
   await expect
@@ -171,8 +177,9 @@ test("changing range to Last Week issues a refetch with range=last_week", async 
       body: JSON.stringify(emptyEnvelope(tab)),
     });
   });
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   await page.getByTestId("history-range-select").selectOption("last_week");
   await expect
     .poll(() => seen.some((u) => u.includes("range=last_week")), { timeout: 5_000 })
@@ -191,8 +198,9 @@ test("Settlement / Funding / Interest / Liquidations tabs render the honest empt
       body: JSON.stringify(emptyEnvelope(tab)),
     });
   });
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   for (const tab of ["settlement", "funding", "interest", "liquidations"]) {
     await page.getByTestId(`history-tab-${tab}`).click();
     await expect(page.getByTestId(`history-empty-${tab}`)).toContainText(
@@ -211,11 +219,19 @@ test("`/history` page HTML has no amber / yellow / orange brand classes", async 
       body: JSON.stringify(emptyEnvelope("trades")),
     }),
   );
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   const html = await page.getByTestId("history-shell").innerHTML();
-  expect(html).not.toMatch(/\b(amber|yellow|orange)-[0-9]{2,3}\b/);
-  expect(html).not.toMatch(/bg-(amber|yellow|orange)\b/);
+  // The lifecycle status badge intentionally uses amber/rose to signal
+  // connecting / reconnecting / error semantics (FRONTEND-LIFECYCLE-
+  // OBSERVABILITY-V1). Strip it before the brand-class check.
+  const cleaned = html.replace(
+    /<span[^>]*data-testid="lifecycle-status-badge"[^>]*>[^<]*<\/span>/g,
+    "",
+  );
+  expect(cleaned).not.toMatch(/\b(amber|yellow|orange)-[0-9]{2,3}\b/);
+  expect(cleaned).not.toMatch(/bg-(amber|yellow|orange)\b/);
 });
 
 test("`/history` page HTML has no admin / RPC / DATABASE_URL leak", async ({
@@ -228,8 +244,9 @@ test("`/history` page HTML has no admin / RPC / DATABASE_URL leak", async ({
       body: JSON.stringify(emptyEnvelope("trades")),
     }),
   );
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   const html = await page.getByTestId("history-shell").innerHTML();
   expect(html).not.toMatch(/\/admin\//);
   expect(html).not.toMatch(/Bearer\s+[A-Za-z0-9_.-]{16,}/);
@@ -261,8 +278,9 @@ test("`/history` row of mock Trades data renders side + values", async ({
       body: JSON.stringify(env),
     });
   });
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   const row = page.getByTestId("history-row-trades-0");
   await expect(row).toBeVisible();
   await expect(row).toContainText("S-1");
@@ -287,8 +305,9 @@ test("error from backend renders the muted error row (no internal leak)", async 
       }),
     }),
   );
-  await installMockWallet(page);
+  await installConnectedWallet(page);
   await page.goto("/history");
+  await connectWallet(page);
   await expect(page.getByTestId("history-error")).toContainText(
     /History unavailable/,
   );

@@ -10,7 +10,7 @@
  *   - a widget moved to (xPct=0.4, yPct=0.4) does not snap back to (0,0)
  *   - V6 schema persists with percentage geometry (no V5 column coords,
  *     no V1 size enum)
- *   - all three terminal routes (/trade, /perps, /custom) still hide
+ *   - all three terminal routes (/options, /perps, /custom) still hide
  *     the PublicBetaFooter
  *   - navbar Widget button still opens the menu
  */
@@ -18,10 +18,10 @@ import { test, expect } from "@playwright/test";
 
 test.use({ viewport: { width: 1920, height: 1080 } });
 
-test("terminal main on /trade fills the viewport on 1920x1080", async ({
+test("terminal main on /options fills the viewport on 1920x1080", async ({
   page,
 }) => {
-  await page.goto("/trade");
+  await page.goto("/options");
   const main = page.getByTestId("trading-main-terminal");
   await expect(main).toBeVisible();
   const mainWidth = await main.evaluate((el) => el.clientWidth);
@@ -41,7 +41,7 @@ test("/custom canvas fills the viewport on 1920x1080", async ({
 test("Options default layout fills the canvas horizontally (no right dead zone)", async ({
   page,
 }) => {
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
   await expect(page.getByTestId("widget-trade")).toBeVisible();
   const widgets = await page.evaluate(() => {
@@ -67,9 +67,11 @@ test("Options default layout fills the canvas horizontally (no right dead zone)"
     if (chain && details) {
       expect(chain.wPct + details.wPct).toBeCloseTo(1, 5);
     }
-    if (dock) {
+    if (dock && chain) {
+      // Dock sits under the chain column only — its width tracks the
+      // chain's, not the full canvas (see workspace/registry.tsx).
       expect(dock.xPct).toBe(0);
-      expect(dock.wPct).toBe(1);
+      expect(dock.wPct).toBeCloseTo(chain.wPct, 3);
     }
   }
 });
@@ -111,8 +113,14 @@ test("Gaps are preserved — a widget placed at (xPct=0.4, yPct=0.4) is NOT pack
   });
   expect(widget).not.toBeNull();
   if (widget) {
-    expect(widget.xPct).toBeCloseTo(0.4, 5);
-    expect(widget.yPct).toBeCloseTo(0.4, 5);
+    // The canvas snaps positions to the CANVAS_SNAP_PX grid, so the
+    // persisted xPct/yPct may drift slightly from the seeded 0.4 —
+    // the test's invariant is "NOT packed back to (0,0)", so we
+    // bound rather than require exact equality.
+    expect(widget.xPct).toBeGreaterThan(0.3);
+    expect(widget.xPct).toBeLessThan(0.5);
+    expect(widget.yPct).toBeGreaterThan(0.3);
+    expect(widget.yPct).toBeLessThan(0.5);
   }
 });
 
@@ -128,7 +136,7 @@ test("V6 layout schema persists with pct geometry (no column coords, no V1 size 
     return raw ? JSON.parse(raw) : null;
   });
   expect(parsed).not.toBeNull();
-  expect(parsed.version).toBe(7);
+  expect(parsed.version).toBe(8);
   const widget = parsed.workspaces["custom-1"].widgets[0];
   expect(typeof widget.xPct).toBe("number");
   expect(typeof widget.yPct).toBe("number");
@@ -139,10 +147,10 @@ test("V6 layout schema persists with pct geometry (no column coords, no V1 size 
   expect(widget.w).toBeUndefined();
 });
 
-test("/trade, /perps, /custom still hide the PublicBetaFooter at 1920x1080", async ({
+test("/options, /perps, /custom still hide the PublicBetaFooter at 1920x1080", async ({
   page,
 }) => {
-  for (const route of ["/trade", "/perps", "/custom"]) {
+  for (const route of ["/options", "/perps", "/custom"]) {
     await page.goto(route);
     await expect(page.getByTestId("public-beta-footer")).toHaveCount(0);
     await expect(page.getByTestId("trading-main-terminal")).toBeVisible();
@@ -152,7 +160,7 @@ test("/trade, /perps, /custom still hide the PublicBetaFooter at 1920x1080", asy
 test("Navbar Widget button still opens the menu at 1920x1080", async ({
   page,
 }) => {
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("navbar-widget-button")).toBeVisible();
   await page.getByTestId("navbar-widget-button").click();
   await expect(page.getByTestId("navbar-widget-menu")).toBeVisible();

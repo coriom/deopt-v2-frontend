@@ -189,7 +189,7 @@ function RowActions({ symbol }: { symbol: string }) {
         Perps
       </Link>
       <Link
-        href={`/trade?underlying=${encodeURIComponent(underlying)}`}
+        href={`/options?underlying=${encodeURIComponent(underlying)}`}
         data-testid={`fundings-action-options-${symbol}`}
         className="rounded border border-zinc-800 bg-black/40 px-2 py-0.5 text-[11px] text-zinc-200 hover:border-emerald-500/40 hover:text-emerald-200"
       >

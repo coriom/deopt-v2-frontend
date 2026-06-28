@@ -24,7 +24,7 @@ import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
 
 const PRIMARY_NAV_ORDER = [
-  { testid: "navbar-link-options",      href: "/trade",         label: "Options" },
+  { testid: "navbar-link-options",      href: "/options",       label: "Options" },
   { testid: "navbar-link-perps",        href: "/perps",         label: "Perps" },
   { testid: "navbar-link-markets",      href: "/markets",       label: "Markets" },
   { testid: "navbar-link-rfq-strategy", href: "/rfq-strategy",  label: "RFQ/Strategy" },
@@ -49,7 +49,7 @@ const DRAWER_ORDER = [
 ];
 
 const DRAWER_HREFS: Record<string, string> = {
-  options: "/trade",
+  options: "/options",
   perps: "/perps",
   markets: "/markets",
   "rfq-strategy": "/rfq-strategy",
@@ -122,7 +122,7 @@ test("right-side controls are exactly [Widget, Connect wallet] in that order", a
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const actions = page.getByTestId("terminal-navbar-actions");
   await expect(actions).toBeVisible();
   const widget = actions.getByTestId("navbar-widget-button");
@@ -253,8 +253,23 @@ test("navbar HTML carries no amber/yellow/orange brand classes", async ({
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const html = await page.getByTestId("terminal-navbar").innerHTML();
   expect(html).not.toMatch(/\b(amber|yellow|orange)-[0-9]{2,3}\b/);
   expect(html).not.toMatch(/bg-(amber|yellow|orange)\b/);
+});
+
+// OPTIONS-ROUTE-RENAMING-V1 — `/trade` was renamed to `/options`. The
+// `/trade` URL must keep working (server-side redirect) so bookmarks,
+// previously-shared links and old landing-page CTAs don't 404. This
+// test is the one we explicitly KEEP using `/trade` — anywhere else
+// in this suite that used `/trade` was migrated to `/options`.
+test("legacy /trade URL still resolves (redirects to /options shell)", async ({
+  page,
+}) => {
+  await installMockWallet(page);
+  const response = await page.goto("/trade");
+  expect(response?.status() ?? 0).toBeLessThan(400);
+  await expect(page).toHaveURL(/\/options(\?|$)/);
+  await expect(page.getByTestId("options-shell")).toBeVisible();
 });

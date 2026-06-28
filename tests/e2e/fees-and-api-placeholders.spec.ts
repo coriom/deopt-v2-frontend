@@ -14,6 +14,7 @@
  *     portfolio page still renders
  */
 import { test, expect } from "@playwright/test";
+import { expectNoPositiveClaimsOrLeaks } from "./copy-claims";
 
 // `/fees` placeholder testids were removed in FRONTEND-FEES-PAGE-V1.
 // The page now renders the My Account card + Option Fee Tiers +
@@ -31,34 +32,14 @@ test("/fees does not contain positive-claim language or sensitive leaks", async 
   page,
 }) => {
   await page.goto("/fees");
-  const html = await page.content();
-  expect(html).not.toMatch(/\baudited\b/i);
-  expect(html).not.toMatch(/mainnet[- ]ready/i);
-  expect(html).not.toMatch(/production[- ]ready/i);
-  expect(html).not.toMatch(/safe for real funds/i);
-  expect(html).not.toMatch(/\bguaranteed\b/i);
-  expect(html).not.toMatch(/Bearer\s+[A-Za-z0-9_.-]{16,}/);
-  expect(html).not.toMatch(/alchemy\.com\/v2\//);
-  expect(html).not.toMatch(/infura\.io\/v3\//);
-  expect(html).not.toMatch(/DATABASE_URL/);
-  expect(html).not.toMatch(/\/admin\//);
+  await expectNoPositiveClaimsOrLeaks(page);
 });
 
 test("/api does not contain positive-claim language or sensitive leaks", async ({
   page,
 }) => {
   await page.goto("/api");
-  const html = await page.content();
-  expect(html).not.toMatch(/\baudited\b/i);
-  expect(html).not.toMatch(/mainnet[- ]ready/i);
-  expect(html).not.toMatch(/production[- ]ready/i);
-  expect(html).not.toMatch(/safe for real funds/i);
-  expect(html).not.toMatch(/\bguaranteed\b/i);
-  expect(html).not.toMatch(/Bearer\s+[A-Za-z0-9_.-]{16,}/);
-  expect(html).not.toMatch(/alchemy\.com\/v2\//);
-  expect(html).not.toMatch(/infura\.io\/v3\//);
-  expect(html).not.toMatch(/DATABASE_URL/);
-  expect(html).not.toMatch(/\/admin\//);
+  await expectNoPositiveClaimsOrLeaks(page);
 });
 
 test("Portfolio route remains reachable via direct URL (Portfolio is no longer in the hamburger after FRONTEND-NAVBAR-IA-V1)", async ({

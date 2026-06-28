@@ -88,7 +88,7 @@ test("localStorage stores V6 pct-geometry bucket with no secrets", async ({
   }
 
   const parsed = JSON.parse(bucket["deopt:v2:workspace:anon"]);
-  expect(parsed.version).toBe(7);
+  expect(parsed.version).toBe(8);
   const widget = parsed.workspaces["custom-1"].widgets[0];
   expect(typeof widget.xPct).toBe("number");
   expect(typeof widget.yPct).toBe("number");

@@ -28,7 +28,7 @@ interface DrawerEntry {
  *     `/portfolio` route still works for direct URLs.
  */
 const PRIMARY_ITEMS: DrawerEntry[] = [
-  { id: "options",       label: "Options",         href: "/trade",         internal: true },
+  { id: "options",       label: "Options",         href: "/options",       internal: true },
   { id: "perps",         label: "Perps",           href: "/perps",         internal: true },
   { id: "markets",       label: "Markets",         href: "/markets",       internal: true },
   { id: "rfq-strategy",  label: "RFQ/Strategy",    href: "/rfq-strategy",  internal: true },

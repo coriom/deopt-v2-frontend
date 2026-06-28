@@ -1,26 +1,55 @@
 "use client";
 
 // FRONTEND-BACKEND-HISTORY-V1 — terminal-style history page.
+// HISTORY-LIFECYCLE-V2 — extended with a `conditional` (TP/SL) tab
+// backed by `/accounts/:address/conditional-orders`, plus a
+// lifecycle-driven refresh banner that surfaces "New activity" when
+// the private WS channels fire while the user is on this page.
 //
-// Wallet-scoped, tabbed, paginated, range-filtered. Wires the new
-// `/accounts/:address/history/v2` backend endpoint. No fake live data:
-// when the wallet is disconnected, the table renders a polite
-// "Connect wallet to view address-scoped history." row; when the
-// backend is unavailable, a single muted error line replaces the rows
-// (no internal URLs, no stack traces, no DB / secret leak).
+// Wallet-scoped, tabbed, paginated, range-filtered. The seven legacy
+// tabs (Trades / Transactions / Orders / Settlement / Funding /
+// Interest / Liquidations) still wire `/accounts/:address/history/v2`;
+// the new `Conditional` tab fetches conditional-order rows directly
+// and applies range + pagination client-side because they aren't
+// served by `history/v2` yet.
+//
+// No fake live data: when the wallet is disconnected, the table
+// renders a polite "Connect wallet to view address-scoped history."
+// row; when the backend is unavailable, a single muted error line
+// replaces the rows (no internal URLs, no stack traces, no DB /
+// secret leak).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWallet } from "@/lib/wallet";
 import {
   fetchHistoryV2,
+  listConditionalOrders,
   type HistoryRange,
   type HistoryTab,
   type HistoryV2Data,
   type HistoryV2Item,
 } from "@/lib/trading-api";
+import type { ConditionalOrderResponse } from "@/lib/trading-types";
+import {
+  isTerminalConditionalStatus,
+  shortId,
+  sliceConditionalHistory,
+} from "@/lib/history-conditional";
+import {
+  deriveOrderReason,
+  type HistoryReason,
+  type ReasonSeverity,
+} from "@/lib/history-reasons";
+import { useLifecycleStream } from "@/hooks/useLifecycleStream";
+import { LifecycleStatusBadge } from "@/components/trading/LifecycleStatusBadge";
+
+// Local superset of the backend HistoryTab. The `"conditional"` tab is
+// served by a different endpoint, so the fetch logic branches on it
+// and we never pass it through to `fetchHistoryV2`.
+type ShellTab = HistoryTab | "conditional";
 
 interface TabDef {
-  id: HistoryTab;
+  id: ShellTab;
   label: string;
 }
 
@@ -28,6 +57,7 @@ const TABS: TabDef[] = [
   { id: "trades",       label: "Trades" },
   { id: "transactions", label: "Transactions" },
   { id: "orders",       label: "Orders" },
+  { id: "conditional",  label: "TP / SL" },
   { id: "settlement",   label: "Settlement" },
   { id: "funding",      label: "Funding" },
   { id: "interest",     label: "Interest" },
@@ -104,6 +134,30 @@ function plainCell(value: string | undefined, fallback = "—"): React.ReactNode
   return value;
 }
 
+// HISTORY-V2-FAILURE-REASONS-V1 — render a HistoryReason as a compact
+// coloured cell. The `code` is the dense, copy-paste-friendly token;
+// the human-readable `message` lives in the `title` attribute so
+// hover-to-explain works without widening the table.
+function reasonClass(severity: ReasonSeverity): string {
+  if (severity === "error") return "text-red-400";
+  if (severity === "warning") return "text-amber-300";
+  return "text-zinc-400";
+}
+
+function renderReasonCell(reason: HistoryReason | null): React.ReactNode {
+  if (!reason) return <span className="text-zinc-600">—</span>;
+  return (
+    <span
+      data-reason-code={reason.code}
+      data-reason-severity={reason.severity}
+      title={reason.message}
+      className={reasonClass(reason.severity)}
+    >
+      {reason.code}
+    </span>
+  );
+}
+
 const timeCol = (): ColumnDef => ({
   id: "time",
   label: "Time",
@@ -154,6 +208,7 @@ const COLUMNS: Record<HistoryTab, ColumnDef[]> = {
     { id: "limit", label: "Limit", numeric: true, render: (it) => plainCell(it.limit_price), csv: (it) => defaultCsv(it, "limit_price") },
     { id: "filled", label: "Filled", numeric: true, render: (it) => plainCell(it.filled) },
     { id: "status", label: "Status", render: (it) => plainCell(it.status) },
+    { id: "reason", label: "Reason", render: (it) => renderReasonCell(deriveOrderReason(it)), csv: (it) => deriveOrderReason(it)?.code ?? "" },
     { id: "role", label: "Role", render: (it) => plainCell(it.role) },
     txCol(),
   ],
@@ -197,6 +252,109 @@ const COLUMNS: Record<HistoryTab, ColumnDef[]> = {
   ],
 };
 
+// HISTORY-LIFECYCLE-V2 — column model for the Conditional / TP-SL tab.
+// Mirrors the ConditionalOrderResponse shape; rows whose status is in
+// `TERMINAL_CONDITIONAL_STATUSES` are visually muted by the row class.
+interface ConditionalColumnDef {
+  id: string;
+  label: string;
+  numeric?: boolean;
+  render: (it: ConditionalOrderResponse) => React.ReactNode;
+  csv: (it: ConditionalOrderResponse) => string;
+}
+
+function statusBadgeClass(status: string): string {
+  if (isTerminalConditionalStatus(status)) {
+    if (status === "failed" || status === "expired") return "text-red-400";
+    if (status === "cancelled") return "text-zinc-500";
+    return "text-zinc-400";
+  }
+  // armed / pending
+  return "text-emerald-300";
+}
+
+const CONDITIONAL_COLUMNS: ConditionalColumnDef[] = [
+  {
+    id: "time",
+    label: "Time",
+    render: (it) => formatTime(it.updated_at_ms),
+    csv: (it) => csvTime(it.updated_at_ms),
+  },
+  {
+    id: "instrument",
+    label: "Instrument",
+    render: (it) => <span className="font-mono text-zinc-300">{shortId(it.option_series_id)}</span>,
+    csv: (it) => it.option_series_id,
+  },
+  {
+    id: "side",
+    label: "Side",
+    render: (it) => <span className="text-zinc-300">{it.position_side}</span>,
+    csv: (it) => it.position_side,
+  },
+  {
+    id: "trigger_type",
+    label: "Trigger",
+    render: (it) => <span className="uppercase tracking-wide text-zinc-300">{it.conditional_type}</span>,
+    csv: (it) => it.conditional_type,
+  },
+  {
+    id: "trigger_price",
+    label: "Trigger Price (1e8)",
+    numeric: true,
+    render: (it) => <span className="font-mono">{it.trigger_price_1e8}</span>,
+    csv: (it) => it.trigger_price_1e8,
+  },
+  {
+    id: "size",
+    label: "Size (1e8)",
+    numeric: true,
+    render: (it) => <span className="font-mono">{it.quantity_1e8}</span>,
+    csv: (it) => it.quantity_1e8,
+  },
+  {
+    id: "status",
+    label: "Status",
+    render: (it) => <span className={statusBadgeClass(it.status)}>{it.status}</span>,
+    csv: (it) => it.status,
+  },
+  {
+    id: "child_order",
+    label: "Child Order",
+    render: (it) =>
+      it.child_order_id
+        ? <span className="font-mono text-zinc-400" title={it.child_order_id}>{shortId(it.child_order_id)}</span>
+        : <span className="text-zinc-600">—</span>,
+    csv: (it) => it.child_order_id ?? "",
+  },
+  {
+    id: "oco_group",
+    label: "OCO Group",
+    render: (it) =>
+      it.oco_group_id
+        ? <span className="font-mono text-zinc-400" title={it.oco_group_id}>{shortId(it.oco_group_id)}</span>
+        : <span className="text-zinc-600">—</span>,
+    csv: (it) => it.oco_group_id ?? "",
+  },
+  {
+    id: "failure",
+    label: "Failure",
+    render: (it) => {
+      if (!it.failure_code && !it.failure_message) {
+        return <span className="text-zinc-600">—</span>;
+      }
+      const code = it.failure_code ?? "error";
+      const msg = it.failure_message ?? "";
+      return (
+        <span className="text-red-400" title={msg || code}>
+          {code}
+        </span>
+      );
+    },
+    csv: (it) => it.failure_code ? `${it.failure_code}${it.failure_message ? `: ${it.failure_message}` : ""}` : "",
+  },
+];
+
 function csvEscape(value: string): string {
   if (value === "") return "";
   if (/[",\r\n]/.test(value)) {
@@ -221,6 +379,15 @@ function buildCsv(tab: HistoryTab, items: HistoryV2Item[]): string {
   return [header, ...rows].join("\r\n");
 }
 
+function buildConditionalCsv(items: ConditionalOrderResponse[]): string {
+  const cols = CONDITIONAL_COLUMNS;
+  const header = cols.map((c) => csvEscape(c.label)).join(",");
+  const rows = items.map((it) =>
+    cols.map((c) => csvEscape(c.csv(it))).join(","),
+  );
+  return [header, ...rows].join("\r\n");
+}
+
 function downloadCsv(filename: string, csv: string): void {
   if (typeof window === "undefined") return;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -235,31 +402,62 @@ function downloadCsv(filename: string, csv: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function csvFilename(tab: HistoryTab, range: HistoryRange): string {
+function csvFilename(tab: ShellTab, range: HistoryRange): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const stamp = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
   return `deopt-history-${tab}-${range}-${stamp}.csv`;
 }
 
-interface HistoryState {
+interface HistoryV2State {
   loading: boolean;
   error: string | null;
   data: HistoryV2Data | null;
 }
 
+interface ConditionalState {
+  loading: boolean;
+  error: string | null;
+  rows: ConditionalOrderResponse[];
+  /** Wall-clock time the rows were captured; used as the `nowMs`
+   *  anchor for client-side range filtering. Captured at fetch time so
+   *  render passes stay pure (no Date.now() inside useMemo). */
+  fetchedAtMs: number;
+}
+
+function shortenError(err: unknown): string {
+  const message = err instanceof Error ? err.message : "Unable to load history.";
+  return message.length > 160 ? "Unable to load history." : message;
+}
+
+function isAbort(err: unknown): boolean {
+  return !!err && typeof err === "object" && (err as { name?: string }).name === "AbortError";
+}
+
 export function HistoryShell() {
   const { address } = useWallet();
-  const [tab, setTab] = useState<HistoryTab>("trades");
+  const [tab, setTab] = useState<ShellTab>("trades");
   const [range, setRange] = useState<HistoryRange>("last_month");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [pageInput, setPageInput] = useState("1");
-  const [state, setState] = useState<HistoryState>({
+  const [v2State, setV2State] = useState<HistoryV2State>({
     loading: false,
     error: null,
     data: null,
   });
+  const [condState, setCondState] = useState<ConditionalState>({
+    loading: false,
+    error: null,
+    rows: [],
+    fetchedAtMs: 0,
+  });
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [bannerVisible, setBannerVisible] = useState(false);
+
+  const lifecycle = useLifecycleStream();
+  const lifecycleSubscribe = lifecycle.subscribe;
+  const lifecycleResyncToken = lifecycle.resyncToken;
 
   useEffect(() => {
     setPageInput(String(page));
@@ -279,56 +477,151 @@ export function HistoryShell() {
     }
   }, [pageInput, page]);
 
+  // HISTORY-LIFECYCLE-V2 — surface a "New activity available" banner
+  // whenever a private lifecycle WS delta arrives. We never silently
+  // mutate the visible page because pagination + range filters make
+  // mid-page row injection visually unstable; the banner pattern lets
+  // the user choose when to fold in the new state.
   useEffect(() => {
-    if (!address) {
-      setState({ loading: false, error: null, data: null });
+    if (!address) return;
+    const flag = () => setBannerVisible(true);
+    const unsubs = [
+      lifecycleSubscribe("account.orders", flag),
+      lifecycleSubscribe("account.fills", flag),
+      lifecycleSubscribe("account.conditional_orders", flag),
+    ];
+    return () => {
+      for (const u of unsubs) u();
+    };
+  }, [address, lifecycleSubscribe]);
+
+  // HISTORY-LIFECYCLE-V2 — on WS reconnect (resync), silently refresh
+  // the current view so we don't show stale data after a missed event.
+  // We start the lifecycle hook at resyncToken=0 (initial), so we only
+  // bump the refresh on the FIRST > 0 transition and every increment
+  // after that. The banner is cleared at the same time because the
+  // refetch covers whatever the banner was alerting about.
+  useEffect(() => {
+    if (lifecycleResyncToken === 0) return;
+    setRefreshNonce((n) => n + 1);
+    setBannerVisible(false);
+  }, [lifecycleResyncToken]);
+
+  // V2 tabs: fetch from `/accounts/:address/history/v2`. Skips the
+  // conditional tab entirely so we don't send an unknown tab string to
+  // the backend (it would 400 with InvalidRequest).
+  useEffect(() => {
+    if (!address || tab === "conditional") {
       return;
     }
     const ctrl = new AbortController();
-    setState((s) => ({ ...s, loading: true, error: null }));
+    setV2State((s) => ({ ...s, loading: true, error: null }));
     fetchHistoryV2(address, { tab, range, page, pageSize, signal: ctrl.signal })
       .then((env) => {
-        setState({ loading: false, error: null, data: env.data });
+        setV2State({ loading: false, error: null, data: env.data });
       })
       .catch((err: unknown) => {
-        if (
-          err &&
-          typeof err === "object" &&
-          (err as { name?: string }).name === "AbortError"
-        ) {
-          return;
-        }
-        const message =
-          err instanceof Error ? err.message : "Unable to load history.";
-        setState({
+        if (isAbort(err)) return;
+        setV2State({ loading: false, error: shortenError(err), data: null });
+      });
+    return () => ctrl.abort();
+  }, [address, tab, range, page, pageSize, refreshNonce]);
+
+  // Reset v2 state on disconnect so we don't leak the previous wallet's
+  // rows after a wallet swap.
+  useEffect(() => {
+    if (!address) {
+      setV2State({ loading: false, error: null, data: null });
+      setCondState({ loading: false, error: null, rows: [], fetchedAtMs: 0 });
+      setBannerVisible(false);
+    }
+  }, [address]);
+
+  // Conditional tab: full-snapshot fetch; range + pagination apply
+  // client-side via `sliceConditionalHistory`. We refetch on
+  // (address, refreshNonce) transitions only; changing range / page
+  // does NOT hit the network — the slice is recomputed locally.
+  useEffect(() => {
+    if (!address || tab !== "conditional") {
+      return;
+    }
+    const ctrl = new AbortController();
+    setCondState((s) => ({ ...s, loading: true, error: null }));
+    listConditionalOrders(address, ctrl.signal)
+      .then((rows) => {
+        setCondState({
           loading: false,
-          error: message.length > 160 ? "Unable to load history." : message,
-          data: null,
+          error: null,
+          rows,
+          fetchedAtMs: Date.now(),
+        });
+      })
+      .catch((err: unknown) => {
+        if (isAbort(err)) return;
+        setCondState({
+          loading: false,
+          error: shortenError(err),
+          rows: [],
+          fetchedAtMs: 0,
         });
       });
     return () => ctrl.abort();
-  }, [address, tab, range, page, pageSize]);
+  }, [address, tab, refreshNonce]);
 
-  const columns = COLUMNS[tab];
-  const items = useMemo(
-    () => state.data?.items ?? [],
-    [state.data],
+  const isConditional = tab === "conditional";
+
+  const condSlice = useMemo(() => {
+    if (!isConditional) return { total: 0, page_items: [] as ConditionalOrderResponse[] };
+    // Anchor the range filter at fetch time so the render pass is pure
+    // (the React `react-hooks/purity` rule rejects `Date.now()` here).
+    // The cutoff freezes per fetch; clicking refresh picks up a fresh
+    // anchor at the next `listConditionalOrders` resolve.
+    const nowMs = condState.fetchedAtMs || 0;
+    return sliceConditionalHistory(condState.rows, {
+      range,
+      nowMs,
+      page,
+      pageSize,
+    });
+  }, [isConditional, condState.rows, condState.fetchedAtMs, range, page, pageSize]);
+
+  const loading = isConditional ? condState.loading : v2State.loading;
+  const error = isConditional ? condState.error : v2State.error;
+  const total = isConditional ? condSlice.total : (v2State.data?.total_records ?? 0);
+  const v2Items = useMemo(
+    () => v2State.data?.items ?? [],
+    [v2State.data],
   );
-  const total = state.data?.total_records ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const v2Columns = isConditional ? null : COLUMNS[tab];
+  const colCount = isConditional ? CONDITIONAL_COLUMNS.length : (v2Columns?.length ?? 0);
 
   // Export is always available — when there are zero records the
   // generated file contains just the header row so the user still
   // gets a usable column template.
   const onExportCsv = useCallback(() => {
-    const csv = buildCsv(tab, items);
-    downloadCsv(csvFilename(tab, range), csv);
-  }, [items, tab, range]);
+    if (isConditional) {
+      const csv = buildConditionalCsv(condSlice.page_items);
+      downloadCsv(csvFilename(tab, range), csv);
+    } else {
+      const csv = buildCsv(tab, v2Items);
+      downloadCsv(csvFilename(tab, range), csv);
+    }
+  }, [isConditional, condSlice.page_items, v2Items, tab, range]);
 
-  const headerRow = useMemo(
-    () => (
+  const onRefreshClick = useCallback(() => {
+    setBannerVisible(false);
+    setRefreshNonce((n) => n + 1);
+  }, []);
+
+  const headerRow = useMemo(() => {
+    const cols = isConditional
+      ? CONDITIONAL_COLUMNS.map((c) => ({ id: c.id, label: c.label, numeric: c.numeric }))
+      : (v2Columns ?? []).map((c) => ({ id: c.id, label: c.label, numeric: c.numeric }));
+    return (
       <tr className="border-b border-zinc-900 text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-        {columns.map((c) => (
+        {cols.map((c) => (
           <th
             key={c.id}
             scope="col"
@@ -341,9 +634,8 @@ export function HistoryShell() {
           </th>
         ))}
       </tr>
-    ),
-    [columns, tab],
-  );
+    );
+  }, [isConditional, v2Columns, tab]);
 
   return (
     <div
@@ -379,6 +671,10 @@ export function HistoryShell() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
+          <LifecycleStatusBadge
+            status={lifecycle.status}
+            detail={lifecycle.statusDetail}
+          />
           <label className="flex items-center gap-1 text-[11px] text-zinc-400">
             <span className="sr-only">Date range</span>
             <select
@@ -396,6 +692,16 @@ export function HistoryShell() {
           </label>
           <button
             type="button"
+            aria-label="Refresh history"
+            data-testid="history-refresh-button"
+            onClick={onRefreshClick}
+            title="Refetch the current view"
+            className="grid h-7 w-7 place-items-center rounded border border-zinc-800 bg-black/40 text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-200"
+          >
+            <span aria-hidden="true">↻</span>
+          </button>
+          <button
+            type="button"
             aria-label="Export current view as CSV"
             data-testid="history-export-button"
             onClick={onExportCsv}
@@ -407,6 +713,18 @@ export function HistoryShell() {
         </div>
       </div>
 
+      {bannerVisible && address && (
+        <button
+          type="button"
+          data-testid="history-refresh-banner"
+          onClick={onRefreshClick}
+          className="flex items-center justify-between gap-2 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-left text-[11px] text-emerald-200 hover:bg-emerald-500/20"
+        >
+          <span>New activity available — refresh to see the latest rows.</span>
+          <span aria-hidden="true" className="text-emerald-300">↻ Refresh</span>
+        </button>
+      )}
+
       <div
         data-testid="history-table-wrap"
         className="relative min-h-0 flex-1 overflow-auto border border-zinc-900"
@@ -416,36 +734,67 @@ export function HistoryShell() {
           <tbody data-testid="history-tbody">
             {!address ? (
               <EmptyRow
-                colSpan={columns.length}
+                colSpan={colCount}
                 testid="history-empty-disconnected"
                 text="Connect wallet to view address-scoped history."
               />
-            ) : state.loading ? (
+            ) : loading ? (
               <EmptyRow
-                colSpan={columns.length}
+                colSpan={colCount}
                 testid="history-loading"
                 text="Loading…"
               />
-            ) : state.error ? (
+            ) : error ? (
               <EmptyRow
-                colSpan={columns.length}
+                colSpan={colCount}
                 testid="history-error"
-                text={`History unavailable: ${state.error}`}
+                text={`History unavailable: ${error}`}
               />
-            ) : items.length === 0 ? (
+            ) : isConditional ? (
+              condSlice.page_items.length === 0 ? (
+                <EmptyRow
+                  colSpan={colCount}
+                  testid="history-empty-conditional"
+                  text="No conditional orders found."
+                />
+              ) : (
+                condSlice.page_items.map((it, i) => (
+                  <tr
+                    key={it.id}
+                    data-testid={`history-row-conditional-${i}`}
+                    data-conditional-status={it.status}
+                    data-conditional-terminal={isTerminalConditionalStatus(it.status) ? "true" : "false"}
+                    className={`border-b border-zinc-900/70 hover:bg-zinc-900/40 ${
+                      isTerminalConditionalStatus(it.status) ? "opacity-70" : ""
+                    }`}
+                  >
+                    {CONDITIONAL_COLUMNS.map((c) => (
+                      <td
+                        key={c.id}
+                        className={`whitespace-nowrap border-b border-zinc-900 px-3 py-2 ${
+                          c.numeric ? "text-right" : "text-left"
+                        }`}
+                      >
+                        {c.render(it)}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )
+            ) : v2Items.length === 0 ? (
               <EmptyRow
-                colSpan={columns.length}
+                colSpan={colCount}
                 testid={`history-empty-${tab}`}
                 text={`No ${tab} found.`}
               />
             ) : (
-              items.map((it, i) => (
+              v2Items.map((it, i) => (
                 <tr
                   key={i}
                   data-testid={`history-row-${tab}-${i}`}
                   className="border-b border-zinc-900/70 hover:bg-zinc-900/40"
                 >
-                  {columns.map((c) => (
+                  {(v2Columns ?? []).map((c) => (
                     <td
                       key={c.id}
                       className={`whitespace-nowrap border-b border-zinc-900 px-3 py-2 ${

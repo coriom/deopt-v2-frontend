@@ -6,6 +6,7 @@
  * `~/DEOPT/deopt-v2-backend/src/fees/schedule.rs::launch_fee_schedule()`.
  */
 import { test, expect } from "@playwright/test";
+import { expectNoPositiveClaimsOrLeaks } from "./copy-claims";
 
 test("/fees renders the new shell with My Account + both tier tables", async ({
   page,
@@ -143,12 +144,7 @@ test("/fees never claims mainnet-ready / audited / production-ready / safe-for-r
   page,
 }) => {
   await page.goto("/fees");
-  const html = await page.content();
-  expect(html).not.toMatch(/\baudited\b/i);
-  expect(html).not.toMatch(/mainnet[- ]ready/i);
-  expect(html).not.toMatch(/production[- ]ready/i);
-  expect(html).not.toMatch(/safe for real funds/i);
-  expect(html).not.toMatch(/\bguaranteed\b/i);
+  await expectNoPositiveClaimsOrLeaks(page);
 });
 
 test("/fees never exposes admin / bearer / RPC / DB URLs", async ({ page }) => {

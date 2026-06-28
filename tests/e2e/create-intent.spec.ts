@@ -56,10 +56,14 @@ test.describe("create-intent UX (M-P3c)", () => {
       account: DEFAULT_TEST_ACCOUNT,
       chainId: BASE_MAINNET_CHAIN_ID,
     });
-    await page.goto("/");
-    await expect(
-      page.getByText(/Mainnet is permanently disabled/i),
-    ).toBeVisible();
+    // The MainnetDisabledBanner only mounts on (trading) routes when
+    // `useWallet().isMainnet` is true; that flag is only set after
+    // the user clicks Connect (the production WalletProvider has no
+    // auto-connect). Navigate to a trading route, click Connect, then
+    // assert the banner via its stable testid.
+    await page.goto("/options");
+    await page.getByTestId("wallet-connect-button").click();
+    await expect(page.getByTestId("mainnet-disabled-banner")).toBeVisible();
   });
 
   test("createExecutionIntent client returns 'pending' on 404 (route intercept)", async ({

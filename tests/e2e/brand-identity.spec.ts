@@ -22,7 +22,9 @@ test("header logo uses /favicon.png (same asset as the favicon)", async ({
   const logo = page.getByTestId("header-logo");
   await expect(logo).toBeVisible();
   const src = await logo.getAttribute("src");
-  expect(src).toContain("/favicon.png");
+  // Next.js `<Image>` rewrites the URL through `/_next/image?url=…`,
+  // url-encoded. Decode + assert the underlying asset is the favicon.
+  expect(decodeURIComponent(src ?? "")).toContain("/favicon.png");
 });
 
 test("main DOM contains no amber/yellow Tailwind class on key routes", async ({

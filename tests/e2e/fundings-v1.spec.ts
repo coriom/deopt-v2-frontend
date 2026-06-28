@@ -7,6 +7,7 @@
  * the backend's seeded perp markets exactly (BTC-PERP + ETH-PERP).
  */
 import { test, expect } from "@playwright/test";
+import { expectNoPositiveClaimsOrLeaks } from "./copy-claims";
 
 test("/fundings renders the four shell sections", async ({ page }) => {
   await page.goto("/fundings");
@@ -51,7 +52,7 @@ test("/fundings overview table lists BTC-PERP + ETH-PERP with `—` cells and Pl
       page.getByTestId(`fundings-action-options-${symbol}`),
     ).toHaveAttribute(
       "href",
-      new RegExp(`/trade\\?underlying=${symbol.replace("-PERP", "")}`),
+      new RegExp(`/options\\?underlying=${symbol.replace("-PERP", "")}`),
     );
   }
 });
@@ -97,12 +98,7 @@ test("/fundings never claims mainnet-ready / audited / production-ready / safe-f
   page,
 }) => {
   await page.goto("/fundings");
-  const html = await page.content();
-  expect(html).not.toMatch(/\baudited\b/i);
-  expect(html).not.toMatch(/mainnet[- ]ready/i);
-  expect(html).not.toMatch(/production[- ]ready/i);
-  expect(html).not.toMatch(/safe for real funds/i);
-  expect(html).not.toMatch(/\bguaranteed\b/i);
+  await expectNoPositiveClaimsOrLeaks(page);
 });
 
 test("/fundings never exposes admin / bearer / RPC / DB URLs", async ({

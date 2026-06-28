@@ -222,7 +222,7 @@ function HeroSection() {
         className="relative flex flex-wrap items-center justify-center gap-3"
       >
         <Link
-          href="/trade"
+          href="/options"
           data-testid="landing-cta-launch-app"
           className="rounded-md bg-emerald-500 px-5 py-2.5 text-[13px] font-semibold text-black shadow-[0_0_28px_rgba(16,185,129,0.4)] hover:bg-emerald-400"
         >
@@ -347,7 +347,7 @@ function OptionsAndPerpsSection() {
               <Chip>Theta</Chip>
             </div>
             <Link
-              href="/trade"
+              href="/options"
               data-testid="landing-options-cta"
               className="mt-1 inline-flex w-fit items-center gap-2 rounded-md px-4 py-2 text-[13px] font-semibold text-emerald-200 ring-1 ring-inset ring-emerald-500/40 hover:bg-emerald-500/10"
             >
@@ -740,7 +740,7 @@ function FinalCtaSection() {
       </h2>
       <div className="relative flex flex-wrap items-center justify-center gap-3">
         <Link
-          href="/trade"
+          href="/options"
           data-testid="landing-final-cta-launch"
           className="rounded-md bg-emerald-500 px-5 py-2.5 text-[13px] font-semibold text-black shadow-[0_0_28px_rgba(16,185,129,0.4)] hover:bg-emerald-400"
         >

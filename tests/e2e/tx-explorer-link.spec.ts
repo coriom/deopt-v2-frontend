@@ -113,10 +113,12 @@ test("REVERTED status surfaces a 'Report this failure' CTA", async ({
   );
   await page.goto(`/transactions/${SYNTH_INTENT_ID}`);
   await expect(page.getByTestId("tx-reverted-banner")).toBeVisible();
-  // ReportIssueButton renders with label "Report this failure" — in
-  // placeholder mode it is a button (panel) rather than an anchor.
-  const cta = page
-    .getByRole("button", { name: /Report this failure/i })
-    .first();
+  // ReportIssueButton renders as an internal `<Link>` (data-testid
+  // `report-issue-link`) when the feedback URL is configured — which
+  // it is post-FRONTEND-INTEGRATED-DOCS-AND-FEEDBACK. Match via the
+  // stable testid + the visible label to avoid coupling to either
+  // button or link role.
+  const cta = page.getByTestId("report-issue-link").first();
   await expect(cta).toBeVisible();
+  await expect(cta).toContainText(/Report this failure/i);
 });

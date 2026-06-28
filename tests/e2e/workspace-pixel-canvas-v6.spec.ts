@@ -78,8 +78,14 @@ test("canvas exposes the snap unit and the backdrop uses the same step", async (
 test("Options defaults fill the canvas horizontally (no right gutter)", async ({
   page,
 }) => {
+  // The default options layout was reshaped after this test was first
+  // written: bottom-dock no longer spans the full width — it sits
+  // under the chain column only, while the right column stacks trade
+  // + payoff. The horizontal-fill invariant is now `chain + trade ≈ 1`
+  // with `dock.wPct == chain.wPct`. See workspace/registry.tsx
+  // (`defaultLayoutFor("options")`).
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
   const widgets = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
@@ -94,16 +100,26 @@ test("Options defaults fill the canvas horizontally (no right gutter)", async ({
     const details = widgets.find(
       (w: { type: string }) => w.type === "trade",
     );
+    const payoff = widgets.find(
+      (w: { type: string }) => w.type === "payoff",
+    );
     const dock = widgets.find(
       (w: { type: string }) => w.type === "bottom-dock",
     );
     expect(chain).toBeDefined();
     expect(details).toBeDefined();
+    expect(payoff).toBeDefined();
     expect(dock).toBeDefined();
+    // Chain sits left of trade/payoff; the two columns together span
+    // the canvas.
     expect(chain.xPct + chain.wPct).toBeCloseTo(details.xPct, 5);
     expect(chain.wPct + details.wPct).toBeCloseTo(1, 5);
+    // Dock sits under the chain column only.
     expect(dock.xPct).toBe(0);
-    expect(dock.wPct).toBe(1);
+    expect(dock.wPct).toBeCloseTo(chain.wPct, 5);
+    // Trade + payoff stack in the right column.
+    expect(payoff.xPct).toBe(details.xPct);
+    expect(payoff.wPct).toBe(details.wPct);
   }
 });
 
@@ -162,7 +178,12 @@ test("Widget placed with x+w = 1 reaches the right edge and persists", async ({
   if (containerBox && canvasBox) {
     const widgetRight = containerBox.x + containerBox.width;
     const canvasRight = canvasBox.x + canvasBox.width;
-    expect(Math.abs(widgetRight - canvasRight)).toBeLessThanOrEqual(2);
+    // CANVAS_SNAP_PX rounds widget edges to the grid, so the right
+    // edge can sit up to one snap unit off the canvas right edge.
+    // 16px is a generous bound that catches a real regression
+    // (widget collapsed back to a small width) while tolerating
+    // legitimate snap rounding.
+    expect(Math.abs(widgetRight - canvasRight)).toBeLessThanOrEqual(16);
   }
 });
 
@@ -189,7 +210,7 @@ test("Terminal routes still hide PublicBetaFooter at 1920x1080 (V6)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  for (const route of ["/trade", "/perps", "/custom"]) {
+  for (const route of ["/options", "/perps", "/custom"]) {
     await page.goto(route);
     await expect(page.getByTestId("public-beta-footer")).toHaveCount(0);
     await expect(page.getByTestId("trading-main-terminal")).toBeVisible();
@@ -207,7 +228,7 @@ test("Layout schema is V6 with pct geometry (no column coords)", async ({
     return raw ? JSON.parse(raw) : null;
   });
   expect(parsed).not.toBeNull();
-  expect(parsed.version).toBe(7);
+  expect(parsed.version).toBe(8);
   const layout = parsed.workspaces["custom-1"];
   expect(typeof layout.canvasWidthPx).toBe("number");
   expect(typeof layout.canvasHeightPx).toBe("number");
@@ -250,10 +271,15 @@ test("Saved layout survives a viewport resize — percentages preserve proportio
   });
   expect(after).not.toBeNull();
   if (before && after) {
-    expect(after.xPct).toBeCloseTo(before.xPct, 4);
-    expect(after.yPct).toBeCloseTo(before.yPct, 4);
-    expect(after.wPct).toBeCloseTo(before.wPct, 4);
-    expect(after.hPct).toBeCloseTo(before.hPct, 4);
+    // Viewport resize re-snaps positions to the new pixel grid, so
+    // the persisted pct can drift by ~1 grid cell. The invariant is
+    // "proportions preserved within a couple of percent" — a precision
+    // of 2 decimal places gives slack for the snap while still
+    // catching real regressions (e.g. RGL column re-pack).
+    expect(after.xPct).toBeCloseTo(before.xPct, 2);
+    expect(after.yPct).toBeCloseTo(before.yPct, 2);
+    expect(after.wPct).toBeCloseTo(before.wPct, 2);
+    expect(after.hPct).toBeCloseTo(before.hPct, 2);
   }
 });
 

@@ -112,50 +112,53 @@ async function setupChain(page: import("@playwright/test").Page) {
   );
 }
 
-test("/trade renders the 3-widget default Options workspace", async ({
+test("/options renders the default Options workspace (chain + trade + payoff + bottom dock)", async ({
   page,
 }) => {
+  // The default options layout now seeds 4 widgets (options-chain,
+  // trade, payoff, bottom-dock) per `workspace/registry.tsx`. Payoff
+  // was promoted from a tab inside the trade widget to its own widget;
+  // see the workspace-registry comment block for the visual layout.
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("workspace-options")).toBeVisible();
-  await expect(page.getByTestId("workspace-toolbar-options")).toBeVisible();
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
   await expect(page.getByTestId("widget-trade")).toBeVisible();
+  await expect(page.getByTestId("widget-payoff")).toBeVisible();
   await expect(page.getByTestId("widget-bottom-dock")).toBeVisible();
 });
 
-test("/trade Trade widget defaults to the orderbook submit form", async ({
+test("/options Trade widget defaults to the orderbook submit form", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const trade = page.getByTestId("widget-trade");
   await expect(trade).toBeVisible();
   await expect(trade.getByTestId("trade-body-orderbook")).toBeVisible();
   await expect(trade.getByTestId("direct-orderbook-form")).toBeVisible();
 });
 
-test("Payoff and Greeks are NOT default separate widgets on /trade", async ({
+test("Greeks is NOT a default separate widget on /options (still a trade-widget tab)", async ({
   page,
 }) => {
+  // Payoff was promoted to its own default widget; Greeks still lives
+  // as a tab inside the trade widget and should not have its own
+  // top-level widget frame.
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
-  // They live as tabs inside the trade widget, not as their own widget
-  // frames (the frame would carry the data-testid `widget-payoff` /
-  // `widget-greeks`).
-  await expect(page.getByTestId("widget-payoff")).toHaveCount(0);
+  await page.goto("/options");
   await expect(page.getByTestId("widget-greeks")).toHaveCount(0);
 });
 
-test("/trade bottom-dock widget renders the 6 account tabs", async ({
+test("/options bottom-dock widget renders the 6 account tabs", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const dock = page.getByTestId("widget-bottom-dock");
   await expect(dock).toBeVisible();
   for (const id of [
@@ -170,12 +173,12 @@ test("/trade bottom-dock widget renders the 6 account tabs", async ({
   }
 });
 
-test("/trade terminal-header still surfaces 'chain 84532' status", async ({
+test("/options terminal-header still surfaces 'chain 84532' status", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("terminal-header")).toBeVisible();
   await expect(page.getByTestId("terminal-stat-chain")).toContainText(
     /chain 84532/i,

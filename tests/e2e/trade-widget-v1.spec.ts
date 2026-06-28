@@ -25,14 +25,14 @@ test("default Options workspace renders `widget-trade` (renamed from `option-det
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("widget-trade")).toBeVisible();
   await expect(page.getByTestId("widget-option-details")).toHaveCount(0);
 });
 
 test("Widget chrome title is exactly `Trade`", async ({ page }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const widget = page.getByTestId("widget-trade");
   await expect(widget).toBeVisible();
   await expect(widget).toHaveAttribute("aria-label", "Trade");
@@ -42,7 +42,7 @@ test("Trade widget header surfaces an instrument title + mode selector", async (
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("trade-instrument-title")).toBeVisible();
   const select = page.getByTestId("trade-mode-select");
   await expect(select).toBeVisible();
@@ -53,7 +53,7 @@ test("Orderbook mode renders the shared DirectOrderbookForm with TIF + Post cont
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
   await expect(page.getByTestId("direct-orderbook-form")).toBeVisible();
   // Required inputs for a real submission.
@@ -68,7 +68,7 @@ test("Orderbook mode renders the shared DirectOrderbookForm with TIF + Post cont
 
 test("Mode selector swaps to RFQ and back to Orderbook", async ({ page }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const select = page.getByTestId("trade-mode-select");
   await select.selectOption("rfq");
   await expect(page.getByTestId("trade-body-rfq")).toBeVisible();
@@ -82,7 +82,7 @@ test("RFQ mode keeps the compact row and does NOT surface TIF / post-only", asyn
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   await page.getByTestId("trade-mode-select").selectOption("rfq");
   await expect(page.getByTestId("trade-rfq-side-buy")).toBeVisible();
   await expect(page.getByTestId("trade-rfq-side-sell")).toBeVisible();
@@ -99,7 +99,7 @@ test("Trade widget has no amber/yellow/orange brand classes", async ({
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const html = await page.getByTestId("widget-trade").innerHTML();
   expect(html).not.toMatch(/\b(amber|yellow|orange)-[0-9]{2,3}\b/);
   expect(html).not.toMatch(/bg-(amber|yellow|orange)\b/);
@@ -109,7 +109,7 @@ test("Trade widget has no Derive branding nor positive-claim language", async ({
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const text = await page.getByTestId("widget-trade").innerText();
   expect(text).not.toMatch(/\bDerive\b/);
   expect(text).not.toMatch(/\bis audited\b/i);
@@ -124,7 +124,7 @@ test("Trade widget has no admin / RPC / DATABASE_URL leaks", async ({
   page,
 }) => {
   await installMockWallet(page);
-  await page.goto("/trade");
+  await page.goto("/options");
   const html = await page.getByTestId("widget-trade").innerHTML();
   expect(html).not.toMatch(/\/admin\//);
   expect(html).not.toMatch(/Bearer\s+[A-Za-z0-9_.-]{16,}/);
@@ -139,7 +139,7 @@ test("Trade widget keeps a readable size after resizing the viewport down to 120
 }) => {
   await installMockWallet(page);
   await page.setViewportSize({ width: 1200, height: 900 });
-  await page.goto("/trade");
+  await page.goto("/options");
   const widget = page.getByTestId("widget-trade");
   await expect(widget).toBeVisible();
   const box = await widget.boundingBox();

@@ -30,7 +30,7 @@ test("backend-unavailable fallback renders the dark/green card with retry + repo
     }),
   );
   await installMockWallet(page);
-  await page.goto("/");
+  await page.goto("/markets");
 
   const card = page.getByTestId("markets-fallback-card");
   await expect(card).toBeVisible();
@@ -76,7 +76,7 @@ test("no-products fallback renders the empty-state copy", async ({ page }) => {
     }),
   );
   await installMockWallet(page);
-  await page.goto("/");
+  await page.goto("/markets");
   const card = page.getByTestId("markets-fallback-card");
   await expect(card).toBeVisible();
   await expect(card).toHaveAttribute("data-kind", "no-products");
@@ -97,7 +97,7 @@ test("markets fallback card uses no amber/yellow styling", async ({ page }) => {
     }),
   );
   await installMockWallet(page);
-  await page.goto("/");
+  await page.goto("/markets");
   const card = page.getByTestId("markets-fallback-card");
   await expect(card).toBeVisible();
   const html = await card.innerHTML();

@@ -36,11 +36,13 @@ test("sign attempt that is rejected by the wallet surfaces the rejected modal ph
   // own series-id state. We focus on the rejection modal path via the RFQ
   // panel which has the same sign affordance.
   await page.goto("/");
-  await page.getByRole("button", { name: /Connect wallet/i }).click();
-  // The Sign button paths emit the modal — verify the rejected text would appear
-  // via the wallet rejection mock. Smoke covers that the wallet fixture's
-  // 4001 rejection propagates as a code that the UI maps to the rejected
-  // phase string. We do not navigate into the trade ticket since the
-  // markets list may be empty.
-  await expect(page.getByText(/Testnet beta/i)).toBeVisible();
+  await page.getByTestId("wallet-connect-button").click();
+  // The testnet-unaudited banner is the page-level signal we use as a
+  // smoke check that the (trading) layout mounted; with the wallet
+  // rejection configured, the layout still renders, which is the only
+  // thing this assertion is verifying. The detailed rejected-modal
+  // assertion lives in the production unit tests for the trade
+  // ticket; navigating into the trade ticket itself is out of scope
+  // here because the markets list can be empty in the mock.
+  await expect(page.getByTestId("testnet-unaudited-banner")).toBeVisible();
 });

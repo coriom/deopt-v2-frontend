@@ -31,7 +31,7 @@ test("hamburger Support link visible on every trading route", async ({
     account: DEFAULT_TEST_ACCOUNT,
     chainId: BASE_SEPOLIA_CHAIN_ID,
   });
-  const routes = ["/", "/markets", "/portfolio", "/history", "/health", "/trade"];
+  const routes = ["/", "/markets", "/portfolio", "/history", "/health", "/options"];
   for (const route of routes) {
     await page.goto(route);
     await page.getByTestId("hamburger-button").first().click();
@@ -51,14 +51,29 @@ test("hamburger Support link visible on every trading route", async ({
   }
 });
 
-test("landing Report-feedback CTA navigates to /feedback (internal)", async ({
+test("ReportIssueButton on /markets fallback links to /feedback (internal)", async ({
   page,
 }) => {
+  // The original landing-page report CTA was retired; the
+  // `ReportIssueButton` ships embedded in the markets fallback card,
+  // the signing-state modal, and the tx-status timeline. The
+  // /markets path renders the fallback card when the products fetch
+  // fails — mock the failure and assert the embedded CTA.
+  await page.route("**/options/products*", (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "error",
+        error: { code: "INTERNAL_ERROR", message: "synthetic outage" },
+      }),
+    }),
+  );
   await installMockWallet(page, {
     account: DEFAULT_TEST_ACCOUNT,
     chainId: BASE_SEPOLIA_CHAIN_ID,
   });
-  await page.goto("/");
+  await page.goto("/markets");
   const reportLink = page.getByTestId("report-issue-link").first();
   await expect(reportLink).toBeVisible();
   await expect(reportLink).toHaveAttribute("href", "/feedback");

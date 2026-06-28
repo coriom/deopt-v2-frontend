@@ -1,13 +1,9 @@
-import { Workspace } from "@/components/workspace/Workspace";
+import { redirect } from "next/navigation";
 
-export default function TradePage() {
-  return (
-    <div data-testid="trade-shell" className="flex h-full min-h-0 flex-col">
-      <Workspace
-        workspaceId="options"
-        title="Options workspace"
-        subtitle="modular · v2 · resizable"
-      />
-    </div>
-  );
+// OPTIONS-ROUTE-RENAMING-V1 — canonical route is now `/options`.
+// `/trade` is kept as a server-side redirect so existing bookmarks,
+// landing-page CTAs, embedded links and operator muscle memory keep
+// working without 404ing.
+export default function TradeRedirect() {
+  redirect("/options");
 }

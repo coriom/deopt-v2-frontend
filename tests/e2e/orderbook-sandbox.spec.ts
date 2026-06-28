@@ -15,11 +15,29 @@
 // running cargo backend. The backend matching engine itself is
 // covered by `cargo test --test options_tests` (88 tests).
 
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Route, type Page } from "@playwright/test";
+import {
+  installConnectedWallet,
+  connectWallet,
+  mockWriteAuthChallenge,
+} from "./wallet-helpers";
 
 const SERIES_ID =
   "0x62e9de8122013ec803cddbbe018c92dd78871c68a1b37c0b9eb39bca13a5f43f";
-const ACCOUNT = "0x0000000000000000000000000000000000000001";
+// The DirectOrderbookForm asserts `walletAddress === account field`,
+// so the test wallet's address (anvil[0]) must match what gets typed
+// into the account input.
+const ACCOUNT = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+
+async function gotoSandbox(page: Page) {
+  await installConnectedWallet(page);
+  // The form runs the WRITE-AUTH challenge flow before submitting the
+  // order (ACCOUNT-WRITE-AUTH-HARDENING-V1); mock the challenge so the
+  // submission reaches `POST /options/orders`.
+  await mockWriteAuthChallenge(page);
+  await page.goto("/api/orderbook-sandbox");
+  await connectWallet(page);
+}
 
 interface CapturedRequest {
   option_series_id: string;
@@ -136,7 +154,7 @@ test.describe("orderbook sandbox — direct-order TIF + post-only wiring", () =>
         post_only: req.post_only,
       }),
     }));
-    await page.goto("/api/orderbook-sandbox");
+    await gotoSandbox(page);
     await fillForm(page, { tif: "GTC", size: "100000000" });
     await page.getByTestId("direct-orderbook-submit").click();
 
@@ -167,7 +185,7 @@ test.describe("orderbook sandbox — direct-order TIF + post-only wiring", () =>
         fills: [{ price: "1000000000", size: "30000000", maker: "maker-a" }],
       }),
     }));
-    await page.goto("/api/orderbook-sandbox");
+    await gotoSandbox(page);
     await fillForm(page, { tif: "IOC", size: "100000000" });
     await page.getByTestId("direct-orderbook-submit").click();
 
@@ -191,7 +209,7 @@ test.describe("orderbook sandbox — direct-order TIF + post-only wiring", () =>
       status: 400,
       body: { error: "fill-or-kill order is not fully fillable" },
     }));
-    await page.goto("/api/orderbook-sandbox");
+    await gotoSandbox(page);
     await fillForm(page, { tif: "FOK", size: "100000000" });
     await page.getByTestId("direct-orderbook-submit").click();
 
@@ -210,7 +228,7 @@ test.describe("orderbook sandbox — direct-order TIF + post-only wiring", () =>
       status: 400,
       body: { error: "post-only order would immediately match" },
     }));
-    await page.goto("/api/orderbook-sandbox");
+    await gotoSandbox(page);
     await fillForm(page, { tif: "GTC", postOnly: true, size: "100000000" });
     await page.getByTestId("direct-orderbook-submit").click();
 

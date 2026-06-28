@@ -40,7 +40,7 @@ function emptyEnvelope() {
 test("/leaderboard renders the shell with the 5-column header", async ({
   page,
 }) => {
-  await page.route("**/leaderboard*", (route) =>
+  await page.route(/\/leaderboard\?/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -62,7 +62,7 @@ test("/leaderboard fetches `/leaderboard` with default range + pagination", asyn
   page,
 }) => {
   let observedUrl = "";
-  await page.route("**/leaderboard*", (route) => {
+  await page.route(/\/leaderboard\?/, (route) => {
     observedUrl = route.request().url();
     return route.fulfill({
       status: 200,
@@ -81,7 +81,7 @@ test("/leaderboard fetches `/leaderboard` with default range + pagination", asyn
 test("empty leaderboard response renders the honest empty row", async ({
   page,
 }) => {
-  await page.route("**/leaderboard*", (route) =>
+  await page.route(/\/leaderboard\?/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -99,7 +99,7 @@ test("changing range triggers a refetch with the new range", async ({
   page,
 }) => {
   const seen: string[] = [];
-  await page.route("**/leaderboard*", (route) => {
+  await page.route(/\/leaderboard\?/, (route) => {
     seen.push(route.request().url());
     return route.fulfill({
       status: 200,
@@ -118,7 +118,7 @@ test("changing range triggers a refetch with the new range", async ({
 test("ranked rows render rank, short address, volume, trade count", async ({
   page,
 }) => {
-  await page.route("**/leaderboard*", (route) => {
+  await page.route(/\/leaderboard\?/, (route) => {
     const env = emptyEnvelope();
     env.data.total_records = 2;
     (env.data.items as unknown[]).push(
@@ -161,7 +161,7 @@ test("ranked rows render rank, short address, volume, trade count", async ({
 test("/leaderboard does NOT render the bottom marketing footer", async ({
   page,
 }) => {
-  await page.route("**/leaderboard*", (route) =>
+  await page.route(/\/leaderboard\?/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -176,7 +176,7 @@ test("/leaderboard does NOT render the bottom marketing footer", async ({
 test("backend 500 renders a muted error row (no internal leak)", async ({
   page,
 }) => {
-  await page.route("**/leaderboard*", (route) =>
+  await page.route(/\/leaderboard\?/, (route) =>
     route.fulfill({
       status: 500,
       contentType: "application/json",
@@ -197,7 +197,7 @@ test("backend 500 renders a muted error row (no internal leak)", async ({
 test("/leaderboard HTML carries no amber/yellow/orange brand classes", async ({
   page,
 }) => {
-  await page.route("**/leaderboard*", (route) =>
+  await page.route(/\/leaderboard\?/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -214,7 +214,7 @@ test("/leaderboard HTML carries no amber/yellow/orange brand classes", async ({
 test("navbar route indicator reads `Leaderboard` while on the page", async ({
   page,
 }) => {
-  await page.route("**/leaderboard*", (route) =>
+  await page.route(/\/leaderboard\?/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",

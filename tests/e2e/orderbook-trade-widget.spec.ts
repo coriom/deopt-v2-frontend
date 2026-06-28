@@ -1,7 +1,7 @@
 // FRONTEND-OPTIONS-DIRECT-ORDERBOOK-V1 — workspace Trade widget e2e.
 //
 // Exercises the four canonical TIF / post-only scenarios through the
-// real `trade` workspace widget on /trade (NOT the standalone
+// real `trade` workspace widget on /options (NOT the standalone
 // /api/orderbook-sandbox page). The widget's Orderbook mode renders
 // the shared DirectOrderbookForm, so this spec validates the wire-up
 // + the matching engine contract surfaces correctly inside the
@@ -12,7 +12,11 @@
 // `cargo test --test options_tests` (88 tests).
 
 import { test, expect, type Route } from "@playwright/test";
-import { installMockWallet } from "./wallet-fixture";
+import {
+  installConnectedWallet,
+  connectWallet,
+  mockWriteAuthChallenge,
+} from "./wallet-helpers";
 
 const SERIES_ID =
   "0x62e9de8122013ec803cddbbe018c92dd78871c68a1b37c0b9eb39bca13a5f43f";
@@ -101,8 +105,10 @@ async function setupOrdersRoute(
 }
 
 async function gotoTradeOrderbook(page: import("@playwright/test").Page) {
-  await installMockWallet(page);
-  await page.goto("/trade");
+  await installConnectedWallet(page);
+  await mockWriteAuthChallenge(page);
+  await page.goto("/options");
+  await connectWallet(page);
   await expect(page.getByTestId("widget-trade")).toBeVisible();
   await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
   await expect(page.getByTestId("direct-orderbook-form")).toBeVisible();
@@ -113,6 +119,11 @@ async function fillOrderbookForm(
   opts: { tif: "GTC" | "IOC" | "FOK"; postOnly?: boolean; size?: string },
 ) {
   await page.getByTestId("direct-orderbook-series-id").fill(SERIES_ID);
+  // Production form requires the account input to match the connected
+  // wallet address (write-auth submitter check).
+  await page
+    .getByTestId("direct-orderbook-account")
+    .fill("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
   if (opts.size) {
     await page.getByTestId("direct-orderbook-size").fill(opts.size);
   }
