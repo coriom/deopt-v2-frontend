@@ -61,7 +61,18 @@ export function TradingShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        // LANDING-PARTICLE-SCROLL-LISTENER-V1: this is the real scroll
+        // container for every non-terminal route (including the
+        // landing page at `/`). The outer layout uses
+        // `h-dvh overflow-hidden`, so `window` never scrolls — the
+        // particle field walks its parent chain to find the element
+        // tagged with `data-scroll-container` and attaches its
+        // scroll listener there instead.
+        <div
+          data-testid="page-scroll-container"
+          data-scroll-container="page"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        >
           <main
             data-testid="trading-main"
             data-route-mode="page"

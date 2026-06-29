@@ -52,13 +52,26 @@ test("/api wallet + signer cells show 'Not connected' / 'Not available' by defau
   await expect(page.getByTestId("identity-signer")).toContainText(/Not available/);
 });
 
-test("/api Mint Tokens card carries the planned chip and no live action", async ({
+// TESTNET-SELF-SERVE-ONBOARDING-V1 — the Mint Tokens placeholder
+// (disabled button + "Mint UI planned" copy) was retired and replaced
+// by a "Request Test Collateral" card that surfaces the 3 deployed
+// Base Sepolia mock token addresses + a Discord/feedback/quickstart
+// request path. Full coverage lives in
+// `testnet-self-serve-onboarding-v1.spec.ts`; this test just pins
+// that the old placeholder is GONE so we don't accidentally
+// re-introduce the dead button later.
+test("/api Mint Tokens card is the upgraded Request Test Collateral surface (no dead button)", async ({
   page,
 }) => {
   await page.goto("/api");
-  await expect(page.getByTestId("mint-tokens-action")).toBeDisabled();
-  await expect(page.getByTestId("mint-tokens-action")).toContainText(
-    /Mint UI planned/,
+  // Old disabled placeholder is gone.
+  await expect(page.getByTestId("mint-tokens-action")).toHaveCount(0);
+  // New surface is mounted with the honest framing.
+  await expect(page.getByTestId("developers-console-mint")).toContainText(
+    /Request Test Collateral/,
+  );
+  await expect(page.getByTestId("developers-console-mint")).toContainText(
+    /owner-only/i,
   );
 });
 

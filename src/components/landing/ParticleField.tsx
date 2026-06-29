@@ -13,12 +13,52 @@
 //   - existing cursor attraction + click repulsion + scroll-driven
 //     mode morphing (calm → wave → nodes → sparse) preserved
 //
+// LANDING-PARTICLE-SCROLL-LISTENER-V1: the trading layout uses
+// `h-dvh overflow-hidden`, so `window` never scrolls on the landing
+// page — the real scroll source is the page-mode div in
+// `TradingShell` (tagged with `data-scroll-container="page"`). The
+// effect walks up the DOM from the field's root to find it; if no
+// scroll container is tagged it falls back to `window` (e.g. an
+// isolated landing render in a Storybook-style harness).
+//
 // `prefers-reduced-motion: reduce` short-circuits the rAF loop and
 // renders a single static frame. Canvas is `pointer-events-none` so
 // it never blocks page interaction; cursor / click listeners are on
 // `window`.
 
 import { useEffect, useRef } from "react";
+
+type ScrollSource = HTMLElement | Window;
+
+function findScrollSource(start: HTMLElement | null): ScrollSource {
+  if (typeof window === "undefined") {
+    return window as unknown as ScrollSource;
+  }
+  let node: HTMLElement | null = start?.parentElement ?? null;
+  while (node) {
+    if (node.dataset?.scrollContainer) return node;
+    node = node.parentElement;
+  }
+  return window;
+}
+
+function readScrollPosition(source: ScrollSource): {
+  y: number;
+  progress: number;
+} {
+  if (source === window) {
+    const max = Math.max(
+      1,
+      document.documentElement.scrollHeight - window.innerHeight,
+    );
+    const y = window.scrollY;
+    return { y, progress: Math.min(1, Math.max(0, y / max)) };
+  }
+  const el = source as HTMLElement;
+  const max = Math.max(1, el.scrollHeight - el.clientHeight);
+  const y = el.scrollTop;
+  return { y, progress: Math.min(1, Math.max(0, y / max)) };
+}
 
 interface Particle {
   x: number;
@@ -55,10 +95,21 @@ export function ParticleField() {
     let width = 0;
     let height = 0;
     let scrollProgress = 0;
-    let lastScrollY = window.scrollY;
+    // LANDING-PARTICLE-SCROLL-LISTENER-V1: resolve the real scroll
+    // source once at mount. Walks parents of the field root looking
+    // for `data-scroll-container`; falls back to `window` if no
+    // tagged container is found.
+    const scrollSource: ScrollSource = findScrollSource(root);
+    let lastScrollY = readScrollPosition(scrollSource).y;
     let currentMode: Mode | "" = "";
     const cursor = { x: -9999, y: -9999, active: false };
     const click = { x: 0, y: 0, time: -Infinity };
+    // Tag the field root so tests / debug tooling can see which
+    // source was picked without inspecting React state.
+    root.setAttribute(
+      "data-scroll-source",
+      scrollSource === window ? "window" : "container",
+    );
 
     const reducedMotion =
       typeof window.matchMedia === "function" &&
@@ -112,12 +163,15 @@ export function ParticleField() {
       click.time = performance.now();
     }
     function onScroll() {
-      const max = Math.max(
-        1,
-        document.documentElement.scrollHeight - window.innerHeight,
-      );
-      scrollProgress = Math.min(1, Math.max(0, window.scrollY / max));
+      const { progress } = readScrollPosition(scrollSource);
+      scrollProgress = progress;
       setModeAttribute(pickMode(scrollProgress));
+      // Surface the live progress as a stable data attribute so
+      // tests can assert numeric movement, not just mode classes.
+      root!.setAttribute(
+        "data-scroll-progress",
+        scrollProgress.toFixed(3),
+      );
     }
 
     function drawStaticFrame() {
@@ -138,10 +192,12 @@ export function ParticleField() {
       const curlStrength = mode < 0.55 ? mode * 0.00012 : 0;
       const driftCalm = mode >= 0.85;
 
-      // Scroll parallax — apply ΔscrollY × PARALLAX_FACTOR to every
+      // Scroll parallax — apply Δscroll × PARALLAX_FACTOR to every
       // particle's internal y position each frame. Wrap-around at the
-      // viewport edges keeps the field visually continuous.
-      const sy = window.scrollY;
+      // viewport edges keeps the field visually continuous. Reads
+      // from the resolved scroll source (page-mode container on the
+      // landing page, `window` as fallback).
+      const sy = readScrollPosition(scrollSource).y;
       const parallaxDrift = (sy - lastScrollY) * PARALLAX_FACTOR;
       lastScrollY = sy;
 
@@ -234,7 +290,11 @@ export function ParticleField() {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("pointerleave", onLeave);
-    window.addEventListener("scroll", onScroll, { passive: true });
+    // Bind the scroll listener to whichever source `findScrollSource`
+    // resolved (page-mode container on landing, `window` fallback).
+    // `addEventListener` is identical for `Element` and `Window`, so
+    // a single binding keeps the cleanup symmetrical.
+    scrollSource.addEventListener("scroll", onScroll, { passive: true });
 
     if (reducedMotion) {
       drawStaticFrame();
@@ -248,7 +308,7 @@ export function ParticleField() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerleave", onLeave);
-      window.removeEventListener("scroll", onScroll);
+      scrollSource.removeEventListener("scroll", onScroll);
     };
   }, []);
 

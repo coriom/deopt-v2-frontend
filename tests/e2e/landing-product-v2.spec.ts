@@ -115,21 +115,62 @@ test("particle field root exposes scroll-parallax + density data attributes", as
   await expect(page.getByTestId("particle-field-canvas")).toBeAttached();
 });
 
-// The (trading) layout wraps the landing in `h-dvh … overflow-hidden`
-// (see `src/app/(trading)/layout.tsx`), so `window.scrollY` no longer
-// changes on the landing page — scrolling is internal to `<main>`.
-// The particle field's mode-switch listener is bound to `window`
-// scroll, so the test's original `calm → not-calm` invariant is no
-// longer reachable from a real user gesture on this layout.
-//
-// The mode-switch logic itself is still exercised by the lighter
-// "particle field renders the canvas" coverage above. Reinstating a
-// proper scroll-driven assertion would require either moving the
-// listener to the scroll container or making the landing scrollable
-// at the document level — both production-UX changes that are out of
-// scope for `PLAYWRIGHT-WALLET-AUTOCONNECT-MIGRATION-V1`.
-test.skip("particle mode morphs across scroll progress (calm → not-calm)", async () => {
-  // Intentionally skipped — see comment block above.
+// LANDING-PARTICLE-SCROLL-LISTENER-V1 — the (trading) layout wraps
+// the landing in `h-dvh … overflow-hidden`, so `window.scrollY`
+// doesn't move. The real scroll source is the page-mode div in
+// `TradingShell`, tagged with `data-testid="page-scroll-container"`
+// + `data-scroll-container="page"`; the particle field now walks its
+// parent chain to that element and attaches its scroll listener
+// there, falling back to `window` when no tagged container is found
+// (so the assertion `data-scroll-source="container"` pins that the
+// real source was discovered).
+test("particle mode morphs across scroll progress (calm → not-calm → calm)", async ({
+  page,
+}) => {
+  await installMockWallet(page);
+  await page.goto("/");
+
+  const field = page.getByTestId("particle-field");
+  const scroller = page.getByTestId("page-scroll-container");
+
+  await expect(field).toBeAttached();
+  await expect(scroller).toBeAttached();
+  // The field must have resolved the page-mode container (not the
+  // window fallback), otherwise the morph wouldn't be reachable.
+  await expect(field).toHaveAttribute("data-scroll-source", "container");
+  await expect(field).toHaveAttribute("data-particle-mode", "calm");
+
+  // Scroll the actual container to the bottom — `evaluate` runs in
+  // the browser so we can use `scrollTo` directly on the element.
+  // `dispatchEvent` would be silently no-op'd because the listener
+  // is `{ passive: true }`; the real `scrollTo` fires the native
+  // scroll event the field is now listening for.
+  await scroller.evaluate((el) => {
+    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+  });
+
+  // Mode should have left `calm`. Use `expect.poll` because the
+  // listener is debounced by the scroll event loop, not the test's
+  // `await`. No arbitrary timeouts.
+  await expect.poll(
+    async () => (await field.getAttribute("data-particle-mode")) ?? "",
+    { timeout: 5_000 },
+  ).toMatch(/^(wave|nodes|sparse)$/);
+
+  // Progress attribute should also have moved forward.
+  const progressAfterDown = Number(
+    (await field.getAttribute("data-scroll-progress")) ?? "0",
+  );
+  expect(progressAfterDown).toBeGreaterThan(0.1);
+
+  // Scrolling back to the top must restore `calm`.
+  await scroller.evaluate((el) => {
+    el.scrollTo({ top: 0, behavior: "auto" });
+  });
+  await expect.poll(
+    async () => await field.getAttribute("data-particle-mode"),
+    { timeout: 5_000 },
+  ).toBe("calm");
 });
 
 test("particle field DOES NOT block link clicks", async ({ page }) => {

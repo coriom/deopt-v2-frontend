@@ -17,9 +17,18 @@
 //   7. Link to the WebSocket sandbox at `/api/sandbox`
 
 import Link from "next/link";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { encodeFunctionData, type Address } from "viem";
+import { baseSepolia } from "viem/chains";
 import { useWallet } from "@/lib/wallet";
 import { docsPath } from "@/lib/docs-url";
+import { expectedChainId, BASE_SEPOLIA } from "@/lib/chains";
 
 type Environment = "Local" | "Testnet" | "Production" | "Unknown";
 
@@ -164,18 +173,419 @@ function IdentityCell({
 
 // ── Cards ─────────────────────────────────────────────────────────
 
+// TESTNET-SELF-SERVE-ONBOARDING-V1 — Case 2: the mock collateral
+// tokens ARE deployed on Base Sepolia (see manifest at
+// `deopt-v2-sol/deployments/base-sepolia.manifest.draft.json`) but
+// their `mint(address,uint256)` is `external onlyOwner`. A true
+// public faucet needs a different contract — that's
+// TESTNET-PUBLIC-FAUCET-CONTRACT-V1. When the operator deploys
+// `TestnetFaucet` and publishes its address via the env var
+// `NEXT_PUBLIC_TESTNET_FAUCET_ADDRESS`, this card flips to
+// claim-mode (calls `TestnetFaucet.claim()` from the user's
+// wallet). Until then, it remains in request-mode (3 token tiles +
+// Discord/feedback request path). NO fake mint button. NO fake
+// balance. NO fake "claimed!" toast.
+const TESTNET_FAUCET_TOKENS: ReadonlyArray<{
+  symbol: string;
+  address: string;
+  decimals: number;
+  blurb: string;
+  claimAmountHuman: string;
+}> = [
+  {
+    symbol: "mUSDC",
+    address: "0x6eae407f5640b006fac9965182e238582a3b412e",
+    decimals: 6,
+    blurb: "settlement collateral — USDC mock",
+    claimAmountHuman: "1,000",
+  },
+  {
+    symbol: "mWETH",
+    address: "0x4deebc5f537f3b8ba0e3393807b4d699d72bdd02",
+    decimals: 18,
+    blurb: "underlying — ETH mock",
+    claimAmountHuman: "1",
+  },
+  {
+    symbol: "mWBTC",
+    address: "0x9d871ac7595e8da271e866608e5145252047967c",
+    decimals: 8,
+    blurb: "underlying — BTC mock",
+    claimAmountHuman: "0.5",
+  },
+];
+
+const TESTNET_FAUCET_REQUEST_DISCORD =
+  "https://discord.gg/zaEMvWuxu";
+
+// TESTNET-PUBLIC-FAUCET-CONTRACT-V1 — minimal ABI for the deployed
+// `TestnetFaucet`. Only the two functions the card needs.
+const TESTNET_FAUCET_ABI = [
+  {
+    type: "function",
+    name: "claim",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+const FAUCET_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * Resolves the faucet address from (1) build-time env
+ * `NEXT_PUBLIC_TESTNET_FAUCET_ADDRESS`, falling back to (2) the
+ * runtime override `window.__deoptFaucetAddress` that Playwright
+ * sets via `setMockFaucetAddress`. Returns `null` if neither
+ * yields a valid 0x-address.
+ */
+function resolveFaucetAddress(): Address | null {
+  const fromEnv =
+    typeof process !== "undefined"
+      ? (process.env.NEXT_PUBLIC_TESTNET_FAUCET_ADDRESS ?? "").trim()
+      : "";
+  if (FAUCET_ADDRESS_RE.test(fromEnv)) return fromEnv as Address;
+  if (typeof window !== "undefined") {
+    const override = (
+      window as unknown as { __deoptFaucetAddress?: string | null }
+    ).__deoptFaucetAddress;
+    if (typeof override === "string" && FAUCET_ADDRESS_RE.test(override)) {
+      return override as Address;
+    }
+  }
+  return null;
+}
+
 function MintTokensCard() {
+  // Faucet address is resolved in an effect so the initial server
+  // render matches the initial client render (no hydration mismatch).
+  // The runtime override `window.__deoptFaucetAddress` only exists
+  // on the client, so the first paint always renders request-mode
+  // and the post-mount effect upgrades to claim-mode if a faucet
+  // address is available.
+  const [faucetAddress, setFaucetAddress] = useState<Address | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFaucetAddress(resolveFaucetAddress());
+  }, []);
+
+  if (faucetAddress) {
+    return <ClaimModeCard faucetAddress={faucetAddress} />;
+  }
+  return <RequestModeCard />;
+}
+
+type ClaimStatus =
+  | { kind: "idle" }
+  | { kind: "pending" }
+  | { kind: "success"; txHash: `0x${string}` }
+  | { kind: "wrong_network"; chainId: number | null }
+  | { kind: "error"; message: string };
+
+function ClaimModeCard({ faucetAddress }: { faucetAddress: Address }) {
+  const { address, walletClient, chainId, isExpectedChain } = useWallet();
+  const [status, setStatus] = useState<ClaimStatus>({ kind: "idle" });
+
+  const baseSepoliaId = useMemo(
+    () => (expectedChainId() === BASE_SEPOLIA.id ? BASE_SEPOLIA.id : null),
+    [],
+  );
+
+  const onClaim = useCallback(async () => {
+    if (!walletClient || !address) return;
+    if (!isExpectedChain) {
+      setStatus({ kind: "wrong_network", chainId });
+      return;
+    }
+    setStatus({ kind: "pending" });
+    try {
+      const data = encodeFunctionData({
+        abi: TESTNET_FAUCET_ABI,
+        functionName: "claim",
+      });
+      const txHash = await walletClient.sendTransaction({
+        account: address,
+        chain: baseSepolia,
+        to: faucetAddress,
+        data,
+      });
+      setStatus({ kind: "success", txHash });
+    } catch (err) {
+      // Never log the wallet error verbatim — it can include
+      // user-pasted strings. Show only the message field.
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Wallet rejected the claim.";
+      setStatus({ kind: "error", message });
+    }
+  }, [address, chainId, faucetAddress, isExpectedChain, walletClient]);
+
+  const canClick =
+    !!address && !!walletClient && status.kind !== "pending";
+
   return (
     <Card testid="developers-console-mint">
-      <CardHeader title="Mint Tokens" />
-      <p className="text-[13px] text-zinc-400">
-        Minting is not wired into the terminal. The faucet flow lands in a
-        later milestone.
+      <CardHeader title="Claim Test Collateral" />
+      <p
+        data-testid="mint-tokens-status"
+        className="text-[13px] text-zinc-400"
+      >
+        Click <span className="font-semibold text-zinc-100">Claim</span> to
+        receive a fixed amount of each mock token from the public
+        Base Sepolia faucet. There&apos;s a per-address cooldown
+        enforced by the contract (default 6h); each call transfers
+        the configured amounts atomically. You&apos;ll need a small
+        amount of Base Sepolia ETH for gas.
       </p>
-      <div className="mt-1 flex flex-wrap items-center gap-2">
-        <DisabledButton testid="mint-tokens-action">
-          Mint UI planned
-        </DisabledButton>
+
+      <div
+        data-testid="mint-tokens-tokens"
+        className="grid gap-2 sm:grid-cols-3"
+      >
+        {TESTNET_FAUCET_TOKENS.map((t) => (
+          <div
+            key={t.symbol}
+            data-testid={`mint-tokens-token-${t.symbol}`}
+            data-token-symbol={t.symbol}
+            data-token-address={t.address}
+            data-token-claim-amount-human={t.claimAmountHuman}
+            className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-[12px]"
+          >
+            <div className="mb-1 flex items-baseline justify-between">
+              <span className="text-[13px] font-semibold text-zinc-100">
+                {t.symbol}
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                +{t.claimAmountHuman}
+              </span>
+            </div>
+            <p className="mb-2 text-zinc-400">{t.blurb}</p>
+            <div className="flex items-center gap-1.5">
+              <code
+                className="truncate font-mono text-[11px] text-zinc-300"
+                title={t.address}
+                style={{ fontFamily: "var(--app-font-mono)" }}
+              >
+                {t.address.slice(0, 8)}…{t.address.slice(-6)}
+              </code>
+              <CopyButton
+                value={t.address}
+                testid={`mint-tokens-token-${t.symbol}-copy`}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        data-testid="mint-tokens-claim"
+        data-faucet-address={faucetAddress}
+        className="flex flex-col gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/[0.04] p-3 text-[12px] text-zinc-300"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+            Faucet
+          </span>
+          <code
+            data-testid="mint-tokens-faucet-address"
+            className="font-mono text-[12px] text-zinc-200"
+            style={{ fontFamily: "var(--app-font-mono)" }}
+          >
+            {faucetAddress}
+          </code>
+          <CopyButton
+            value={faucetAddress}
+            testid="mint-tokens-faucet-address-copy"
+          />
+        </div>
+        {!address ? (
+          <p
+            data-testid="mint-tokens-no-wallet"
+            className="text-zinc-500"
+          >
+            Connect your wallet (top right) to enable the claim
+            button.
+          </p>
+        ) : !isExpectedChain ? (
+          <div className="flex flex-col gap-1">
+            <p
+              data-testid="mint-tokens-wrong-network"
+              className="text-zinc-400"
+            >
+              Switch your wallet to Base Sepolia (chain id{" "}
+              <span className="font-mono text-zinc-200">
+                {baseSepoliaId ?? 84532}
+              </span>
+              ) to claim — the page banner has the switch button.
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            data-testid="mint-tokens-claim-button"
+            data-claim-status={status.kind}
+            disabled={!canClick}
+            onClick={onClaim}
+            className="inline-flex w-fit items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-[13px] font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {status.kind === "pending" ? "Claiming…" : "Claim"}
+          </button>
+        )}
+
+        {status.kind === "success" ? (
+          <p
+            data-testid="mint-tokens-claim-success"
+            className="text-zinc-300"
+          >
+            Claim broadcast — tx{" "}
+            <a
+              href={`https://sepolia.basescan.org/tx/${status.txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="mint-tokens-claim-tx-link"
+              data-tx-hash={status.txHash}
+              className="font-mono text-emerald-300 underline-offset-2 hover:underline"
+              style={{ fontFamily: "var(--app-font-mono)" }}
+            >
+              {status.txHash.slice(0, 10)}…{status.txHash.slice(-8)}
+            </a>
+            . Wait for confirmation before you trade.
+          </p>
+        ) : null}
+
+        {status.kind === "error" ? (
+          <p
+            data-testid="mint-tokens-claim-error"
+            className="text-zinc-400"
+          >
+            Claim failed:{" "}
+            <span className="text-zinc-200">{status.message}</span>
+          </p>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+function RequestModeCard() {
+  const { address } = useWallet();
+  return (
+    <Card testid="developers-console-mint">
+      <CardHeader title="Request Test Collateral" />
+      <p
+        data-testid="mint-tokens-status"
+        className="text-[13px] text-zinc-400"
+      >
+        The Base Sepolia mock collateral / underlying tokens are{" "}
+        <span className="text-zinc-200">deployed</span> but their
+        <code className="mx-1 rounded bg-zinc-900 px-1 py-0.5 font-mono text-[12px] text-zinc-200">
+          mint
+        </code>
+        function is{" "}
+        <span className="font-semibold text-zinc-100">owner-only</span> in
+        this beta. A public-callable faucet contract lands in
+        {" "}
+        <span className="text-zinc-200">TESTNET-PUBLIC-FAUCET-CONTRACT-V1</span>;
+        until then, the operator mints on request.
+      </p>
+
+      <div
+        data-testid="mint-tokens-tokens"
+        className="grid gap-2 sm:grid-cols-3"
+      >
+        {TESTNET_FAUCET_TOKENS.map((t) => (
+          <div
+            key={t.symbol}
+            data-testid={`mint-tokens-token-${t.symbol}`}
+            data-token-symbol={t.symbol}
+            data-token-address={t.address}
+            className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-[12px]"
+          >
+            <div className="mb-1 flex items-baseline justify-between">
+              <span className="text-[13px] font-semibold text-zinc-100">
+                {t.symbol}
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                {t.decimals} dec
+              </span>
+            </div>
+            <p className="mb-2 text-zinc-400">{t.blurb}</p>
+            <div className="flex items-center gap-1.5">
+              <code
+                className="truncate font-mono text-[11px] text-zinc-300"
+                title={t.address}
+                style={{ fontFamily: "var(--app-font-mono)" }}
+              >
+                {t.address.slice(0, 8)}…{t.address.slice(-6)}
+              </code>
+              <CopyButton
+                value={t.address}
+                testid={`mint-tokens-token-${t.symbol}-copy`}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        data-testid="mint-tokens-request"
+        className="flex flex-col gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/[0.04] p-3 text-[12px] text-zinc-300"
+      >
+        <p>
+          To request a top-up, send the operator your connected wallet
+          address — either via{" "}
+          <a
+            href={TESTNET_FAUCET_REQUEST_DISCORD}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="mint-tokens-discord-link"
+            className="text-emerald-300 underline-offset-2 hover:underline"
+          >
+            Discord
+          </a>{" "}
+          or the{" "}
+          <Link
+            href="/feedback"
+            data-testid="mint-tokens-feedback-link"
+            className="text-emerald-300 underline-offset-2 hover:underline"
+          >
+            feedback page
+          </Link>
+          . You&apos;ll need Base Sepolia ETH for gas separately (any
+          public Base Sepolia faucet — see the{" "}
+          <Link
+            href="/docs/quickstart"
+            data-testid="mint-tokens-quickstart-link"
+            className="text-emerald-300 underline-offset-2 hover:underline"
+          >
+            5-minute tester quickstart
+          </Link>
+          ).
+        </p>
+        {address ? (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+              Your address
+            </span>
+            <code
+              data-testid="mint-tokens-connected-address"
+              className="font-mono text-[12px] text-zinc-100"
+              style={{ fontFamily: "var(--app-font-mono)" }}
+            >
+              {address}
+            </code>
+            <CopyButton value={address} testid="mint-tokens-address-copy" />
+          </div>
+        ) : (
+          <p
+            data-testid="mint-tokens-no-wallet"
+            className="text-zinc-500"
+          >
+            Connect your wallet (top right) so you can copy your
+            address into the request — the operator needs it to mint.
+          </p>
+        )}
       </div>
     </Card>
   );

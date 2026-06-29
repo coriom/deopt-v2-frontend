@@ -58,6 +58,13 @@ const MOCK_TYPED_SIGNATURE =
   "12".repeat(64) +
   "1c"; /* v = 28; 65 bytes hex-encoded = 132 chars after 0x */
 
+// Deterministic fake tx hash returned by `eth_sendTransaction` so the
+// `TestnetFaucet.claim()` UX can resolve in browser tests without a
+// real chain. Recognisable shape (alternating bytes) so log scans
+// know it's a test artifact, not a real Base Sepolia hash.
+export const MOCK_TX_HASH: `0x${string}` =
+  "0xdeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
+
 // Page-scoped guard so `installMockWallet` can be called more than
 // once per page without re-registering the exposed function (which
 // would throw `Function "__deoptPersonalSign" has been already
@@ -92,6 +99,7 @@ export async function installMockWallet(
       chainId,
       signatureRejected,
       MOCK_TYPED_SIGNATURE,
+      MOCK_TX_HASH,
     }) => {
       type Handler = (...args: unknown[]) => void;
       const listeners: Map<string, Handler[]> = new Map();
@@ -172,6 +180,23 @@ export async function installMockWallet(
               }
               return await exposed(message);
             }
+            case "eth_sendTransaction": {
+              // TESTNET-PUBLIC-FAUCET-CONTRACT-V1 — support the
+              // faucet `claim()` UX in browser tests. NO real tx is
+              // broadcast (this is a mock provider in a Playwright
+              // page); we return a deterministic 32-byte hash so
+              // viem resolves and the UI shows its success state.
+              // Rejection path mirrors the sign handlers so tests
+              // can drive the error UX too.
+              if (state.signatureRejected) {
+                const err: Error & { code?: number } = new Error(
+                  "User rejected the request.",
+                );
+                err.code = 4001;
+                throw err;
+              }
+              return MOCK_TX_HASH;
+            }
             default:
               return null;
           }
@@ -207,6 +232,24 @@ export async function installMockWallet(
           },
         };
     },
-    { account, chainId, signatureRejected, MOCK_TYPED_SIGNATURE },
+    { account, chainId, signatureRejected, MOCK_TYPED_SIGNATURE, MOCK_TX_HASH },
   );
+}
+
+/**
+ * TESTNET-PUBLIC-FAUCET-CONTRACT-V1 — inject a runtime faucet
+ * address override. `MintTokensCard` reads
+ * `process.env.NEXT_PUBLIC_TESTNET_FAUCET_ADDRESS` first (build-time
+ * inlined); if empty, it falls back to `window.__deoptFaucetAddress`
+ * so Playwright can flip the card between request-mode and
+ * claim-mode without rebuilding. Pass `null` to clear the override.
+ */
+export async function setMockFaucetAddress(
+  page: Page,
+  address: `0x${string}` | null,
+): Promise<void> {
+  await page.addInitScript((addr) => {
+    (window as unknown as { __deoptFaucetAddress?: string | null }).__deoptFaucetAddress =
+      addr;
+  }, address);
 }
