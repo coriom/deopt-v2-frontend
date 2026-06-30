@@ -22,6 +22,7 @@ import type {
   ClosePreviewRequest,
   HistoryData,
   NotReadyData,
+  OptionOrderAttachmentPlan,
   PortfolioData,
   PositionsData,
   ProductDetailData,
@@ -676,6 +677,57 @@ export function cancelConditionalOrder(
     `/accounts/${address}/conditional-orders/${id}`,
     body,
     signal,
+  );
+}
+
+/**
+ * ATTACHED-TP-SL-PLAN-OBSERVABILITY-V1 — list the trader's
+ * attached TP/SL plans (the spec the ticket sent, plus its
+ * pending/active/cancelled/failed status). Materialised
+ * conditional rows are still listed via `listConditionalOrders`;
+ * this endpoint is the only window onto pending/failed plans.
+ *
+ * Returns the raw `OptionOrderAttachmentPlan[]` newest first.
+ */
+export function listOptionOrderAttachmentPlans(
+  address: string,
+  opts: { sinceMs?: number; signal?: AbortSignal } = {},
+): Promise<OptionOrderAttachmentPlan[]> {
+  const params = new URLSearchParams();
+  if (opts.sinceMs !== undefined) params.set("since_ms", String(opts.sinceMs));
+  const suffix = params.toString().length > 0 ? `?${params.toString()}` : "";
+  return rawRequest<{ plans: OptionOrderAttachmentPlan[] }>(
+    "GET",
+    `/accounts/${address}/option-order-attachment-plans${suffix}`,
+    undefined,
+    opts.signal,
+  ).then((r) =>
+    r.plans.map((p) => {
+      const tpTrigger = p.take_profit_trigger_price_1e8;
+      const tpLimit = p.take_profit_limit_price_1e8;
+      const slTrigger = p.stop_loss_trigger_price_1e8;
+      const slLimit = p.stop_loss_limit_price_1e8;
+      const out: OptionOrderAttachmentPlan = { ...p };
+      if (tpTrigger !== undefined && tpLimit !== undefined) {
+        out.take_profit = {
+          trigger_price_1e8: tpTrigger,
+          limit_price_1e8: tpLimit,
+        };
+      }
+      if (slTrigger !== undefined && slLimit !== undefined) {
+        out.stop_loss = {
+          trigger_price_1e8: slTrigger,
+          limit_price_1e8: slLimit,
+        };
+      }
+      if (p.take_profit_conditional_order_id !== undefined) {
+        out.tp_conditional_order_id = p.take_profit_conditional_order_id;
+      }
+      if (p.stop_loss_conditional_order_id !== undefined) {
+        out.sl_conditional_order_id = p.stop_loss_conditional_order_id;
+      }
+      return out;
+    }),
   );
 }
 

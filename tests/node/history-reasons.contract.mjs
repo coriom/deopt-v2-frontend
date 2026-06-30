@@ -11,6 +11,15 @@ const REASON_LABELS = {
   fok_not_fillable:        { message: "Fill-or-kill order was not fully fillable", severity: "warning" },
   fok_cancelled:           { message: "Fill-or-kill order cancelled", severity: "info" },
   post_only_would_cross:   { message: "Post-only order would immediately match", severity: "warning" },
+  // HISTORY-V2-REJECTED-ATTEMPTS-FEED-V1 (mirror src/lib/history-reasons.ts)
+  post_only_would_match:   { message: "Post-only order would immediately match", severity: "warning" },
+  self_trade:              { message: "Order would self-trade", severity: "warning" },
+  deadline_expired:        { message: "Order deadline passed before submit", severity: "warning" },
+  zero_price:              { message: "Price must be > 0", severity: "warning" },
+  zero_size:               { message: "Size must be > 0", severity: "warning" },
+  unsupported_tif:         { message: "Time-in-force is not supported", severity: "warning" },
+  invalid_tif_combination: { message: "Invalid time-in-force + post-only combination", severity: "warning" },
+  option_series_inactive:  { message: "Option series is not active", severity: "warning" },
   cancelled:               { message: "Cancelled", severity: "info" },
   user_cancelled:          { message: "Cancelled by user", severity: "info" },
   system_cancelled:        { message: "Cancelled by system", severity: "info" },
@@ -343,4 +352,104 @@ test("long persisted terminal_reason_message is clamped to <= 240 chars", () => 
   });
   assert.ok(r.message.length <= 240);
   assert.ok(r.message.endsWith("…"));
+});
+
+// =====================================================================
+// HISTORY-V2-REJECTED-ATTEMPTS-FEED-V1 — verify the new rejection
+// codes render through the same `deriveOrderReason` helper that the
+// Orders tab uses.
+// =====================================================================
+
+test("rejected post_only_would_match row renders the post-only message", () => {
+  const r = deriveOrderReason({
+    status: "rejected",
+    order_type: "gtc",
+    post_only: true,
+    terminal_reason_code: "post_only_would_match",
+    terminal_reason_source: "matching_policy",
+  });
+  assert.equal(r.code, "post_only_would_match");
+  assert.equal(r.message, "Post-only order would immediately match");
+  assert.equal(r.severity, "warning");
+  assert.equal(r.source, "matching_policy");
+});
+
+test("rejected fok_not_fillable row renders the FOK message", () => {
+  const r = deriveOrderReason({
+    status: "rejected",
+    order_type: "fok",
+    terminal_reason_code: "fok_not_fillable",
+    terminal_reason_source: "matching_policy",
+  });
+  assert.equal(r.code, "fok_not_fillable");
+  assert.equal(r.message, "Fill-or-kill order was not fully fillable");
+  assert.equal(r.severity, "warning");
+  assert.equal(r.source, "matching_policy");
+});
+
+test("rejected deadline_expired row renders the deadline message", () => {
+  const r = deriveOrderReason({
+    status: "rejected",
+    order_type: "gtc",
+    terminal_reason_code: "deadline_expired",
+    terminal_reason_source: "request_validation",
+  });
+  assert.equal(r.code, "deadline_expired");
+  assert.equal(r.message, "Order deadline passed before submit");
+  assert.equal(r.source, "request_validation");
+});
+
+test("rejected invalid_tif_combination row renders the TIF-combo message", () => {
+  const r = deriveOrderReason({
+    status: "rejected",
+    order_type: "ioc",
+    post_only: true,
+    terminal_reason_code: "invalid_tif_combination",
+    terminal_reason_source: "request_validation",
+  });
+  assert.equal(r.code, "invalid_tif_combination");
+  assert.equal(r.message, "Invalid time-in-force + post-only combination");
+});
+
+test("rejected option_series_inactive renders the series-state message", () => {
+  const r = deriveOrderReason({
+    status: "rejected",
+    order_type: "gtc",
+    terminal_reason_code: "option_series_inactive",
+    terminal_reason_source: "series_state",
+  });
+  assert.equal(r.code, "option_series_inactive");
+  assert.equal(r.message, "Option series is not active");
+  assert.equal(r.source, "series_state");
+});
+
+test("unknown rejection code falls back to raw token + warning severity", () => {
+  // Defends against a backend-side rejection_reason addition the
+  // frontend hasn't shipped a label for yet — we must NOT silently
+  // drop the row.
+  const r = deriveOrderReason({
+    status: "rejected",
+    order_type: "gtc",
+    terminal_reason_code: "future_unknown_code",
+    terminal_reason_source: "matching_policy",
+  });
+  assert.equal(r.code, "future_unknown_code");
+  assert.equal(r.message, "future_unknown_code");
+  assert.equal(r.severity, "warning");
+});
+
+test("expired status keeps its own label and is not conflated with rejected", () => {
+  // OPTION-ORDER-EXPIRY-SWEEP-V1 + this milestone share the Orders
+  // tab; the Expired terminal reason must not be rebranded as a
+  // pre-persistence rejection.
+  const r = deriveOrderReason({
+    status: "expired",
+    order_type: "gtc",
+    terminal_reason_code: "expired",
+    terminal_reason_source: "expiry_sweep",
+  });
+  assert.equal(r.code, "expired");
+  assert.equal(r.message, "Expired");
+  assert.equal(r.severity, "info");
+  assert.equal(r.source, "expiry_sweep");
 });

@@ -63,6 +63,42 @@ const REASON_LABELS: Record<string, { message: string; severity: ReasonSeverity 
     message: "Post-only order would immediately match",
     severity: "warning",
   },
+  // HISTORY-V2-REJECTED-ATTEMPTS-FEED-V1 — backend-side rejection
+  // codes for pre-persistence attempts. These rows arrive on the
+  // Orders tab with `status="rejected"` and `terminal_reason_code`
+  // set to one of the entries below.
+  post_only_would_match: {
+    message: "Post-only order would immediately match",
+    severity: "warning",
+  },
+  self_trade: {
+    message: "Order would self-trade",
+    severity: "warning",
+  },
+  deadline_expired: {
+    message: "Order deadline passed before submit",
+    severity: "warning",
+  },
+  zero_price: {
+    message: "Price must be > 0",
+    severity: "warning",
+  },
+  zero_size: {
+    message: "Size must be > 0",
+    severity: "warning",
+  },
+  unsupported_tif: {
+    message: "Time-in-force is not supported",
+    severity: "warning",
+  },
+  invalid_tif_combination: {
+    message: "Invalid time-in-force + post-only combination",
+    severity: "warning",
+  },
+  option_series_inactive: {
+    message: "Option series is not active",
+    severity: "warning",
+  },
   // Generic order outcomes.
   cancelled: { message: "Cancelled", severity: "info" },
   user_cancelled: { message: "Cancelled by user", severity: "info" },

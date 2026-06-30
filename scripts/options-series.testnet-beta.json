@@ -1,0 +1,43 @@
+{
+  "_comment": "TESTNET-PUBLIC-BETA-LAUNCH-KIT-V1 — minimal seed set for the public Base Sepolia beta. Feed to scripts/seed-options-series.mjs. The backend's POST /options/series endpoint computes a deterministic option_series_id from (underlying, strike, expiry, is_call, base/quote/settlement asset), so re-running this seed against the same DB is idempotent.",
+  "_chain": "Base Sepolia 84532",
+  "_underlying_oracle_caveat": "These series are TESTNET BETA placeholders. The strike + expiry combinations are illustrative; before public launch the operator should sanity-check that the on-chain OptionProductRegistry recognises the same products. The mock collateral on Base Sepolia is USDC-denominated.",
+  "series": [
+    {
+      "underlying": "ETH",
+      "base_asset": "ETH",
+      "quote_asset": "USDC",
+      "settlement_asset": "USDC",
+      "expiry": 1798704000,
+      "strike_1e8": "400000000000",
+      "is_call": true,
+      "contract_size_1e8": "100000000",
+      "onchain_product_id": "TESTNET-BETA-ETH-CALL",
+      "onchain_series_id": "TESTNET-BETA-ETH-CALL-4000-2026-12-31"
+    },
+    {
+      "underlying": "ETH",
+      "base_asset": "ETH",
+      "quote_asset": "USDC",
+      "settlement_asset": "USDC",
+      "expiry": 1798704000,
+      "strike_1e8": "350000000000",
+      "is_call": false,
+      "contract_size_1e8": "100000000",
+      "onchain_product_id": "TESTNET-BETA-ETH-PUT",
+      "onchain_series_id": "TESTNET-BETA-ETH-PUT-3500-2026-12-31"
+    },
+    {
+      "underlying": "BTC",
+      "base_asset": "BTC",
+      "quote_asset": "USDC",
+      "settlement_asset": "USDC",
+      "expiry": 1798704000,
+      "strike_1e8": "9500000000000",
+      "is_call": true,
+      "contract_size_1e8": "100000000",
+      "onchain_product_id": "TESTNET-BETA-BTC-CALL",
+      "onchain_series_id": "TESTNET-BETA-BTC-CALL-95000-2026-12-31"
+    }
+  ]
+}

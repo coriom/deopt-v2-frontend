@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "e2e:install": "playwright install chromium",
     "e2e:local": "playwright test",
-    "test:node": "node --test tests/node/*.mjs"
+    "test:node": "node --test tests/node/*.mjs",
+    "testnet:faucet:reserves": "node scripts/check-testnet-faucet-reserves.mjs"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",

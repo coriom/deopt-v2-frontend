@@ -25,6 +25,7 @@ import { useWallet } from "@/lib/wallet";
 import { buildAuthorization, canonical } from "@/lib/write-auth";
 import { useLifecycleStream } from "@/hooks/useLifecycleStream";
 import type { LifecycleEvent } from "@/lib/lifecycle-types";
+import { AttachedPlansPanel } from "./AttachedPlansPanel";
 import { LifecycleStatusBadge } from "./LifecycleStatusBadge";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -296,6 +297,11 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
           Cancel failed: {cancelError}
         </p>
       )}
+      {/* ATTACHED-TP-SL-PLAN-OBSERVABILITY-V1 — sibling subsection
+          showing attachment plans (pending/active/cancelled/failed).
+          Distinct from the conditional rows above; uses its own
+          REST snapshot. */}
+      <AttachedPlansPanel address={address} />
     </section>
   );
 }

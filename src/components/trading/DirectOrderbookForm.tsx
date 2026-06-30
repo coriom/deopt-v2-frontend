@@ -25,6 +25,10 @@
 
 import { useState } from "react";
 import {
+  buildAttachedTpSlPayload,
+  validateAttachedTpSl,
+} from "@/lib/attached-tp-sl-payload";
+import {
   submitOptionOrder,
   TradingApiError,
 } from "@/lib/trading-api";
@@ -63,19 +67,43 @@ export function DirectOrderbookForm({
   const [tif, setTif] = useState<Tif>("GTC");
   const [postOnly, setPostOnly] = useState(false);
 
+  // ATTACHED-TP-SL-TICKET-UI-V1 — attached TP/SL inputs. Disabled
+  // by default; toggling on reveals the price inputs and forces
+  // OCO when both are enabled. The payload is only included in
+  // the submit body when at least one toggle is on AND every
+  // enabled leg's prices are valid.
+  const [tpEnabled, setTpEnabled] = useState(false);
+  const [slEnabled, setSlEnabled] = useState(false);
+  const [tpTrigger1e8, setTpTrigger1e8] = useState("");
+  const [tpLimit1e8, setTpLimit1e8] = useState("");
+  const [slTrigger1e8, setSlTrigger1e8] = useState("");
+  const [slLimit1e8, setSlLimit1e8] = useState("");
+
   const [phase, setPhase] = useState<"idle" | "submitting" | "ok" | "err">(
     "idle",
   );
   const [response, setResponse] = useState<SubmitOptionOrderResponse | null>(
     null,
   );
+  const [attachedSubmitted, setAttachedSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const attachedState = {
+    tpEnabled,
+    slEnabled,
+    tpTrigger1e8,
+    tpLimit1e8,
+    slTrigger1e8,
+    slLimit1e8,
+  };
+  const attachedValidation = validateAttachedTpSl(attachedState);
 
   const canSubmit =
     seriesId.length > 0 &&
     account.length > 0 &&
     price1e8.length > 0 &&
     size1e8.length > 0 &&
+    attachedValidation.ok &&
     phase !== "submitting";
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,6 +138,7 @@ export function DirectOrderbookForm({
         }),
         signTypedData,
       });
+      const attached = buildAttachedTpSlPayload(attachedState);
       const body: SubmitOptionOrderRequest = {
         option_series_id: seriesId,
         account: walletAddress,
@@ -119,14 +148,17 @@ export function DirectOrderbookForm({
         time_in_force: tifWire(tif),
         post_only: postOnly,
         authorization,
+        ...(attached ? { attached_tp_sl: attached } : {}),
       };
       const res = await submitOptionOrder(body);
       setResponse(res);
+      setAttachedSubmitted(attached !== undefined);
       setPhase("ok");
     } catch (err) {
       const message =
         err instanceof TradingApiError ? err.message : (err as Error).message;
       setErrorMessage(message);
+      setAttachedSubmitted(false);
       setPhase("err");
     }
   };
@@ -251,6 +283,160 @@ export function DirectOrderbookForm({
         />
       </div>
 
+      {/* ATTACHED-TP-SL-TICKET-UI-V1 — compact attached TP/SL
+          section. Off by default. Toggling either leg reveals its
+          inputs. When both legs are enabled the OCO link is forced
+          on and a short copy explains the behaviour. */}
+      <section
+        data-testid="direct-orderbook-attached-section"
+        className="flex flex-col gap-2 rounded border border-zinc-800 bg-black/30 p-2 text-xs text-zinc-300"
+      >
+        <header className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-emerald-200">
+            Attach TP / SL (optional)
+          </h3>
+          <span
+            data-testid="direct-orderbook-attached-help"
+            className="text-[10px] text-zinc-500"
+          >
+            activates after fill
+          </span>
+        </header>
+        <div className="flex flex-col gap-1 text-[10px] leading-snug text-zinc-500">
+          <span>
+            Attached TP/SL becomes active only after the entry order
+            fills.
+          </span>
+          <span>
+            For partial fills, TP/SL covers the filled size only.
+            Standalone TP/SL remains available after entry.
+          </span>
+        </div>
+        <div className="flex gap-3">
+          <label className="flex items-center gap-1 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={tpEnabled}
+              onChange={(e) => setTpEnabled(e.target.checked)}
+              data-testid="direct-orderbook-attach-tp-toggle"
+              className="size-3.5 accent-emerald-500"
+            />
+            Take Profit
+          </label>
+          <label className="flex items-center gap-1 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={slEnabled}
+              onChange={(e) => setSlEnabled(e.target.checked)}
+              data-testid="direct-orderbook-attach-sl-toggle"
+              className="size-3.5 accent-red-500"
+            />
+            Stop Loss
+          </label>
+        </div>
+        {tpEnabled ? (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[11px] text-zinc-300">
+              TP trigger (1e8)
+              <input
+                type="text"
+                inputMode="numeric"
+                value={tpTrigger1e8}
+                onChange={(e) => setTpTrigger1e8(e.target.value)}
+                data-testid="direct-orderbook-attach-tp-trigger"
+                aria-invalid={attachedValidation.tpTriggerError !== null}
+                placeholder="1500000000"
+                className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
+              />
+              {attachedValidation.tpTriggerError ? (
+                <span
+                  data-testid="direct-orderbook-attach-tp-trigger-error"
+                  className="block text-[10px] text-red-300"
+                >
+                  {attachedValidation.tpTriggerError}
+                </span>
+              ) : null}
+            </label>
+            <label className="text-[11px] text-zinc-300">
+              TP limit (1e8)
+              <input
+                type="text"
+                inputMode="numeric"
+                value={tpLimit1e8}
+                onChange={(e) => setTpLimit1e8(e.target.value)}
+                data-testid="direct-orderbook-attach-tp-limit"
+                aria-invalid={attachedValidation.tpLimitError !== null}
+                placeholder="1500000000"
+                className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
+              />
+              {attachedValidation.tpLimitError ? (
+                <span
+                  data-testid="direct-orderbook-attach-tp-limit-error"
+                  className="block text-[10px] text-red-300"
+                >
+                  {attachedValidation.tpLimitError}
+                </span>
+              ) : null}
+            </label>
+          </div>
+        ) : null}
+        {slEnabled ? (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[11px] text-zinc-300">
+              SL trigger (1e8)
+              <input
+                type="text"
+                inputMode="numeric"
+                value={slTrigger1e8}
+                onChange={(e) => setSlTrigger1e8(e.target.value)}
+                data-testid="direct-orderbook-attach-sl-trigger"
+                aria-invalid={attachedValidation.slTriggerError !== null}
+                placeholder="500000000"
+                className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-red-500/60 focus:outline-none"
+              />
+              {attachedValidation.slTriggerError ? (
+                <span
+                  data-testid="direct-orderbook-attach-sl-trigger-error"
+                  className="block text-[10px] text-red-300"
+                >
+                  {attachedValidation.slTriggerError}
+                </span>
+              ) : null}
+            </label>
+            <label className="text-[11px] text-zinc-300">
+              SL limit (1e8)
+              <input
+                type="text"
+                inputMode="numeric"
+                value={slLimit1e8}
+                onChange={(e) => setSlLimit1e8(e.target.value)}
+                data-testid="direct-orderbook-attach-sl-limit"
+                aria-invalid={attachedValidation.slLimitError !== null}
+                placeholder="500000000"
+                className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-red-500/60 focus:outline-none"
+              />
+              {attachedValidation.slLimitError ? (
+                <span
+                  data-testid="direct-orderbook-attach-sl-limit-error"
+                  className="block text-[10px] text-red-300"
+                >
+                  {attachedValidation.slLimitError}
+                </span>
+              ) : null}
+            </label>
+          </div>
+        ) : null}
+        {tpEnabled && slEnabled ? (
+          <p
+            data-testid="direct-orderbook-attach-oco-copy"
+            className="text-[10px] leading-snug text-zinc-400"
+          >
+            OCO is on by default. When one leg triggers, the other is
+            cancelled.
+          </p>
+        ) : null}
+      </section>
+
       <button
         type="submit"
         disabled={!canSubmit}
@@ -293,6 +479,15 @@ export function DirectOrderbookForm({
               </span>
             </ResultCell>
           </div>
+          {attachedSubmitted ? (
+            <p
+              data-testid="direct-orderbook-result-attached"
+              className="rounded border border-emerald-700/40 bg-emerald-900/30 px-2 py-1 text-[11px] text-emerald-100"
+            >
+              Attached TP/SL plan submitted. It becomes active after
+              fills. Check Conditional Orders / History for status.
+            </p>
+          ) : null}
           {response.fills.length > 0 ? (
             <ul
               data-testid="direct-orderbook-result-fills"

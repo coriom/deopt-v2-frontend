@@ -383,6 +383,87 @@ export interface SubmitOptionOrderRequest {
   /** ACCOUNT-WRITE-AUTH-HARDENING-V1 — write authorization envelope.
    * Build via `src/lib/write-auth.ts::buildAuthorization`. */
   authorization: import("./write-auth").AuthorizationEnvelope;
+  /** ATTACHED-TP-SL-ON-ENTRY-V1 — optional TP/SL intent that
+   * materialises into reduce-only conditional orders on the first
+   * fill batch where the parent has reducible position. Backwards-
+   * compatible: omit entirely for the existing behaviour. */
+  attached_tp_sl?: AttachedTpSlRequest;
+}
+
+/** ATTACHED-TP-SL-ON-ENTRY-V1 — wire-level body for the trader's
+ * TP/SL attachment intent. Prices follow the parent order's
+ * `price_1e8` / `size_1e8` convention (stringified u128 × 1e8).
+ *
+ * Validation (enforced server-side, surfaced via the rejected-
+ * attempts feed when failing): at least one of `take_profit` /
+ * `stop_loss` must be present; each leg's trigger and limit
+ * prices must be > 0; `link_as_oco=true` requires BOTH legs;
+ * `expires_at_ms`, if set, must be in the future. */
+export interface AttachedTpSlRequest {
+  take_profit?: AttachedLegRequest;
+  stop_loss?: AttachedLegRequest;
+  link_as_oco?: boolean;
+  expires_at_ms?: number;
+}
+
+export interface AttachedLegRequest {
+  trigger_price_1e8: DecimalString;
+  limit_price_1e8: DecimalString;
+}
+
+/** ATTACHED-TP-SL-ON-ENTRY-V1 — attachment plan status surfaced
+ * to the frontend via the (future) account endpoint. The
+ * lifecycle is `pending → active | cancelled | failed`; only
+ * `pending` is non-terminal. */
+export type AttachmentPlanStatus =
+  | "pending"
+  | "active"
+  | "cancelled"
+  | "failed";
+
+/** ATTACHED-TP-SL-PLAN-OBSERVABILITY-V1 — read-only representation
+ * of a persisted attachment plan, returned by
+ * `GET /accounts/:address/option-order-attachment-plans`. Wire
+ * fields are flattened (`take_profit_trigger_price_1e8` rather
+ * than `take_profit: { trigger_price_1e8 }`) so the JSON layout
+ * matches the OpenAPI snapshot in the milestone result doc.
+ *
+ * `take_profit` / `stop_loss` are nested helpers populated from
+ * the flattened wire fields on the frontend side (see
+ * `parseAttachmentPlanLegs` in the API client) so the component
+ * can render with `plan.take_profit?.trigger_price_1e8` style. */
+export interface OptionOrderAttachmentPlan {
+  plan_id: string;
+  parent_order_id: string;
+  account: EthAddress;
+  option_series_id: SeriesId;
+  status: AttachmentPlanStatus;
+  link_as_oco: boolean;
+  expires_at_ms?: number;
+  // Flattened wire fields.
+  take_profit_trigger_price_1e8?: DecimalString;
+  take_profit_limit_price_1e8?: DecimalString;
+  stop_loss_trigger_price_1e8?: DecimalString;
+  stop_loss_limit_price_1e8?: DecimalString;
+  materialized_size_1e8?: DecimalString;
+  take_profit_conditional_order_id?: string;
+  stop_loss_conditional_order_id?: string;
+  oco_group_id?: string;
+  failure_code?: string;
+  failure_message?: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+  // Convenience helpers populated by the API client (NOT on the
+  // wire) so components can render `plan.take_profit?.…`.
+  take_profit?: AttachedLegRequest;
+  stop_loss?: AttachedLegRequest;
+  // Convenience alias for the conditional ids — kept in sync with
+  // the *_conditional_order_id fields by the API client. The
+  // backend never sends `tp_conditional_order_id` / `sl_…`; older
+  // V1 docs that mentioned them have been updated to the wire
+  // names.
+  tp_conditional_order_id?: string;
+  sl_conditional_order_id?: string;
 }
 
 export interface OptionFillResponse {
