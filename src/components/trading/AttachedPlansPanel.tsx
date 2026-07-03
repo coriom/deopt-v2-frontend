@@ -20,9 +20,12 @@
 //               service returned an error (see `failure_*`). The
 //               parent order is unaffected.
 //
-// No lifecycle deltas are subscribed yet (deferred to
-// `ATTACHED-TP-SL-PLAN-LIFECYCLE-V2`); the panel re-fetches on
-// re-mount and shows a "Refresh" affordance.
+// ACCOUNT-LIFECYCLE-REALTIME-GAPS-V2 — panel now subscribes to the
+// `account.conditional_orders` channel and refetches the REST snapshot
+// on every `attachment_plan_updated` delta. Refetch-on-delta is the
+// simplest correct behaviour: the parser has already validated the
+// event shape, and refetching is idempotent + covers status, size,
+// child-id and failure fields in one shot without a per-row merger.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -33,6 +36,8 @@ import type {
   AttachmentPlanStatus,
   OptionOrderAttachmentPlan,
 } from "@/lib/trading-types";
+import { useLifecycleStream } from "@/hooks/useLifecycleStream";
+import type { LifecycleEvent } from "@/lib/lifecycle-types";
 
 export interface AttachedPlansPanelProps {
   address: string | null;
@@ -62,6 +67,7 @@ function shortId(id: string | undefined | null): string {
 }
 
 export function AttachedPlansPanel({ address }: AttachedPlansPanelProps) {
+  const { subscribe } = useLifecycleStream();
   const [rows, setRows] = useState<OptionOrderAttachmentPlan[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +96,22 @@ export function AttachedPlansPanel({ address }: AttachedPlansPanelProps) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
+
+  // ACCOUNT-LIFECYCLE-REALTIME-GAPS-V2 — refetch the panel on every
+  // `attachment_plan_updated` delta. Other conditional-order events
+  // (e.g. `conditional_order_updated`) are ignored here; those are
+  // handled by ConditionalOrdersPanel above.
+  useEffect(() => {
+    if (!address) return;
+    const unsubscribe = subscribe(
+      "account.conditional_orders",
+      (event: LifecycleEvent) => {
+        if (event.payload.type !== "attachment_plan_updated") return;
+        void refresh();
+      },
+    );
+    return unsubscribe;
+  }, [address, subscribe, refresh]);
 
   return (
     <section

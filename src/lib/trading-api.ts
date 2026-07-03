@@ -829,3 +829,397 @@ export function cancelOptionOrder(
     signal,
   );
 }
+
+// ---------------------------------------------------------------------
+// PERPS-MINIMAL-MARKET-AND-PRICE-V1 — read-only Perps market + price.
+//
+// The backend returns 503 `perps_read_layer_is_disabled...` when the
+// operator has not turned the reader on, and 503
+// `perps_oracle_price_unavailable...` when the RPC/oracle is stale or
+// unreachable. Both are surfaced as the same `PerpsReadUnavailable`
+// state to the UI — never as a fabricated price.
+// ---------------------------------------------------------------------
+
+export type PerpMarketStatus = "read_only" | "paused" | "unknown";
+export type PerpMarketSource = "onchain_registry" | "seed";
+export type PerpPriceSource = "oracle_router";
+
+export interface PerpMarketRow {
+  market_id: string;
+  onchain_market_id: string;
+  base_asset: string;
+  quote_asset: string;
+  status: PerpMarketStatus;
+  chain_id: number;
+  source: PerpMarketSource;
+  trading_enabled: false;
+}
+
+export interface PerpMarketListing {
+  markets: PerpMarketRow[];
+  chain_id: number;
+  trading_enabled: false;
+}
+
+export interface PerpPriceSnapshot {
+  market_id: string;
+  index_price_1e8: string;
+  mark_price_1e8: string;
+  oracle_timestamp_ms: number;
+  source: PerpPriceSource;
+  stale: boolean;
+  trading_enabled: false;
+  chain_id: number;
+}
+
+/** Union that panels/hooks read to render honestly. */
+export type PerpPriceState =
+  | { kind: "loading" }
+  | { kind: "unavailable"; reason: string }
+  | { kind: "ok"; snapshot: PerpPriceSnapshot };
+
+export function listPerpsMarkets(signal?: AbortSignal): Promise<PerpMarketListing> {
+  return rawRequest<PerpMarketListing>("GET", "/perps/markets", undefined, signal);
+}
+
+export function getPerpsMarketPrice(
+  marketId: string,
+  signal?: AbortSignal,
+): Promise<PerpPriceSnapshot> {
+  return rawRequest<PerpPriceSnapshot>(
+    "GET",
+    `/perps/markets/${encodeURIComponent(marketId)}/price`,
+    undefined,
+    signal,
+  );
+}
+
+// PERPS-ISOLATED-MARGIN-POSITION-ENGINE-V1 — read-only account
+// positions listing. The backend returns `[]` when the trader has no
+// positions; risk fields (mark price, unrealised PnL, margin ratio,
+// maintenance margin) are `null` when the oracle mark is unavailable
+// or stale. Never fabricates.
+export type PerpPositionSide = "long" | "short";
+export type PerpPositionStatus = "open" | "closed";
+
+export interface PerpPositionView {
+  id: string;
+  account: string;
+  market_id: string;
+  side: PerpPositionSide;
+  size_1e8: string;
+  entry_price_1e8: string;
+  margin_1e8: string;
+  realized_pnl_1e8: string;
+  status: PerpPositionStatus;
+  mark_price_1e8: string | null;
+  notional_1e8: string | null;
+  unrealized_pnl_1e8: string | null;
+  initial_margin_requirement_1e8: string;
+  maintenance_margin_requirement_1e8: string | null;
+  margin_ratio_bps: string | null;
+  estimated_liquidation_price_1e8: string | null;
+  opened_at_ms: number;
+  updated_at_ms: number;
+  closed_at_ms: number | null;
+  price_stale: boolean;
+  trading_enabled: false;
+}
+
+export interface PerpPositionListResponse {
+  positions: PerpPositionView[];
+  chain_id: number;
+  trading_enabled: false;
+}
+
+export function getPerpsAccountPositions(
+  address: string,
+  signal?: AbortSignal,
+): Promise<PerpPositionListResponse> {
+  return rawRequest<PerpPositionListResponse>(
+    "GET",
+    `/accounts/${encodeURIComponent(address)}/perps/positions`,
+    undefined,
+    signal,
+  );
+}
+
+/**
+ * PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 — one row from
+ * the account orders history feed. All monetary fields are
+ * 1e8-scaled decimal strings; `trading_enabled` is always `false` in
+ * V1. Nullable fields (`client_order_id`, `terminal_*`) match the
+ * backend wire contract exactly.
+ */
+export interface PerpOrderView {
+  order_id: string;
+  account: string;
+  market_id: string;
+  side: "buy" | "sell";
+  order_type: string;
+  price_1e8: string;
+  size_1e8: string;
+  remaining_size_1e8: string;
+  filled_size_1e8: string;
+  time_in_force: string;
+  post_only: boolean;
+  reduce_only: boolean;
+  isolated_margin_1e8: string;
+  status: string;
+  client_order_id: string | null;
+  terminal_reason_code: string | null;
+  terminal_reason_message: string | null;
+  terminal_reason_source: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+  trading_enabled: false;
+}
+
+export interface PerpOrderListResponse {
+  orders: PerpOrderView[];
+  chain_id: number;
+  trading_enabled: false;
+}
+
+/**
+ * PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 — account-scoped
+ * Perps orders history. Newest-first. Empty array is the honest
+ * default; no fake rows are ever fabricated.
+ */
+export function listPerpOrders(
+  address: string,
+  signal?: AbortSignal,
+): Promise<PerpOrderListResponse> {
+  return rawRequest<PerpOrderListResponse>(
+    "GET",
+    `/accounts/${encodeURIComponent(address)}/perps/orders`,
+    undefined,
+    signal,
+  );
+}
+
+/**
+ * PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 — one row from
+ * the account fills history feed, viewed from the requesting account's
+ * perspective. `side` and `liquidity_role` are computed backend-side
+ * for the viewer.
+ */
+export interface PerpFillView {
+  fill_id: string;
+  market_id: string;
+  taker_order_id: string;
+  maker_order_id: string;
+  taker_account: string;
+  maker_account: string;
+  liquidity_role: "taker" | "maker";
+  side: "buy" | "sell";
+  price_1e8: string;
+  size_1e8: string;
+  created_at_ms: number;
+  trading_enabled: false;
+}
+
+export interface PerpFillListResponse {
+  fills: PerpFillView[];
+  chain_id: number;
+  trading_enabled: false;
+}
+
+/**
+ * PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 — account-scoped
+ * Perps fills history. Newest-first.
+ */
+export function listPerpFills(
+  address: string,
+  signal?: AbortSignal,
+): Promise<PerpFillListResponse> {
+  return rawRequest<PerpFillListResponse>(
+    "GET",
+    `/accounts/${encodeURIComponent(address)}/perps/fills`,
+    undefined,
+    signal,
+  );
+}
+
+/**
+ * PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 — one row from
+ * the account liquidation history feed. Signed fields
+ * (`unrealized_pnl_1e8`, `equity_1e8`, `realized_pnl_1e8`) may start
+ * with a `-` sign.
+ */
+export interface PerpLiquidationEventView {
+  liquidation_id: string;
+  account: string;
+  market_id: string;
+  position_id: string;
+  side: "long" | "short";
+  size_1e8: string;
+  entry_price_1e8: string;
+  mark_price_1e8: string;
+  margin_1e8: string;
+  unrealized_pnl_1e8: string;
+  equity_1e8: string;
+  maintenance_margin_requirement_1e8: string;
+  margin_ratio_bps: string;
+  realized_pnl_1e8: string;
+  bad_debt_1e8: string;
+  liquidation_fee_1e8: string;
+  status: string;
+  reason_code: string;
+  created_at_ms: number;
+  trading_enabled: false;
+}
+
+export interface PerpLiquidationListResponse {
+  liquidations: PerpLiquidationEventView[];
+  chain_id: number;
+  trading_enabled: false;
+}
+
+/**
+ * PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 — account-scoped
+ * Perps liquidation history. Newest-first.
+ */
+export function listPerpLiquidations(
+  address: string,
+  signal?: AbortSignal,
+): Promise<PerpLiquidationListResponse> {
+  return rawRequest<PerpLiquidationListResponse>(
+    "GET",
+    `/accounts/${encodeURIComponent(address)}/perps/liquidations`,
+    undefined,
+    signal,
+  );
+}
+
+/**
+ * PERPS-FUNDING-V1 — one row from the account funding history feed.
+ * All monetary fields are 1e8-scaled decimal strings. Signed values
+ * (`payment_1e8`, `funding_delta_1e18`, `funding_index_*`) may start
+ * with a `-` sign. `trading_enabled` is always `false` in V1.
+ */
+export interface PerpFundingEventView {
+  funding_event_id: string;
+  account: string;
+  market_id: string;
+  position_id: string;
+  side: "long" | "short";
+  position_size_1e8: string;
+  funding_index_before_1e18: string;
+  funding_index_after_1e18: string;
+  funding_delta_1e18: string;
+  payment_1e8: string;
+  margin_before_1e8: string;
+  margin_after_1e8: string;
+  bad_debt_1e8: string;
+  reason_code: string;
+  created_at_ms: number;
+  trading_enabled: false;
+}
+
+export interface PerpFundingListResponse {
+  funding_events: PerpFundingEventView[];
+  chain_id: number;
+  trading_enabled: false;
+}
+
+/**
+ * PERPS-FUNDING-V1 — account-scoped funding history. Newest-first.
+ * Empty array is the honest default; no fake rows are ever fabricated.
+ */
+export function listPerpFundingEvents(
+  address: string,
+  signal?: AbortSignal,
+): Promise<PerpFundingListResponse> {
+  return rawRequest<PerpFundingListResponse>(
+    "GET",
+    `/accounts/${encodeURIComponent(address)}/perps/funding`,
+    undefined,
+    signal,
+  );
+}
+
+// =====================================================================
+// PERPS-FRONTEND-TICKET-ENABLEMENT-V1 — Perps mutation client.
+// =====================================================================
+//
+// These call `POST /perps/orders` + `DELETE /perps/orders/:id` on the
+// backend. Both routes are STRICTLY OPT-IN behind
+// `PERPS_PUBLIC_TRADING_ENABLED=true`; when the flag is off the backend
+// returns 503 `PerpsNotLive` and this client surfaces the message
+// unchanged so the UI can display it honestly.
+
+/**
+ * Request body for `POST /perps/orders`. All monetary fields are
+ * 1e8-scaled decimal strings. `market_id` is a symbol like
+ * `"ETH-PERP"`, not the numeric on-chain market id.
+ */
+export interface SubmitPerpsOrderRequest {
+  market_id: string;
+  account: string;
+  side: "buy" | "sell";
+  price_1e8: string;
+  size_1e8: string;
+  time_in_force: "gtc" | "ioc" | "fok";
+  post_only: boolean;
+  reduce_only: boolean;
+  isolated_margin_1e8: string;
+  client_order_id?: string | null;
+}
+
+export interface SubmitPerpsOrderResponse {
+  status: "ok";
+  order: PerpOrderView;
+  fills: PerpFillView[];
+  chain_id: number;
+  trading_enabled: true;
+}
+
+export interface CancelPerpsOrderResponse {
+  status: "ok";
+  order: PerpOrderView;
+  chain_id: number;
+  trading_enabled: true;
+}
+
+/**
+ * Submit a Perps order. Returns the accepted order and any fills that
+ * occurred in the same transaction.
+ *
+ * Backend behavior:
+ *   - Default (`PERPS_PUBLIC_TRADING_ENABLED=false`) → 503 `PerpsNotLive`.
+ *   - Enabled without PG repository → 503 `PerpsNotLive` (V1 posture:
+ *     durable-only).
+ *   - Enabled with PG → order is executed via the PG dispatcher
+ *     (`submit_perp_order_via_repository`).
+ */
+export function submitPerpsOrder(
+  request: SubmitPerpsOrderRequest,
+  signal?: AbortSignal,
+): Promise<SubmitPerpsOrderResponse> {
+  return rawRequest<SubmitPerpsOrderResponse>(
+    "POST",
+    "/perps/orders",
+    request,
+    signal,
+  );
+}
+
+/**
+ * Cancel an owned Perps order. `caller` must match the account that
+ * submitted the order; otherwise the backend rejects with
+ * `PerpInvalidOrderState`.
+ */
+export function cancelPerpsOrder(
+  orderId: string,
+  caller: string,
+  signal?: AbortSignal,
+): Promise<CancelPerpsOrderResponse> {
+  const q = new URLSearchParams({ account: caller }).toString();
+  return rawRequest<CancelPerpsOrderResponse>(
+    "DELETE",
+    `/perps/orders/${encodeURIComponent(orderId)}?${q}`,
+    undefined,
+    signal,
+  );
+}

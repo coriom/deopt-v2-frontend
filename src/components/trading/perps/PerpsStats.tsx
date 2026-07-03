@@ -1,33 +1,129 @@
 "use client";
 
 // FRONTEND-PERPS-POLISH-V1 — single-row stats bar.
+// PERPS-MINIMAL-MARKET-AND-PRICE-V1 — wires the Mark + Index cells to
+// the read-only backend price snapshot when available.
 //
 // One horizontal row: symbol tabs on the left, 7 stat cells flowing
 // to the right. Designed to fit a ~64–80 px tall band right under the
 // navbar without scrolling internally.
+//
+// Fallback rules (honest never fabricated):
+//   * backend reader disabled or unreachable → all stat cells render `—`
+//     with `data-perps-price-state="unavailable"` so tests can pin the
+//     no-fabrication contract.
+//   * price arrives with `stale=true` → cells still render the number
+//     but tagged `data-perps-price-state="stale"` and visually muted.
+//   * price arrives fresh → cells render the number, tagged `ok`.
+//
+// Cells NOT wired to a real signal in V1 remain `—` (24h Δ, 24h Vol,
+// Funding, Next, OI). Funding and OI land with `PERPS-FUNDING-V1` /
+// `PERPS-ISOLATED-MARGIN-POSITION-ENGINE-V1`.
 
+import { useEffect, useState } from "react";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
+import {
+  getPerpsMarketPrice,
+  TradingApiError,
+  type PerpPriceState,
+} from "@/lib/trading-api";
 
 interface Cell {
   id: string;
   label: string;
+  value: (state: PerpPriceState) => string;
+}
+
+const POLL_INTERVAL_MS = 15_000;
+
+function format1e8(raw: string): string {
+  // Two-decimal grouped format via BigInt to avoid float drift. Falls
+  // back to raw for pathological inputs so we never render a number
+  // that isn't traceable to the wire value.
+  if (!/^\d+$/.test(raw)) return "—";
+  if (raw.length > 20) return raw;
+  const asBigInt = BigInt(raw);
+  const scale = BigInt(100_000_000);
+  const whole = asBigInt / scale;
+  const frac = asBigInt % scale;
+  // Divide by 1e6 to keep the top two frac digits (rounding down).
+  const twoDp = frac / BigInt(1_000_000);
+  const wholeStr = whole
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${wholeStr}.${twoDp.toString().padStart(2, "0")}`;
+}
+
+function priceCellValue(state: PerpPriceState, which: "mark" | "index"): string {
+  if (state.kind === "ok") {
+    const raw =
+      which === "mark"
+        ? state.snapshot.mark_price_1e8
+        : state.snapshot.index_price_1e8;
+    return format1e8(raw);
+  }
+  return "—";
 }
 
 const CELLS: Cell[] = [
-  { id: "mark", label: "Mark" },
-  { id: "index", label: "Index" },
-  { id: "change-24h", label: "24h Δ" },
-  { id: "volume-24h", label: "24h Vol" },
-  { id: "funding", label: "Funding" },
-  { id: "next-funding", label: "Next" },
-  { id: "open-interest", label: "OI" },
+  { id: "mark", label: "Mark", value: (s) => priceCellValue(s, "mark") },
+  { id: "index", label: "Index", value: (s) => priceCellValue(s, "index") },
+  { id: "change-24h", label: "24h Δ", value: () => "—" },
+  { id: "volume-24h", label: "24h Vol", value: () => "—" },
+  { id: "funding", label: "Funding", value: () => "—" },
+  { id: "next-funding", label: "Next", value: () => "—" },
+  { id: "open-interest", label: "OI", value: () => "—" },
 ];
+
+function usePerpsPriceState(symbol: string): PerpPriceState {
+  const [state, setState] = useState<PerpPriceState>({ kind: "loading" });
+
+  useEffect(() => {
+    // Effect is a synchronisation to an external system (the backend
+    // price snapshot). The setState calls only fire inside the async
+    // task's microtask/interval handler — never synchronously in the
+    // effect body — so the `set-state-in-effect` rule does not apply.
+    let cancelled = false;
+    const ctrl = new AbortController();
+
+    async function tick() {
+      try {
+        const snap = await getPerpsMarketPrice(symbol, ctrl.signal);
+        if (!cancelled) setState({ kind: "ok", snapshot: snap });
+      } catch (err) {
+        if (cancelled || (err as Error)?.name === "AbortError") return;
+        const reason =
+          err instanceof TradingApiError ? err.message : (err as Error).message;
+        setState({ kind: "unavailable", reason });
+      }
+    }
+
+    void tick();
+    const handle = window.setInterval(() => void tick(), POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+      window.clearInterval(handle);
+    };
+  }, [symbol]);
+
+  return state;
+}
+
+function priceStateTag(state: PerpPriceState): string {
+  if (state.kind === "loading") return "loading";
+  if (state.kind === "unavailable") return "unavailable";
+  return state.snapshot.stale ? "stale" : "ok";
+}
 
 export function PerpsStatsWidget() {
   const { market, markets, setMarket } = usePerpsSymbol();
+  const priceState = usePerpsPriceState(market.symbol);
+  const stateTag = priceStateTag(priceState);
   return (
     <div
       data-testid="widget-perps-stats-body"
+      data-perps-price-state={stateTag}
       className="flex h-full min-h-0 w-full items-stretch overflow-x-auto"
     >
       {/* Symbol tabs */}
@@ -60,23 +156,31 @@ export function PerpsStatsWidget() {
         })}
       </div>
       {/* Stat cells */}
-      {CELLS.map((c) => (
-        <div
-          key={c.id}
-          data-testid={`widget-perps-stat-${c.id}`}
-          className="flex min-w-0 shrink-0 flex-col justify-center gap-0 border-r border-zinc-900 px-3 py-0.5"
-        >
-          <span className="text-[9px] uppercase leading-tight tracking-[0.12em] text-zinc-500">
-            {c.label}
-          </span>
-          <span
-            className="text-[12px] leading-tight text-zinc-300"
-            style={{ fontFamily: "var(--app-font-mono)" }}
+      {CELLS.map((c) => {
+        const value = c.value(priceState);
+        return (
+          <div
+            key={c.id}
+            data-testid={`widget-perps-stat-${c.id}`}
+            data-perps-cell-state={stateTag}
+            className="flex min-w-0 shrink-0 flex-col justify-center gap-0 border-r border-zinc-900 px-3 py-0.5"
           >
-            —
-          </span>
-        </div>
-      ))}
+            <span className="text-[9px] uppercase leading-tight tracking-[0.12em] text-zinc-500">
+              {c.label}
+            </span>
+            <span
+              className={
+                stateTag === "stale"
+                  ? "text-[12px] leading-tight text-zinc-500"
+                  : "text-[12px] leading-tight text-zinc-300"
+              }
+              style={{ fontFamily: "var(--app-font-mono)" }}
+            >
+              {value}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

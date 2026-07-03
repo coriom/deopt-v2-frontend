@@ -3,20 +3,39 @@
 // FRONTEND-PERPS-POLISH-V1 — perps trade form widget.
 //
 // Visually interactive (tabs, inputs, slider) so the operator can
-// preview the UX, but the submit button is permanently disabled with
-// a `Perps not live` guard until the perps executor ships. No wallet
-// signing, no broadcast, no chain RPC, no real prices — the preview
-// rows render `—`.
+// preview the UX. Submit posture depends on the strict opt-in flag:
+//
+//   * `NEXT_PUBLIC_PERPS_TICKET_ENABLED != "true"` (default) — submit
+//     is hard-disabled with a "Perps not live" copy. This matches the
+//     backend's default `PerpsNotLive` posture on POST /perps/orders.
+//   * `NEXT_PUBLIC_PERPS_TICKET_ENABLED = "true"` — submit becomes
+//     interactive and calls `submitPerpsOrder(...)` from the API
+//     client. The backend still returns 503 unless
+//     `PERPS_PUBLIC_TRADING_ENABLED=true` AND a PG repository is
+//     wired; the frontend surfaces those errors honestly. Also
+//     requires a connected wallet on the expected chain (Base Sepolia
+//     84532).
+//
+// (PERPS-FRONTEND-TICKET-ENABLEMENT-V1)
 
 import { useState } from "react";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
 import { TifPopover, PostCheckbox, type Tif } from "../TifPopover";
+import { isPerpsTicketEnabled } from "@/lib/perps-flag";
+import {
+  submitPerpsOrder,
+  TradingApiError,
+  type SubmitPerpsOrderRequest,
+} from "@/lib/trading-api";
+import { useWallet } from "@/lib/wallet";
 
 type Side = "long" | "short";
 type Mode = "market" | "limit";
 
 export function PerpsTradeFormWidget() {
   const { market } = usePerpsSymbol();
+  const wallet = useWallet();
+  const ticketEnabled = isPerpsTicketEnabled();
   const [side, setSide] = useState<Side>("long");
   const [mode, setMode] = useState<Mode>("market");
   const [qty, setQty] = useState<string>("");
@@ -25,6 +44,69 @@ export function PerpsTradeFormWidget() {
   const [slippagePct, setSlippagePct] = useState<string>("0.5");
   const [tif, setTif] = useState<Tif>("GTC");
   const [postOnly, setPostOnly] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [lastAcceptedOrderId, setLastAcceptedOrderId] = useState<string | null>(null);
+
+  const walletConnected =
+    wallet.address !== null && wallet.isExpectedChain;
+  const walletBlocker = !ticketEnabled
+    ? null
+    : wallet.address === null
+      ? "Connect wallet to submit."
+      : !wallet.isExpectedChain
+        ? "Switch to Base Sepolia to submit."
+        : null;
+
+  async function handleSubmit() {
+    if (!ticketEnabled || !walletConnected) return;
+    setSubmitError(null);
+    setLastAcceptedOrderId(null);
+    // Very small pre-flight validation matching the backend's
+    // `parse_u128_field` gate.
+    const size = qty.trim();
+    if (size.length === 0 || !/^\d+$/.test(size)) {
+      setSubmitError("Size must be a positive integer in 1e8 units.");
+      return;
+    }
+    if (mode === "limit") {
+      const price = limitPrice.trim();
+      if (price.length === 0 || !/^\d+$/.test(price)) {
+        setSubmitError("Limit price must be a positive integer in 1e8 units.");
+        return;
+      }
+    }
+    const marketId = market.symbol; // e.g. "ETH-PERP"
+    const priceStr =
+      mode === "limit" ? limitPrice.trim() : "0"; // V1: market orders send `0` and let the router reject
+    const req: SubmitPerpsOrderRequest = {
+      market_id: marketId,
+      account: wallet.address!,
+      side: side === "long" ? "buy" : "sell",
+      price_1e8: priceStr,
+      size_1e8: size,
+      time_in_force: tif.toLowerCase() as "gtc" | "ioc" | "fok",
+      post_only: postOnly,
+      reduce_only: false,
+      // V1: leverage → isolated margin. `notional / leverage` in 1e8.
+      // Callers wire real risk math when the enabled surface goes
+      // beyond closed testing. For V1 we ship a straightforward
+      // computation that the backend will re-validate anyway.
+      isolated_margin_1e8: computeIsolatedMargin1e8(size, priceStr, leverage),
+      client_order_id: `ticket-${Date.now()}`,
+    };
+    setSubmitting(true);
+    try {
+      const response = await submitPerpsOrder(req);
+      setLastAcceptedOrderId(response.order.order_id);
+    } catch (err) {
+      const message =
+        err instanceof TradingApiError ? err.message : (err as Error).message;
+      setSubmitError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div
@@ -191,18 +273,91 @@ export function PerpsTradeFormWidget() {
         ))}
       </div>
 
-      <button
-        type="button"
-        disabled
-        aria-disabled="true"
-        data-testid="widget-perps-trade-submit"
-        title="Perps execution ships in a later milestone."
-        className="cursor-not-allowed rounded border border-zinc-700 bg-zinc-900/60 py-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
-      >
-        Perps not live
-      </button>
+      {ticketEnabled ? (
+        <button
+          type="button"
+          disabled={!walletConnected || submitting}
+          aria-disabled={!walletConnected || submitting}
+          data-testid="widget-perps-trade-submit"
+          data-ticket-mode="enabled"
+          title={
+            walletBlocker ??
+            (submitting ? "Submitting…" : "Submit Perps order")
+          }
+          onClick={() => void handleSubmit()}
+          className={
+            walletConnected && !submitting
+              ? "rounded border border-emerald-500/60 bg-emerald-600/80 py-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-emerald-500"
+              : "cursor-not-allowed rounded border border-zinc-700 bg-zinc-900/60 py-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
+          }
+        >
+          {submitting
+            ? "Submitting…"
+            : side === "long"
+              ? "Open long"
+              : "Open short"}
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled
+          aria-disabled="true"
+          data-testid="widget-perps-trade-submit"
+          data-ticket-mode="disabled"
+          title="Perps execution ships in a later milestone."
+          className="cursor-not-allowed rounded border border-zinc-700 bg-zinc-900/60 py-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-500"
+        >
+          Perps not live
+        </button>
+      )}
+      {ticketEnabled && walletBlocker ? (
+        <p
+          data-testid="widget-perps-trade-wallet-blocker"
+          className="text-[10px] text-emerald-300"
+        >
+          {walletBlocker}
+        </p>
+      ) : null}
+      {submitError ? (
+        <p
+          data-testid="widget-perps-trade-error"
+          role="alert"
+          className="text-[10px] text-rose-400"
+        >
+          {submitError}
+        </p>
+      ) : null}
+      {lastAcceptedOrderId ? (
+        <p
+          data-testid="widget-perps-trade-accepted"
+          data-order-id={lastAcceptedOrderId}
+          className="text-[10px] text-emerald-300"
+        >
+          Order accepted: {lastAcceptedOrderId.slice(0, 8)}…
+        </p>
+      ) : null}
     </div>
   );
+}
+
+// Compute a naive isolated-margin figure in 1e8 units from the raw
+// size + price 1e8 strings and the integer leverage. The backend
+// re-validates against the market's `max_leverage` cap so a bad
+// number surfaces as a clear rejection there rather than silently
+// running. Uses BigInt to avoid drift on large positions.
+function computeIsolatedMargin1e8(
+  size1e8: string,
+  price1e8: string,
+  leverage: number,
+): string {
+  const s = BigInt(size1e8);
+  const p = BigInt(price1e8);
+  const lev = BigInt(Math.max(1, Math.floor(leverage)));
+  const scale = BigInt(100_000_000);
+  // notional_1e8 = size * price / 1e8; margin = notional / leverage.
+  const notional = (s * p) / scale;
+  const margin = notional / lev;
+  return margin.toString();
 }
 
 function Field({

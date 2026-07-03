@@ -30,7 +30,11 @@
 export type LifecycleChannel =
   | "account.orders"
   | "account.fills"
-  | "account.conditional_orders";
+  | "account.conditional_orders"
+  | "account.perp_orders"
+  | "account.perp_fills"
+  | "account.perp_positions"
+  | "account.perp_funding";
 
 export interface OrderUpdated {
   type: "order_updated";
@@ -62,10 +66,178 @@ export interface ConditionalOrderUpdated {
   failure_code: string | null;
 }
 
+/**
+ * ACCOUNT-LIFECYCLE-REALTIME-GAPS-V2 — a submit attempt that was
+ * durably persisted in the rejected-attempts feed. Routed on
+ * `account.orders`. Carries only scalar fields already surfaced by
+ * the rejected-attempts REST endpoint — never a signature, nonce,
+ * envelope, header, or bearer token.
+ */
+export interface OrderRejected {
+  type: "order_rejected";
+  rejection_id: string;
+  option_series_id: string | null;
+  side: "buy" | "sell" | null;
+  price_1e8: string | null;
+  size_1e8: string | null;
+  time_in_force: string | null;
+  post_only: boolean | null;
+  client_order_id: string | null;
+  reason_code: string;
+  reason_message: string | null;
+  reason_source: string;
+  created_at_ms: number;
+}
+
+/**
+ * ACCOUNT-LIFECYCLE-REALTIME-GAPS-V2 — an attached TP/SL plan
+ * transitioned (pending create, active materialisation, cancelled,
+ * failed, or materialized_size resize). Routed on
+ * `account.conditional_orders` so consumers already tracking the
+ * conditional-orders channel receive both conditional leg deltas
+ * and their parent-plan transitions on one subscription.
+ */
+export interface AttachmentPlanUpdated {
+  type: "attachment_plan_updated";
+  plan_id: string;
+  parent_order_id: string;
+  option_series_id: string;
+  status: string;
+  materialized_size_1e8: string | null;
+  tp_conditional_order_id: string | null;
+  sl_conditional_order_id: string | null;
+  oco_group_id: string | null;
+  failure_code: string | null;
+  failure_message: string | null;
+  updated_at_ms: number;
+}
+
+/**
+ * PERPS-PERSISTENCE-HISTORY-LIFECYCLE-V1 — Perps order lifecycle.
+ * Routed on `account.perp_orders`. Never carries auth material.
+ */
+export interface PerpOrderUpdated {
+  type: "perp_order_updated";
+  order_id: string;
+  market_id: string;
+  side: "buy" | "sell";
+  status: string;
+  price_1e8: string;
+  size_1e8: string;
+  remaining_size_1e8: string;
+  filled_size_1e8: string;
+  time_in_force: string;
+  post_only: boolean;
+  reduce_only: boolean;
+  client_order_id: string | null;
+  terminal_reason_code: string | null;
+  updated_at_ms: number;
+}
+
+/** Routed on `account.perp_fills`. One frame per account (taker + maker). */
+export interface PerpFillCreated {
+  type: "perp_fill_created";
+  fill_id: string;
+  market_id: string;
+  order_id: string;
+  counterparty_order_id: string;
+  liquidity_role: "taker" | "maker";
+  side: "buy" | "sell";
+  price_1e8: string;
+  size_1e8: string;
+  created_at_ms: number;
+}
+
+/** Routed on `account.perp_positions`. */
+export interface PerpPositionUpdated {
+  type: "perp_position_updated";
+  position_id: string;
+  market_id: string;
+  side: "long" | "short";
+  size_1e8: string;
+  entry_price_1e8: string;
+  margin_1e8: string;
+  realized_pnl_1e8: string;
+  status: string;
+  updated_at_ms: number;
+}
+
+/** Routed on `account.perp_orders`. V1 emitted from internal exec only. */
+export interface PerpOrderRejected {
+  type: "perp_order_rejected";
+  market_id: string | null;
+  side: "buy" | "sell" | null;
+  price_1e8: string | null;
+  size_1e8: string | null;
+  time_in_force: string | null;
+  post_only: boolean | null;
+  reduce_only: boolean | null;
+  client_order_id: string | null;
+  reason_code: string;
+  reason_message: string | null;
+  reason_source: string;
+  created_at_ms: number;
+}
+
+/**
+ * PERPS-LIQUIDATION-AND-RISK-V1 — a Perps position was liquidated (or a
+ * candidate was skipped because the mark was unavailable). Routed on
+ * `account.perp_positions`. Never carries auth material.
+ */
+export interface PerpPositionLiquidated {
+  type: "perp_position_liquidated";
+  liquidation_id: string;
+  market_id: string;
+  position_id: string;
+  side: "long" | "short";
+  size_1e8: string;
+  mark_price_1e8: string;
+  realized_pnl_1e8: string;
+  bad_debt_1e8: string;
+  liquidation_fee_1e8: string;
+  reason_code: string;
+  created_at_ms: number;
+}
+
+/**
+ * PERPS-FUNDING-V1 — a Perps funding settlement recorded a payment.
+ * Positive `payment_1e8` means the trader OWED funding (their margin
+ * was reduced); negative means the trader RECEIVED funding (their
+ * margin was increased). Routed on `account.perp_funding`. Consumers
+ * already subscribed to `account.perp_positions` will additionally
+ * see a `PerpPositionUpdated` frame reflecting the new margin. Never
+ * carries signatures, nonces, envelopes, headers, or bearer tokens.
+ */
+export interface PerpFundingPaymentCreated {
+  type: "perp_funding_payment_created";
+  funding_event_id: string;
+  market_id: string;
+  position_id: string;
+  side: "long" | "short";
+  position_size_1e8: string;
+  funding_index_before_1e18: string;
+  funding_index_after_1e18: string;
+  funding_delta_1e18: string;
+  payment_1e8: string;
+  margin_before_1e8: string;
+  margin_after_1e8: string;
+  bad_debt_1e8: string;
+  reason_code: string;
+  created_at_ms: number;
+}
+
 export type LifecyclePayload =
   | OrderUpdated
   | FillCreated
-  | ConditionalOrderUpdated;
+  | ConditionalOrderUpdated
+  | OrderRejected
+  | AttachmentPlanUpdated
+  | PerpOrderUpdated
+  | PerpFillCreated
+  | PerpPositionUpdated
+  | PerpOrderRejected
+  | PerpPositionLiquidated
+  | PerpFundingPaymentCreated;
 
 /** Parsed lifecycle frame ready for UI consumption. */
 export interface LifecycleEvent {

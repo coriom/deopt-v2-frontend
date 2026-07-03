@@ -15,7 +15,25 @@ import { useMemo, useState } from "react";
  *     truncated 0x… shape; the label calls it "PUBLIC" explicitly.
  *   - The rendered template ends with an explicit reminder bullet.
  */
+export const FEEDBACK_CATEGORIES = [
+  "trade-order",
+  "faucet",
+  "wallet-network",
+  "api-docs",
+  "ui-ux",
+  "history-lifecycle",
+  "perps-readonly",
+  "security-safety",
+  "other",
+] as const;
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number];
+
+export const FEEDBACK_SEVERITIES = ["low", "medium", "high", "critical"] as const;
+export type FeedbackSeverity = (typeof FEEDBACK_SEVERITIES)[number];
+
 interface FormState {
+  category: FeedbackCategory;
+  severity: FeedbackSeverity;
   title: string;
   scenario: string;
   walletPublicAddress: string;
@@ -30,6 +48,8 @@ interface FormState {
 }
 
 const INITIAL: FormState = {
+  category: "other",
+  severity: "medium",
   title: "",
   scenario: "",
   walletPublicAddress: "",
@@ -45,6 +65,11 @@ const INITIAL: FormState = {
 
 function assembleReport(s: FormState): string {
   const lines: string[] = [];
+  lines.push("### Category / severity");
+  lines.push("");
+  lines.push(`- Category: ${s.category}`);
+  lines.push(`- Severity: ${s.severity}`);
+  lines.push("");
   lines.push("### Issue title");
   lines.push("");
   lines.push(s.title || "(fill in)");
@@ -114,6 +139,38 @@ export function FeedbackForm() {
         data-testid="feedback-form"
         className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 sm:grid-cols-2"
       >
+        <Label label="Category">
+          <select
+            value={s.category}
+            onChange={(e) =>
+              update({ category: e.target.value as FeedbackCategory })
+            }
+            data-testid="feedback-input-category"
+            className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
+          >
+            {FEEDBACK_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </Label>
+        <Label label="Severity">
+          <select
+            value={s.severity}
+            onChange={(e) =>
+              update({ severity: e.target.value as FeedbackSeverity })
+            }
+            data-testid="feedback-input-severity"
+            className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
+          >
+            {FEEDBACK_SEVERITIES.map((sv) => (
+              <option key={sv} value={sv}>
+                {sv}
+              </option>
+            ))}
+          </select>
+        </Label>
         <Label label="Issue title">
           <input
             type="text"
