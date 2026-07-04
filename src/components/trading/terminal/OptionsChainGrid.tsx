@@ -2,15 +2,20 @@
 
 // FRONTEND-OPTIONS-CHAIN-POLISH-V1 — rewrite of the chain grid with
 // per-column visibility (toggled from the hamburger popover) and
-// drag-and-drop reordering of column headers. Both sides (calls +
-// puts) share the same visible-columns set and the same order so the
-// grid stays symmetrical.
+// drag-and-drop reordering of column headers.
 //
-// Existing testids are preserved (`chain-row-*`, `chain-call-*`,
-// `chain-put-*`, `chain-strike-*`, `options-chain-grid`,
-// `options-chain-empty`) so existing e2e coverage continues to pass.
+// The chain is rendered as TWO independent scrollable panels (calls +
+// puts) separated by a fixed Strike column. Each side reads
+// left-to-right in the same canonical order and their horizontal
+// scroll positions are kept in sync via `onScroll` handlers — so
+// scrolling right on either side reveals the same columns on both
+// sides simultaneously.
+//
+// Existing testids are preserved (`chain-call-*`, `chain-put-*`,
+// `chain-strike-*`, `options-chain-grid`, `options-chain-empty`) so
+// existing e2e coverage continues to pass.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { OptionLeg, OptionsChainRow } from "@/lib/options-chain-model";
 import {
   useChainColumnPrefs,
@@ -48,12 +53,14 @@ export function OptionsChainGrid({
   const prefs = prefsProp ?? localPrefs;
   const [dragId, setDragId] = useState<ColumnId | null>(null);
   const visible = prefs.visibleOrdered;
-  // Both sides render columns in the SAME canonical order (no mirror):
-  // calls read left-to-right, then the sticky Strike acts as a hard
-  // visual separator, then puts read left-to-right in the same order.
-  // The user scrolls right to reveal more columns; content that
-  // scrolls past the Strike hides behind its opaque background rather
-  // than "wrapping around" the other side.
+  // Each side (calls + puts) is rendered in its OWN horizontal-scroll
+  // container. The `callsRef` / `putsRef` refs let `onScroll` handlers
+  // mirror the `scrollLeft` between the two panels so both sides always
+  // display the SAME subset of columns at any scroll position — the
+  // Strike sits between them as a fixed, non-scrolling separator.
+  const callsRef = useRef<HTMLDivElement>(null);
+  const putsRef = useRef<HTMLDivElement>(null);
+  const scrollLock = useRef(false);
 
   if (rows.length === 0) {
     return (
@@ -70,11 +77,14 @@ export function OptionsChainGrid({
       </div>
     );
   }
-  // Single grid-template across the whole row: N call columns | strike | N put columns.
-  // `minmax(3rem, 1fr)` keeps numeric cells compact but lets long ids
-  // (e.g. exotic strike labels) breathe.
-  const cellTpl = visible.map(() => "minmax(3rem,1fr)").join(" ");
-  const rowTemplate = `${cellTpl || "1fr"} minmax(7rem,auto) ${cellTpl || "1fr"}`;
+  // Per-side grid template. Both sides use the SAME template so the
+  // same subset of columns is visible on both sides at any scroll
+  // position. `minmax(3rem, 1fr)` keeps numeric cells compact but
+  // lets long labels breathe.
+  const sideTpl = visible.length > 0
+    ? visible.map(() => "minmax(3rem,1fr)").join(" ")
+    : "1fr";
+  const sideGridStyle = { gridTemplateColumns: sideTpl };
 
   function onHeaderDragStart(id: ColumnId) {
     setDragId(id);
@@ -90,6 +100,32 @@ export function OptionsChainGrid({
   }
   function onHeaderDragEnd() {
     setDragId(null);
+  }
+
+  // Sync horizontal scroll between the two side panels. The
+  // `scrollLock` flag prevents the `onScroll` events from firing each
+  // other into an infinite loop.
+  function syncFromCalls(e: React.UIEvent<HTMLDivElement>) {
+    if (scrollLock.current) return;
+    const src = e.currentTarget.scrollLeft;
+    if (putsRef.current && putsRef.current.scrollLeft !== src) {
+      scrollLock.current = true;
+      putsRef.current.scrollLeft = src;
+      requestAnimationFrame(() => {
+        scrollLock.current = false;
+      });
+    }
+  }
+  function syncFromPuts(e: React.UIEvent<HTMLDivElement>) {
+    if (scrollLock.current) return;
+    const src = e.currentTarget.scrollLeft;
+    if (callsRef.current && callsRef.current.scrollLeft !== src) {
+      scrollLock.current = true;
+      callsRef.current.scrollLeft = src;
+      requestAnimationFrame(() => {
+        scrollLock.current = false;
+      });
+    }
   }
 
   return (
@@ -114,117 +150,154 @@ export function OptionsChainGrid({
         <div className="flex-1 text-center text-emerald-300">Puts</div>
       </div>
 
-      {/* Horizontal scroll container — carries the header row + body
-          rows together so their columns stay synchronised. Toolbar
-          above and footnote below sit outside so they stay pinned. */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
-      {/* Header row */}
-      <div
-        data-testid="chain-header-row"
-        className="grid min-w-max border-b border-zinc-800 bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
-        style={{ gridTemplateColumns: rowTemplate }}
-      >
-        {visible.map((id) => (
-          <HeaderCell
-            key={`call-${id}`}
-            id={id}
-            side="call"
-            dragId={dragId}
-            onDragStart={() => onHeaderDragStart(id)}
-            onDragOver={onHeaderDragOver}
-            onDrop={() => onHeaderDrop(id)}
-            onDragEnd={onHeaderDragEnd}
-          />
-        ))}
+      {/* Chain body: 3 flex columns
+            [ calls scroll panel ] [ Strike fixed column ] [ puts scroll panel ]
+          Calls and puts each own a horizontal scroll container; their
+          `scrollLeft` positions are synced via `onScroll` so both
+          sides always show the same subset of columns. */}
+      <div className="flex min-h-0 flex-1">
+        {/* Calls panel */}
         <div
-          className="sticky z-10 border-x border-zinc-800 bg-zinc-950 px-2 py-1 text-center text-zinc-400"
-          style={{
-            left: "calc(50% - 3.5rem)",
-            right: "calc(50% - 3.5rem)",
-          }}
+          ref={callsRef}
+          onScroll={syncFromCalls}
+          data-testid="chain-calls-scroll"
+          className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
         >
-          Strike
+          <div
+            data-testid="chain-header-row-call"
+            className="grid min-w-max border-b border-zinc-800 bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
+            style={sideGridStyle}
+          >
+            {visible.map((id) => (
+              <HeaderCell
+                key={`call-${id}`}
+                id={id}
+                side="call"
+                dragId={dragId}
+                onDragStart={() => onHeaderDragStart(id)}
+                onDragOver={onHeaderDragOver}
+                onDrop={() => onHeaderDrop(id)}
+                onDragEnd={onHeaderDragEnd}
+              />
+            ))}
+          </div>
+          <div role="rowgroup">
+            {rows.map((row) => {
+              const selected =
+                row.call.seriesId !== null &&
+                row.call.seriesId === selectedSeriesId;
+              const disabled = row.call.seriesId === null;
+              return (
+                <div
+                  key={`call-row-${row.strike1e8}-${row.expiryMs}`}
+                  className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
+                  style={sideGridStyle}
+                >
+                  {visible.map((id) => (
+                    <BodyCell
+                      key={`call-${id}`}
+                      side="call"
+                      text={fmt(row.call, id)}
+                      selected={selected}
+                      disabled={disabled}
+                      onClick={() => !disabled && onSelect(row.call, row)}
+                      testid={
+                        visible[0] === id
+                          ? `chain-call-${row.strike1e8}-${row.expiryMs}`
+                          : undefined
+                      }
+                      dataSelected={selected}
+                      dataAvailable={!disabled}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
         </div>
-        {visible.map((id) => (
-          <HeaderCell
-            key={`put-${id}`}
-            id={id}
-            side="put"
-            dragId={dragId}
-            onDragStart={() => onHeaderDragStart(id)}
-            onDragOver={onHeaderDragOver}
-            onDrop={() => onHeaderDrop(id)}
-            onDragEnd={onHeaderDragEnd}
-          />
-        ))}
-      </div>
 
-      {/* Body */}
-      <div role="rowgroup">
-        {rows.map((row) => {
-          const callSelected =
-            row.call.seriesId !== null &&
-            row.call.seriesId === selectedSeriesId;
-          const putSelected =
-            row.put.seriesId !== null && row.put.seriesId === selectedSeriesId;
-          const callDisabled = row.call.seriesId === null;
-          const putDisabled = row.put.seriesId === null;
-          return (
-            <div
-              key={`${row.strike1e8}-${row.expiryMs}`}
-              data-testid={`chain-row-${row.strike1e8}-${row.expiryMs}`}
-              className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
-              style={{ gridTemplateColumns: rowTemplate }}
-            >
-              {visible.map((id) => (
-                <BodyCell
-                  key={`call-${id}`}
-                  side="call"
-                  text={fmt(row.call, id)}
-                  selected={callSelected}
-                  disabled={callDisabled}
-                  onClick={() => !callDisabled && onSelect(row.call, row)}
-                  testid={
-                    visible[0] === id
-                      ? `chain-call-${row.strike1e8}-${row.expiryMs}`
-                      : undefined
-                  }
-                  dataSelected={callSelected}
-                  dataAvailable={!callDisabled}
-                />
-              ))}
+        {/* Strike column — fixed width, non-scrolling. */}
+        <div
+          data-testid="chain-strike-column"
+          className="flex shrink-0 flex-col border-x border-zinc-800 bg-zinc-950 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
+          style={{ minWidth: "7rem" }}
+        >
+          <div className="border-b border-zinc-800 bg-black/30 px-2 py-1 text-center text-zinc-400">
+            Strike
+          </div>
+          <div role="rowgroup" className="flex flex-1 flex-col">
+            {rows.map((row) => (
               <div
+                key={`strike-${row.strike1e8}-${row.expiryMs}`}
                 data-testid={`chain-strike-${row.strike1e8}-${row.expiryMs}`}
-                className="sticky z-10 flex items-center justify-center border-x border-zinc-900 bg-zinc-950 px-2 py-1 font-mono text-[12px] text-zinc-100"
-                style={{
-                  left: "calc(50% - 3.5rem)",
-                  right: "calc(50% - 3.5rem)",
-                }}
+                className="flex flex-1 items-center justify-center border-b border-zinc-900 px-2 py-1 font-mono text-[12px] text-zinc-100 last:border-b-0"
               >
-                <span>{row.strikeLabel}</span>
+                {row.strikeLabel}
               </div>
-              {visible.map((id) => (
-                <BodyCell
-                  key={`put-${id}`}
-                  side="put"
-                  text={fmt(row.put, id)}
-                  selected={putSelected}
-                  disabled={putDisabled}
-                  onClick={() => !putDisabled && onSelect(row.put, row)}
-                  testid={
-                    visible[0] === id
-                      ? `chain-put-${row.strike1e8}-${row.expiryMs}`
-                      : undefined
-                  }
-                  dataSelected={putSelected}
-                  dataAvailable={!putDisabled}
-                />
-              ))}
-            </div>
-          );
-        })}
-      </div>
-      </div>{/* /horizontal scroll container */}
+            ))}
+          </div>
+        </div>
+
+        {/* Puts panel */}
+        <div
+          ref={putsRef}
+          onScroll={syncFromPuts}
+          data-testid="chain-puts-scroll"
+          className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+        >
+          <div
+            data-testid="chain-header-row-put"
+            className="grid min-w-max border-b border-zinc-800 bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
+            style={sideGridStyle}
+          >
+            {visible.map((id) => (
+              <HeaderCell
+                key={`put-${id}`}
+                id={id}
+                side="put"
+                dragId={dragId}
+                onDragStart={() => onHeaderDragStart(id)}
+                onDragOver={onHeaderDragOver}
+                onDrop={() => onHeaderDrop(id)}
+                onDragEnd={onHeaderDragEnd}
+              />
+            ))}
+          </div>
+          <div role="rowgroup">
+            {rows.map((row) => {
+              const selected =
+                row.put.seriesId !== null &&
+                row.put.seriesId === selectedSeriesId;
+              const disabled = row.put.seriesId === null;
+              return (
+                <div
+                  key={`put-row-${row.strike1e8}-${row.expiryMs}`}
+                  className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
+                  style={sideGridStyle}
+                >
+                  {visible.map((id) => (
+                    <BodyCell
+                      key={`put-${id}`}
+                      side="put"
+                      text={fmt(row.put, id)}
+                      selected={selected}
+                      disabled={disabled}
+                      onClick={() => !disabled && onSelect(row.put, row)}
+                      testid={
+                        visible[0] === id
+                          ? `chain-put-${row.strike1e8}-${row.expiryMs}`
+                          : undefined
+                      }
+                      dataSelected={selected}
+                      dataAvailable={!disabled}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>{/* /chain body 3-column flex */}
 
       {/* Footnote — outside the scroll container so it stays pinned. */}
       <div className="border-t border-zinc-800 bg-black/40 px-3 py-1.5 text-[10px] text-zinc-500">
