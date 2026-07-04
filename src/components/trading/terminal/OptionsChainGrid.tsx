@@ -10,7 +10,7 @@
 // `chain-put-*`, `chain-strike-*`, `options-chain-grid`,
 // `options-chain-empty`) so existing e2e coverage continues to pass.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { OptionLeg, OptionsChainRow } from "@/lib/options-chain-model";
 import {
   useChainColumnPrefs,
@@ -48,10 +48,12 @@ export function OptionsChainGrid({
   const prefs = prefsProp ?? localPrefs;
   const [dragId, setDragId] = useState<ColumnId | null>(null);
   const visible = prefs.visibleOrdered;
-  // Calls side is rendered as the mirror of puts across the Strike
-  // column — puts read left-to-right in the canonical order, calls
-  // read right-to-left, giving the classic symmetrical chain layout.
-  const callVisible = useMemo(() => [...visible].reverse(), [visible]);
+  // Both sides render columns in the SAME canonical order (no mirror):
+  // calls read left-to-right, then the sticky Strike acts as a hard
+  // visual separator, then puts read left-to-right in the same order.
+  // The user scrolls right to reveal more columns; content that
+  // scrolls past the Strike hides behind its opaque background rather
+  // than "wrapping around" the other side.
 
   if (rows.length === 0) {
     return (
@@ -122,7 +124,7 @@ export function OptionsChainGrid({
         className="grid min-w-max border-b border-zinc-800 bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
         style={{ gridTemplateColumns: rowTemplate }}
       >
-        {callVisible.map((id) => (
+        {visible.map((id) => (
           <HeaderCell
             key={`call-${id}`}
             id={id}
@@ -174,7 +176,7 @@ export function OptionsChainGrid({
               className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
               style={{ gridTemplateColumns: rowTemplate }}
             >
-              {callVisible.map((id) => (
+              {visible.map((id) => (
                 <BodyCell
                   key={`call-${id}`}
                   side="call"
@@ -183,7 +185,7 @@ export function OptionsChainGrid({
                   disabled={callDisabled}
                   onClick={() => !callDisabled && onSelect(row.call, row)}
                   testid={
-                    callVisible[0] === id
+                    visible[0] === id
                       ? `chain-call-${row.strike1e8}-${row.expiryMs}`
                       : undefined
                   }
