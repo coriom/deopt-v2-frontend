@@ -199,31 +199,28 @@ export interface DefaultPlacement {
 export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] {
   switch (workspaceId) {
     case "options":
-      // Mirrors the reference Derive Options screenshot:
+      // Payoff no longer ships as a separate widget — it lives as a
+      // tab inside the Trade ticket ("Payoff/Greeks/Trades/Book"), so
+      // the right column is a single Trade ticket at full height,
+      // avoiding the overlap the split layout produced when the
+      // ticket needed more vertical room than 58% of the canvas.
       //
       //   ┌───────────────────────┬──────────────┐
       //   │  OPTIONS CHAIN        │  TRADE       │
-      //   │  (calls │ str │ puts) │  TICKET      │
-      //   │  72% × 72%            │  28% × 58%   │
-      //   │                       │              │
-      //   │                       ├──────────────┤
-      //   │                       │  PAYOFF      │
-      //   ├───────────────────────│  /Greeks/    │
-      //   │  BOTTOM DOCK          │  Trades/Book │
-      //   │  (Bal/Pos/Ord/Greeks) │  28% × 42%   │
-      //   │  72% × 28%            │              │
+      //   │  72% × 72%            │  TICKET      │
+      //   │                       │  (Payoff /   │
+      //   │                       │   Greeks /   │
+      //   ├───────────────────────│   Trades /   │
+      //   │  BOTTOM DOCK          │   Book tabs) │
+      //   │  72% × 28%            │  28% × 100%  │
       //   └───────────────────────┴──────────────┘
       //
-      // Trade ticket is taller than payoff (matches the visual
-      // emphasis in the reference). Bottom dock sits only under the
-      // chain, not full-width, so the right column stays uninterrupted.
       // Existing users keep their saved layout — only first-time
       // visitors and explicit resets land on this seed.
       return [
         { type: "options-chain", xPct: 0,    yPct: 0,     wPct: 0.72, hPct: 0.72 },
         { type: "bottom-dock",   xPct: 0,    yPct: 0.72,  wPct: 0.72, hPct: 0.28 },
-        { type: "trade",         xPct: 0.72, yPct: 0,     wPct: 0.28, hPct: 0.58 },
-        { type: "payoff",        xPct: 0.72, yPct: 0.58,  wPct: 0.28, hPct: 0.42 },
+        { type: "trade",         xPct: 0.72, yPct: 0,     wPct: 0.28, hPct: 1.0  },
       ];
     case "perps":
       // 3-column layout. The combined Order Book / Perps Feed widget

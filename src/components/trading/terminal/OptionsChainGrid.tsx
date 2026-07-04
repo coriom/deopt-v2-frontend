@@ -10,19 +10,25 @@
 // `chain-put-*`, `chain-strike-*`, `options-chain-grid`,
 // `options-chain-empty`) so existing e2e coverage continues to pass.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { OptionLeg, OptionsChainRow } from "@/lib/options-chain-model";
-import { useChainColumnPrefs } from "@/hooks/useChainColumnPrefs";
+import {
+  useChainColumnPrefs,
+  type ChainColumnPrefs,
+} from "@/hooks/useChainColumnPrefs";
 import {
   COLUMN_REGISTRY,
   type ColumnId,
 } from "@/lib/chain-columns";
-import { ChainColumnsMenu } from "./ChainColumnsMenu";
 
 interface OptionsChainGridProps {
   rows: OptionsChainRow[];
   selectedSeriesId: string | null;
   onSelect: (leg: OptionLeg, row: OptionsChainRow) => void;
+  /** Optional pre-hoisted prefs (so the ☰ menu can live in the
+   *  banner and share state with the grid). When omitted the grid
+   *  falls back to its own hook call — same underlying store. */
+  prefs?: ChainColumnPrefs;
 }
 
 const DASH = "—";
@@ -36,9 +42,16 @@ export function OptionsChainGrid({
   rows,
   selectedSeriesId,
   onSelect,
+  prefs: prefsProp,
 }: OptionsChainGridProps) {
-  const prefs = useChainColumnPrefs();
+  const localPrefs = useChainColumnPrefs();
+  const prefs = prefsProp ?? localPrefs;
   const [dragId, setDragId] = useState<ColumnId | null>(null);
+  const visible = prefs.visibleOrdered;
+  // Calls side is rendered as the mirror of puts across the Strike
+  // column — puts read left-to-right in the canonical order, calls
+  // read right-to-left, giving the classic symmetrical chain layout.
+  const callVisible = useMemo(() => [...visible].reverse(), [visible]);
 
   if (rows.length === 0) {
     return (
@@ -55,8 +68,6 @@ export function OptionsChainGrid({
       </div>
     );
   }
-
-  const visible = prefs.visibleOrdered;
   // Single grid-template across the whole row: N call columns | strike | N put columns.
   // `minmax(3rem, 1fr)` keeps numeric cells compact but lets long ids
   // (e.g. exotic strike labels) breathe.
@@ -82,25 +93,36 @@ export function OptionsChainGrid({
   return (
     <div
       data-testid="options-chain-grid"
-      className="flex h-full min-h-0 flex-col overflow-hidden"
+      className="flex h-full min-h-0 flex-col"
     >
-      {/* Toolbar: titles + columns menu */}
-      <div className="flex items-center justify-between border-b border-zinc-900 px-3 py-1">
-        <div className="flex items-center gap-4 text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-          <span className="text-emerald-300">Calls</span>
-          <span>Strike</span>
-          <span className="text-emerald-300">Puts</span>
+      {/* Toolbar: CALLS / <expiry date> / PUTS. Kept OUTSIDE the
+          horizontal-scroll container so the section labels stay
+          pinned to the widget frame while the columns beneath scroll
+          left/right. The center slot shows the current expiry (all
+          rows have been filtered by expiry upstream so
+          `rows[0].expiryLabel` is representative). */}
+      <div className="flex items-center border-b border-zinc-900 px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
+        <div className="flex-1 text-center text-emerald-300">Calls</div>
+        <div
+          data-testid="chain-toolbar-expiry"
+          className="px-4 text-center font-mono normal-case tracking-normal text-zinc-300"
+        >
+          {rows[0]?.expiryLabel ?? ""}
         </div>
-        <ChainColumnsMenu prefs={prefs} />
+        <div className="flex-1 text-center text-emerald-300">Puts</div>
       </div>
 
+      {/* Horizontal scroll container — carries the header row + body
+          rows together so their columns stay synchronised. Toolbar
+          above and footnote below sit outside so they stay pinned. */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
       {/* Header row */}
       <div
         data-testid="chain-header-row"
-        className="grid border-b border-zinc-800 bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
+        className="grid min-w-max border-b border-zinc-800 bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
         style={{ gridTemplateColumns: rowTemplate }}
       >
-        {visible.map((id) => (
+        {callVisible.map((id) => (
           <HeaderCell
             key={`call-${id}`}
             id={id}
@@ -112,7 +134,15 @@ export function OptionsChainGrid({
             onDragEnd={onHeaderDragEnd}
           />
         ))}
-        <div className="px-2 py-1 text-center text-zinc-400">Strike</div>
+        <div
+          className="sticky z-10 border-x border-zinc-800 bg-zinc-950 px-2 py-1 text-center text-zinc-400"
+          style={{
+            left: "calc(50% - 3.5rem)",
+            right: "calc(50% - 3.5rem)",
+          }}
+        >
+          Strike
+        </div>
         {visible.map((id) => (
           <HeaderCell
             key={`put-${id}`}
@@ -141,10 +171,10 @@ export function OptionsChainGrid({
             <div
               key={`${row.strike1e8}-${row.expiryMs}`}
               data-testid={`chain-row-${row.strike1e8}-${row.expiryMs}`}
-              className="grid border-b border-zinc-900 text-[11px] last:border-b-0"
+              className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
               style={{ gridTemplateColumns: rowTemplate }}
             >
-              {visible.map((id) => (
+              {callVisible.map((id) => (
                 <BodyCell
                   key={`call-${id}`}
                   side="call"
@@ -153,7 +183,7 @@ export function OptionsChainGrid({
                   disabled={callDisabled}
                   onClick={() => !callDisabled && onSelect(row.call, row)}
                   testid={
-                    visible[0] === id
+                    callVisible[0] === id
                       ? `chain-call-${row.strike1e8}-${row.expiryMs}`
                       : undefined
                   }
@@ -163,12 +193,13 @@ export function OptionsChainGrid({
               ))}
               <div
                 data-testid={`chain-strike-${row.strike1e8}-${row.expiryMs}`}
-                className="flex flex-col items-center justify-center border-x border-zinc-900 bg-black/40 px-2 py-1 font-mono text-[12px] text-zinc-100"
+                className="sticky z-10 flex items-center justify-center border-x border-zinc-900 bg-zinc-950 px-2 py-1 font-mono text-[12px] text-zinc-100"
+                style={{
+                  left: "calc(50% - 3.5rem)",
+                  right: "calc(50% - 3.5rem)",
+                }}
               >
                 <span>{row.strikeLabel}</span>
-                <span className="text-[9px] text-zinc-500">
-                  {row.expiryLabel}
-                </span>
               </div>
               {visible.map((id) => (
                 <BodyCell
@@ -191,13 +222,13 @@ export function OptionsChainGrid({
           );
         })}
       </div>
+      </div>{/* /horizontal scroll container */}
 
-      {/* Footnote */}
+      {/* Footnote — outside the scroll container so it stays pinned. */}
       <div className="border-t border-zinc-800 bg-black/40 px-3 py-1.5 text-[10px] text-zinc-500">
-        Only fields wired on the backend render real values; everything else
-        renders &ldquo;{DASH}&rdquo;. Use the column menu to add bidIV / askIV
-        / Vol / OI / Δ24% etc. as the sources land — drag a header to
-        reorder.
+        Only fields wired on the backend render real values; everything
+        else renders &ldquo;{DASH}&rdquo;. Toggle columns via the ☰ menu;
+        drag a header to reorder.
       </div>
     </div>
   );

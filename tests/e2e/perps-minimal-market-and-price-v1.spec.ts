@@ -73,8 +73,10 @@ test.describe("PERPS-MINIMAL-MARKET-AND-PRICE-V1", () => {
     ]) {
       await expect(page.getByTestId(id)).toContainText("—");
     }
-    // Not-live posture is preserved end-to-end.
-    await expect(page.getByTestId("perps-not-live-banner")).toBeVisible();
+    // Not-live posture: the retired page-level banner should not
+    // reappear; disclosures banner + disabled trade form + backend
+    // fail-closed already communicate this.
+    await expect(page.getByTestId("perps-not-live-banner")).toHaveCount(0);
   });
 
   test("stale price flag tags the widget without hiding the number", async ({

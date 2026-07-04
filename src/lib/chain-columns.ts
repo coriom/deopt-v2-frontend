@@ -15,6 +15,7 @@ export type ColumnId =
   | "askSize"
   | "delta"
   | "markIV"
+  | "position"
   | "vol"
   | "oi"
   | "chg"
@@ -100,6 +101,11 @@ export const COLUMN_REGISTRY: Record<ColumnId, ColumnDef> = {
     label: "Mark IV",
     value: (l) => pct(l.iv, l.ivAvail),
   },
+  position: {
+    id: "position",
+    label: "Position",
+    value: () => null, // per-wallet open position; wired in a follow-up
+  },
   vol: {
     id: "vol",
     label: "Vol",
@@ -153,6 +159,7 @@ export const DEFAULT_ORDER: ColumnId[] = [
   "askSize",
   "delta",
   "markIV",
+  "position",
   "vol",
   "oi",
   "chg",
@@ -163,13 +170,26 @@ export const DEFAULT_ORDER: ColumnId[] = [
   "netChange",
 ];
 
-/** Initial visible columns — the ones most likely to be useful on day 1. */
+/** Initial visible columns — Derive-style full set. Users can hide any
+ *  column via the ☰ menu; the grid is horizontally scrollable when the
+ *  full column set is wider than the widget. */
 export const DEFAULT_VISIBLE: ColumnId[] = [
+  "bidSize",
+  "bidIV",
   "bid",
   "mark",
   "ask",
+  "askIV",
+  "askSize",
   "delta",
   "markIV",
+  "position",
+  "vol",
+  "oi",
+  "chg",
+  "theta",
+  "vega",
+  "rho",
 ];
 
 export const ALL_COLUMN_IDS: ColumnId[] = DEFAULT_ORDER;

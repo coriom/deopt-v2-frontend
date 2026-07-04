@@ -167,26 +167,8 @@ export function DirectOrderbookForm({
     <form
       data-testid="direct-orderbook-form"
       onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-lg border border-emerald-500/30 bg-zinc-950 p-3 text-zinc-100"
+      className="flex flex-col gap-3 text-zinc-100"
     >
-      <header className="flex flex-col gap-1 border-b border-zinc-900 pb-2">
-        <h2 className="text-sm font-semibold text-emerald-200">
-          Direct orderbook submit
-        </h2>
-        <p
-          data-testid="direct-orderbook-scope"
-          className="text-[11px] leading-snug text-zinc-400"
-        >
-          Posts to{" "}
-          <code className="rounded bg-zinc-900 px-1 text-emerald-300">
-            POST /options/orders
-          </code>
-          . Honours GTC / IOC / FOK and post-only. Separate from the
-          paired RFQ execution-intent flow that the standard Trade
-          ticket drives.
-        </p>
-      </header>
-
       <label className="text-xs text-zinc-300">
         Option series id
         <input
@@ -289,7 +271,7 @@ export function DirectOrderbookForm({
           on and a short copy explains the behaviour. */}
       <section
         data-testid="direct-orderbook-attached-section"
-        className="flex flex-col gap-2 rounded border border-zinc-800 bg-black/30 p-2 text-xs text-zinc-300"
+        className="flex flex-col gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-300"
       >
         <header className="flex items-center justify-between">
           <h3 className="text-xs font-semibold text-emerald-200">

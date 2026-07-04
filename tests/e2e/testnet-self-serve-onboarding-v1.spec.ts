@@ -104,40 +104,25 @@ test.describe("/api MintTokensCard upgrade", () => {
   });
 });
 
-test.describe("/perps not-live banner", () => {
-  test("renders a visible Perps · not live banner above the workspace", async ({
+test.describe("/perps posture (page-level banner retired for polish)", () => {
+  test("perps workspace shell + widgets render without the retired not-live banner", async ({
     page,
   }) => {
-    await page.goto("/perps");
-    const banner = page.getByTestId("perps-not-live-banner");
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText(/Perps.*not live/i);
-    await expect(banner).toContainText(/Options-only/i);
-  });
-
-  test("banner links the tester at /options", async ({ page }) => {
-    await page.goto("/perps");
-    const link = page.getByTestId("perps-not-live-options-link");
-    await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "/options");
-  });
-
-  test("existing perps workspace shell + widgets still render under the banner", async ({
-    page,
-  }) => {
+    // The former `perps-not-live-banner` was removed for visual polish.
+    // The V1 disclosures banner + hard-disabled trade form + backend
+    // fail-closed still communicate the not-live posture. Assert both
+    // the shell renders AND the retired banner is gone.
     await page.goto("/perps");
     await expect(page.getByTestId("perps-terminal-shell")).toBeVisible();
     await expect(page.getByTestId("workspace-perps")).toBeVisible();
-    // Spot-check the trade form is present (and its disabled button
-    // still shows "Perps not live" — that's tested elsewhere).
     await expect(page.getByTestId("widget-perps-trade-form")).toBeVisible();
+    await expect(page.getByTestId("perps-not-live-banner")).toHaveCount(0);
   });
 
-  test("banner uses zinc/emerald palette (no amber/yellow/orange)", async ({
+  test("/perps page uses zinc/emerald palette (no amber/yellow/orange)", async ({
     page,
   }) => {
-    // The /perps page forbids amber/yellow/orange in any class string
-    // (see perps-v1.spec.ts). The new banner must respect that.
+    // Palette invariant kept even without the retired banner.
     await page.goto("/perps");
     const html = await page.locator("main").innerHTML();
     expect(html).not.toMatch(/class="[^"]*\bamber-/);

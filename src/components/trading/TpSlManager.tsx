@@ -197,7 +197,7 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
     <section
       data-testid="tp-sl-manager"
       data-tp-sl-disabled={disabled ? "true" : "false"}
-      className="flex flex-col gap-3 rounded-lg border border-emerald-500/20 bg-zinc-950 p-3"
+      className="flex flex-col gap-3 border-t border-zinc-800 pt-3"
     >
       <header className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold text-emerald-200">TP / SL</h3>

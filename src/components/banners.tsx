@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useWallet } from "@/lib/wallet";
 import {
   expectedChain,
@@ -9,19 +10,59 @@ import {
   BASE_SEPOLIA,
 } from "@/lib/chains";
 
+const TESTNET_UNAUDITED_DISMISSED_KEY = "deopt:v2:testnet-unaudited-banner-dismissed";
+
 export function TestnetUnauditedBanner() {
+  // Hydration-safe: render visible on the server + first client paint,
+  // then hide on next tick if localStorage says the tester already
+  // dismissed it. Prevents a flash-of-hidden-then-visible and keeps
+  // the existing landing/sign-rejected spec assertions honest on
+  // a fresh browser context.
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => {
+    // Hydration-safe one-shot read of localStorage. `setDismissed`
+    // inside `useEffect` is the idiomatic pattern for reading a
+    // client-only source that isn't available during SSR.
+    try {
+      if (window.localStorage.getItem(TESTNET_UNAUDITED_DISMISSED_KEY) === "1") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setDismissed(true);
+      }
+    } catch {
+      // localStorage unavailable — keep the banner visible.
+    }
+  }, []);
+  if (dismissed) return null;
   return (
     <div
       role="status"
       data-testid="testnet-unaudited-banner"
-      className="border-b border-emerald-500/30 bg-zinc-950 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-emerald-100"
+      className="flex items-center justify-center gap-3 border-b border-emerald-500/30 bg-zinc-950 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-emerald-100"
     >
-      <span className="text-emerald-300">Public testnet beta</span>{" "}
-      <span className="text-zinc-300">—</span>{" "}
-      <strong className="text-emerald-200">UNAUDITED</strong>
-      <span className="text-zinc-400">, experimental, Base Sepolia only.</span>{" "}
-      Testnet beta — <strong className="text-emerald-200">NOT YET AUDITED</strong>.{" "}
-      Do NOT deposit real funds. Mainnet trading is disabled. Addresses may change.
+      <span>
+        <span className="text-emerald-300">Public testnet beta</span>{" "}
+        <span className="text-zinc-300">—</span>{" "}
+        <strong className="text-emerald-200">UNAUDITED</strong>
+        <span className="text-zinc-400">, experimental, Base Sepolia only.</span>{" "}
+        Testnet beta — <strong className="text-emerald-200">NOT YET AUDITED</strong>.{" "}
+        Do NOT deposit real funds. Mainnet trading is disabled. Addresses may change.
+      </span>
+      <button
+        type="button"
+        aria-label="Dismiss testnet beta banner"
+        onClick={() => {
+          try {
+            window.localStorage.setItem(TESTNET_UNAUDITED_DISMISSED_KEY, "1");
+          } catch {
+            // ignore — we still hide the banner for this session.
+          }
+          setDismissed(true);
+        }}
+        data-testid="testnet-unaudited-banner-close"
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[14px] leading-none text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+      >
+        ×
+      </button>
     </div>
   );
 }

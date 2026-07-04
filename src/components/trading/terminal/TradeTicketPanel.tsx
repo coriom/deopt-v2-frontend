@@ -27,9 +27,20 @@ import { useWallet } from "@/lib/wallet";
 import { AccountLifecyclePanel } from "@/components/trading/AccountLifecyclePanel";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
 import { TpSlManager } from "@/components/trading/TpSlManager";
+import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
+import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 
 type TicketMode = "orderbook" | "rfq";
 type Side = "buy" | "sell";
+type TradeTab = "payoff" | "greeks" | "trades" | "book";
+
+const TRADE_TABS: readonly { id: TradeTab; label: string }[] = [
+  { id: "payoff", label: "Payoff" },
+  { id: "greeks", label: "Greeks" },
+  { id: "trades", label: "Trades" },
+  { id: "book", label: "Book" },
+] as const;
 
 function fallbackInstrumentTitle(): string {
   return "Pick a series from the chain";
@@ -58,6 +69,7 @@ export function TradeTicketPanel() {
   const [mode, setMode] = useState<TicketMode>("orderbook");
   const [side, setSide] = useState<Side>("buy");
   const [amount, setAmount] = useState("");
+  const [activeTab, setActiveTab] = useState<TradeTab>("payoff");
 
   return (
     <div
@@ -94,7 +106,146 @@ export function TradeTicketPanel() {
             setAmount={setAmount}
           />
         )}
+
+        <TradeTabsSection
+          active={activeTab}
+          onChange={setActiveTab}
+          leg={leg}
+          row={row}
+        />
       </div>
+    </div>
+  );
+}
+
+// ---------- Payoff/Greeks/Trades/Book tabs ----------
+
+interface TradeTabsSectionProps {
+  active: TradeTab;
+  onChange: (t: TradeTab) => void;
+  leg: OptionLeg | null;
+  row: OptionsChainRow | null;
+}
+
+function TradeTabsSection({ active, onChange, leg, row }: TradeTabsSectionProps) {
+  return (
+    <section
+      data-testid="trade-tabs-section"
+      className="flex flex-col border-t border-zinc-800"
+    >
+      <div
+        role="tablist"
+        aria-label="Trade details"
+        data-testid="trade-tabs-strip"
+        className="flex items-center gap-1 px-2 pt-2"
+      >
+        {TRADE_TABS.map((t) => {
+          const isActive = active === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onChange(t.id)}
+              data-testid={`trade-tab-${t.id}`}
+              data-selected={isActive ? "true" : "false"}
+              className={`rounded-t px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                isActive
+                  ? "border-b-2 border-emerald-400 text-zinc-100"
+                  : "border-b-2 border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        role="tabpanel"
+        data-testid={`trade-tab-body-${active}`}
+        className="border-t border-zinc-800 p-3"
+      >
+        <TradeTabBody active={active} leg={leg} row={row} />
+      </div>
+    </section>
+  );
+}
+
+function TradeTabBody({
+  active,
+  leg,
+  row,
+}: {
+  active: TradeTab;
+  leg: OptionLeg | null;
+  row: OptionsChainRow | null;
+}) {
+  if (active === "payoff") {
+    if (!leg || !row) {
+      return <PickInstrumentEmpty tab="Payoff" />;
+    }
+    return (
+      <div
+        data-testid="trade-tab-payoff-body"
+        className="flex flex-col gap-2"
+      >
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em]">
+          <span className="text-emerald-300">
+            {leg.isCall ? "Long call" : "Long put"} · K = {row.strikeLabel}
+          </span>
+          <span className="text-zinc-500">exp {row.expiryLabel}</span>
+        </div>
+        <PayoffSvg isCall={leg.isCall} isBuy strikeLabel={row.strikeLabel} />
+      </div>
+    );
+  }
+  if (active === "greeks") {
+    if (!leg || !row) return <PickInstrumentEmpty tab="Greeks" />;
+    return (
+      <div
+        data-testid="trade-tab-greeks-body"
+        className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-400"
+      >
+        Delta / Gamma / Vega / Theta are not exposed by the current backend for
+        this instrument. Portfolio-level greeks land in a follow-up milestone.
+        Honest dashes are shown in the chain and detail panel meanwhile.
+      </div>
+    );
+  }
+  if (active === "trades") {
+    return (
+      <div data-testid="trade-tab-trades-body" className="min-h-[6rem]">
+        <TradeHistoryTable />
+      </div>
+    );
+  }
+  // book
+  return (
+    <div
+      data-testid="trade-tab-book-body"
+      className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-400"
+    >
+      {leg && row
+        ? `Orderbook snapshot for ${row.strikeLabel} ${leg.isCall ? "Call" : "Put"} — coming from the direct orderbook adapter in a follow-up milestone.`
+        : "Pick an instrument in the chain to preview its resting orders here."}
+    </div>
+  );
+}
+
+function PickInstrumentEmpty({ tab }: { tab: string }) {
+  return (
+    <div
+      data-testid="trade-tab-empty-state"
+      className="flex flex-col items-center gap-2 py-6 text-center text-zinc-500"
+    >
+      <span
+        aria-hidden="true"
+        className="grid h-8 w-8 place-items-center rounded border border-zinc-800 text-lg text-zinc-600"
+      >
+        +
+      </span>
+      <span className="text-[11px]">Select an instrument to view {tab}</span>
     </div>
   );
 }
@@ -115,15 +266,6 @@ function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) 
     >
       <div className="flex min-w-0 items-center gap-2">
         <span
-          aria-hidden="true"
-          data-testid="trade-header-grip"
-          className="grid h-5 w-3 shrink-0 grid-cols-2 gap-[2px] text-zinc-600"
-        >
-          {Array.from({ length: 6 }).map((_, i) => (
-            <span key={i} className="h-[2px] w-[2px] rounded-full bg-current" />
-          ))}
-        </span>
-        <span
           data-testid="trade-instrument-title"
           className="truncate text-[13px] font-semibold tracking-tight text-zinc-100"
           title={instrumentTitle}
@@ -133,15 +275,20 @@ function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) 
       </div>
       <label className="flex items-center gap-1">
         <span className="sr-only">Ticket mode</span>
-        <select
+        <NativeSelect
           data-testid="trade-mode-select"
+          aria-label="Ticket mode"
           value={mode}
           onChange={(e) => onModeChange(e.target.value as TicketMode)}
-          className="cursor-pointer rounded border border-zinc-800 bg-black/40 px-2 py-0.5 text-[11px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
+          variant="bordered"
         >
-          <option value="orderbook">Orderbook</option>
-          <option value="rfq">RFQ</option>
-        </select>
+          <option value="orderbook" className="bg-zinc-950 text-zinc-100">
+            Orderbook
+          </option>
+          <option value="rfq" className="bg-zinc-950 text-zinc-100">
+            RFQ
+          </option>
+        </NativeSelect>
       </label>
     </header>
   );

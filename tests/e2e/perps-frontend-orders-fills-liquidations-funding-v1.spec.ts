@@ -209,15 +209,23 @@ const FUNDING_ROW = {
 // =====================================================================
 
 test.describe("PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 — not-live posture", () => {
-  test("not-live banner is still rendered on /perps", async ({ page }) => {
+  test("both retired page-level banners do not resurface on /perps", async ({
+    page,
+  }) => {
     await stubMarketPriceUnavailable(page);
     await page.goto("/perps");
-    await expect(page.getByTestId("perps-not-live-banner")).toBeVisible({
+    // Both the `perps-not-live-banner` and the `perps-v1-disclosures-banner`
+    // were retired for visual polish. The workspace shell still mounts;
+    // the not-live posture is enforced by the disabled submit + backend
+    // fail-closed grid.
+    await expect(page.getByTestId("workspace-perps")).toBeVisible({
       timeout: 10_000,
     });
+    await expect(page.getByTestId("perps-not-live-banner")).toHaveCount(0);
+    await expect(page.getByTestId("perps-v1-disclosures-banner")).toHaveCount(0);
   });
 
-  test("all four new panels mount with wallet connected + not-live banner still visible", async ({
+  test("all four new panels mount with wallet connected + retired banner does not resurface", async ({
     page,
   }) => {
     await installMockWallet(page, { chainId: BASE_SEPOLIA_CHAIN_ID });
@@ -228,10 +236,9 @@ test.describe("PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 — not-live 
     await expect(page.getByTestId("perps-fills-panel")).toBeVisible();
     await expect(page.getByTestId("perps-liquidations-panel")).toBeVisible();
     await expect(page.getByTestId("perps-funding-panel")).toBeVisible();
-    // Not-live banner is the page-level guarantee that trading is
-    // disabled — the widget-scoped submit is already covered by
+    // The widget-scoped submit remains disabled; that's covered by
     // `perps-isolated-margin-position-engine-v1.spec.ts`.
-    await expect(page.getByTestId("perps-not-live-banner")).toBeVisible();
+    await expect(page.getByTestId("perps-not-live-banner")).toHaveCount(0);
   });
 });
 

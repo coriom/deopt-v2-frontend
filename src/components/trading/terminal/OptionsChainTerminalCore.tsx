@@ -17,6 +17,9 @@ import {
 } from "@/lib/options-chain-model";
 import type { Product, Series, SeriesId } from "@/lib/trading-types";
 import { useSelectedOption } from "@/lib/workspace-selected-option";
+import { NativeSelect } from "@/components/ui/NativeSelect";
+import { useChainColumnPrefs } from "@/hooks/useChainColumnPrefs";
+import { ChainColumnsMenu } from "./ChainColumnsMenu";
 import { ExpirySelector } from "./ExpirySelector";
 import { OptionsChainGrid } from "./OptionsChainGrid";
 
@@ -52,6 +55,7 @@ function useSeriesById(seriesIds: SeriesId[]) {
 export function OptionsChainTerminalCore() {
   const products = useProducts();
   const { selected, setSelected } = useSelectedOption();
+  const chainPrefs = useChainColumnPrefs();
 
   const allProducts = useMemo<Product[]>(
     () => products.data?.data.products ?? [],
@@ -115,6 +119,18 @@ export function OptionsChainTerminalCore() {
 
   const expiries = useMemo(() => distinctExpiries(chainRows), [chainRows]);
   const [expiryPick, setExpiryPick] = useState<number | null>(null);
+  // Auto-select the nearest available expiry once expiries load. The
+  // former "All" pill (which mapped `null` → show every expiry) was
+  // retired for visual polish, so `null` would leave the grid empty
+  // until the user clicks; auto-picking the earliest expiry keeps the
+  // grid populated on first load. Users can still switch expiries via
+  // the pill row.
+  useEffect(() => {
+    if (expiryPick !== null) return;
+    if (expiries.length === 0) return;
+    const first = expiries[0].ms;
+    Promise.resolve().then(() => setExpiryPick(first));
+  }, [expiryPick, expiries]);
   const visibleRows = useMemo(
     () => filterByExpiry(chainRows, expiryPick),
     [chainRows, expiryPick],
@@ -140,53 +156,38 @@ export function OptionsChainTerminalCore() {
     <div data-testid="options-chain-core" className="flex flex-col gap-2">
       <header
         data-testid="terminal-header"
-        className="flex flex-wrap items-center justify-between gap-2 rounded border border-emerald-500/30 bg-zinc-950 px-3 py-1.5 text-[11px]"
+        className="flex flex-wrap items-center gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-[11px]"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">
-            Options · v1
-          </span>
-          <div role="tablist" aria-label="Underlying" className="flex flex-wrap gap-1">
-            {underlyings.map((u) => (
-              <button
-                key={u.key}
-                type="button"
-                role="tab"
-                aria-selected={underlyingKey === u.key}
-                onClick={() => {
-                  setUnderlyingKey(u.key);
-                  setSelected(null);
-                  setExpiryPick(null);
-                }}
-                data-testid={`underlying-pill-${u.label}`}
-                data-selected={underlyingKey === u.key ? "true" : "false"}
-                className={`rounded border px-2 py-0.5 text-[11px] font-medium ${
-                  underlyingKey === u.key
-                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
-                    : "border-zinc-800 bg-black/40 text-zinc-300 hover:border-emerald-500/40"
-                }`}
-              >
-                {u.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <NativeSelect
+          aria-label="Underlying"
+          value={underlyingKey ?? ""}
+          onChange={(e) => {
+            setUnderlyingKey(e.target.value);
+            setSelected(null);
+            setExpiryPick(null);
+          }}
+          data-testid="underlying-select"
+          variant="ghost"
+        >
+          {underlyings.map((u) => (
+            <option key={u.key} value={u.key} className="bg-zinc-950 text-zinc-100">
+              {u.label}
+            </option>
+          ))}
+        </NativeSelect>
         <ExpirySelector
           expiries={expiries}
           selected={expiryPick}
           onSelect={setExpiryPick}
         />
-        <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-          <span data-testid="terminal-stat-chain">chain 84532</span>
-          <span>·</span>
-          <span>Base Sepolia testnet</span>
-          <span>·</span>
-          <span className="text-emerald-300">no real funds</span>
+        <div className="ml-auto">
+          <ChainColumnsMenu prefs={chainPrefs} />
         </div>
       </header>
       <OptionsChainGrid
         rows={visibleRows}
         selectedSeriesId={selected?.leg.seriesId ?? null}
+        prefs={chainPrefs}
         onSelect={(leg, row) =>
           setSelected({ leg, row, productId: leg.productId })
         }

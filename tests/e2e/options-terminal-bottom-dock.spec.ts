@@ -112,21 +112,23 @@ async function setupChain(page: import("@playwright/test").Page) {
   );
 }
 
-test("/options renders the default Options workspace (chain + trade + payoff + bottom dock)", async ({
+test("/options renders the default Options workspace (chain + trade + bottom dock; payoff is a Trade tab)", async ({
   page,
 }) => {
-  // The default options layout now seeds 4 widgets (options-chain,
-  // trade, payoff, bottom-dock) per `workspace/registry.tsx`. Payoff
-  // was promoted from a tab inside the trade widget to its own widget;
-  // see the workspace-registry comment block for the visual layout.
+  // Payoff was demoted back into the Trade ticket's tab set to prevent
+  // the vertical overlap that appeared when the ticket needed more than
+  // 58% of the canvas. The default layout now seeds 3 widgets:
+  // options-chain, trade (full-height right column), bottom-dock. See
+  // the workspace-registry comment block for the ASCII layout.
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/options");
   await expect(page.getByTestId("workspace-options")).toBeVisible();
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
   await expect(page.getByTestId("widget-trade")).toBeVisible();
-  await expect(page.getByTestId("widget-payoff")).toBeVisible();
   await expect(page.getByTestId("widget-bottom-dock")).toBeVisible();
+  // Payoff is NOT a default separate widget anymore.
+  await expect(page.getByTestId("widget-payoff")).toHaveCount(0);
 });
 
 test("/options Trade widget defaults to the orderbook submit form", async ({
@@ -173,14 +175,21 @@ test("/options bottom-dock widget renders the 6 account tabs", async ({
   }
 });
 
-test("/options terminal-header still surfaces 'chain 84532' status", async ({
+test("/options terminal-header renders (underlying + expiry only, no redundant chain copy)", async ({
   page,
 }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/options");
   await expect(page.getByTestId("terminal-header")).toBeVisible();
-  await expect(page.getByTestId("terminal-stat-chain")).toContainText(
+  // The banner now shows only the underlying select + expiry selector.
+  // Redundant "chain 84532 · Base Sepolia testnet · no real funds" copy
+  // was retired since the shell footer already surfaces the network posture.
+  await expect(page.getByTestId("underlying-select")).toBeVisible();
+  await expect(page.getByTestId("terminal-header")).not.toContainText(
     /chain 84532/i,
+  );
+  await expect(page.getByTestId("terminal-header")).not.toContainText(
+    /no real funds/i,
   );
 });

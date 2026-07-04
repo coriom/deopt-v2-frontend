@@ -28,21 +28,6 @@ export function ExpirySelector({
       aria-label="Expiry"
       className="flex flex-wrap gap-2"
     >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={selected === null}
-        onClick={() => onSelect(null)}
-        data-testid="expiry-pill-all"
-        data-selected={selected === null ? "true" : "false"}
-        className={`rounded border px-2 py-0.5 text-[11px] ${
-          selected === null
-            ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
-            : "border-zinc-800 bg-black/40 text-zinc-300 hover:border-emerald-500/40"
-        }`}
-      >
-        All
-      </button>
       {expiries.map((e) => (
         <button
           key={e.ms}

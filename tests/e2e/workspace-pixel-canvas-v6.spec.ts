@@ -78,12 +78,16 @@ test("canvas exposes the snap unit and the backdrop uses the same step", async (
 test("Options defaults fill the canvas horizontally (no right gutter)", async ({
   page,
 }) => {
-  // The default options layout was reshaped after this test was first
-  // written: bottom-dock no longer spans the full width — it sits
-  // under the chain column only, while the right column stacks trade
-  // + payoff. The horizontal-fill invariant is now `chain + trade ≈ 1`
-  // with `dock.wPct == chain.wPct`. See workspace/registry.tsx
-  // (`defaultLayoutFor("options")`).
+  // Latest reshape: payoff was demoted back into the Trade ticket's
+  // tab set (it was overlapping the ticket above it at the sizes the
+  // trade form actually needed). The default options layout now seeds
+  // 3 widgets:
+  //   - options-chain (left column, top)
+  //   - bottom-dock   (left column, bottom — same wPct as chain)
+  //   - trade         (right column, full height)
+  // Horizontal-fill invariant: `chain.wPct + trade.wPct ≈ 1` and
+  // `dock.wPct == chain.wPct`. See workspace/registry.tsx
+  // (`defaultWidgetsFor("options")`).
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/options");
   await expect(page.getByTestId("widget-options-chain")).toBeVisible();
@@ -100,26 +104,27 @@ test("Options defaults fill the canvas horizontally (no right gutter)", async ({
     const details = widgets.find(
       (w: { type: string }) => w.type === "trade",
     );
-    const payoff = widgets.find(
-      (w: { type: string }) => w.type === "payoff",
-    );
     const dock = widgets.find(
       (w: { type: string }) => w.type === "bottom-dock",
     );
     expect(chain).toBeDefined();
     expect(details).toBeDefined();
-    expect(payoff).toBeDefined();
     expect(dock).toBeDefined();
-    // Chain sits left of trade/payoff; the two columns together span
-    // the canvas.
+    // Payoff is no longer a default separate widget.
+    const payoff = widgets.find(
+      (w: { type: string }) => w.type === "payoff",
+    );
+    expect(payoff).toBeUndefined();
+    // Chain sits left of trade; the two columns together span the canvas.
     expect(chain.xPct + chain.wPct).toBeCloseTo(details.xPct, 5);
     expect(chain.wPct + details.wPct).toBeCloseTo(1, 5);
     // Dock sits under the chain column only.
     expect(dock.xPct).toBe(0);
     expect(dock.wPct).toBeCloseTo(chain.wPct, 5);
-    // Trade + payoff stack in the right column.
-    expect(payoff.xPct).toBe(details.xPct);
-    expect(payoff.wPct).toBe(details.wPct);
+    // Trade spans the full height of the right column (pixel snapping
+    // may round the persisted hPct slightly below 1.0).
+    expect(details.hPct).toBeGreaterThan(0.98);
+    expect(details.yPct).toBeCloseTo(0, 2);
   }
 });
 

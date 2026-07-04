@@ -18,6 +18,7 @@ import type {
   Series,
   SeriesId,
 } from "@/lib/trading-types";
+import { underlyingDisplaySymbol } from "@/lib/underlying-symbols";
 
 export type OptionAvail = "live" | "n/a-testnet" | "loading";
 
@@ -241,7 +242,15 @@ export function distinctExpiries(
     .sort((a, b) => a.ms - b.ms);
 }
 
-/** Distinct underlying symbols from a product list. */
+/** Distinct underlying symbols from a product list.
+ *
+ * `key` is the raw underlying identifier the backend uses (usually a
+ * hex address) so filtering + backend calls stay stable; `label` is
+ * the human-readable ticker resolved via `underlyingDisplaySymbol` —
+ * uses the backend-provided `underlying_symbol` when present, then a
+ * frozen Base-Sepolia address table, then a truncated `0xABCD…6789`,
+ * then the raw value.
+ */
 export function distinctUnderlyings(
   products: Product[],
 ): Array<{ key: string; label: string }> {
@@ -251,7 +260,10 @@ export function distinctUnderlyings(
     const key = p.underlying;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ key, label: p.underlying_symbol ?? key });
+    out.push({
+      key,
+      label: underlyingDisplaySymbol(p.underlying, p.underlying_symbol),
+    });
   }
   return out;
 }

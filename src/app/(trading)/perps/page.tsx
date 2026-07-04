@@ -5,7 +5,6 @@ import { PerpsOrdersPanel } from "@/components/trading/perps/PerpsOrdersPanel";
 import { PerpsFillsPanel } from "@/components/trading/perps/PerpsFillsPanel";
 import { PerpsLiquidationsPanel } from "@/components/trading/perps/PerpsLiquidationsPanel";
 import { PerpsFundingPanel } from "@/components/trading/perps/PerpsFundingPanel";
-import { PerpsV1DisclosuresBanner } from "@/components/trading/perps/PerpsV1DisclosuresBanner";
 
 export default function PerpsPage() {
   return (
@@ -14,44 +13,15 @@ export default function PerpsPage() {
       className="flex h-full min-h-0 flex-col overflow-y-auto"
     >
       {/*
-       * TESTNET-SELF-SERVE-ONBOARDING-V1 — thin visible banner so a
-       * tester landing on `/perps` immediately understands the surface
-       * is a preview. The backend mutation routes already fail closed
-       * with `PerpsNotLive` and the trade form button is hard-disabled
-       * with the same label; this banner makes the not-live posture
-       * legible at the page level too.
+       * Both the page-level "Perps · not live" banner and the V1
+       * disclosures banner were retired for visual polish. The not-live
+       * posture is still guaranteed end-to-end by: (a) the trade form
+       * submit button hard-disabled with "Perps not live",
+       * (b) `PERPS_PUBLIC_TRADING_ENABLED=false` default + startup
+       * mainnet guard, (c) the backend returning `503 PerpsNotLive` on
+       * every one of the 9 Perps mutation URLs, and (d) the readiness
+       * probe reporting `perps_public_routes: fail_closed`.
        */}
-      <div
-        data-testid="perps-not-live-banner"
-        className="flex items-center justify-between border-b border-zinc-800 bg-zinc-950 px-3 py-1.5 text-[12px] text-zinc-300"
-      >
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          <strong className="font-semibold text-zinc-100">Perps · not live</strong>
-          <span className="text-zinc-400">
-            in this Options-only public testnet beta. Order entry and
-            cancel are disabled. Read-only market data may render live
-            on Base Sepolia; trading is not enabled. Options trade on{" "}
-            <a
-              href="/options"
-              data-testid="perps-not-live-options-link"
-              className="text-emerald-300 underline-offset-2 hover:underline"
-            >
-              /options
-            </a>
-            .
-          </span>
-        </span>
-      </div>
-      {/*
-       * PERPS-FRONTEND-TICKET-ENABLEMENT-V1 — V1 caveat disclosures.
-       * Two honest statements the audit requires be visible on `/perps`
-       * before any public unlock: (1) `mark == index` in V1;
-       * (2) funding is wired but on-chain funding flag is off for
-       * ETH-PERP + BTC-PERP so accrual is currently zero. Rendered
-       * regardless of ticket-enablement flag.
-       */}
-      <PerpsV1DisclosuresBanner />
       <PerpsSymbolProvider>
         {/*
          * The Workspace measures its own container via

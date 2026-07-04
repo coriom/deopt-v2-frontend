@@ -65,8 +65,9 @@ test.describe("PERPS-ISOLATED-MARGIN-POSITION-ENGINE-V1", () => {
       timeout: 10_000,
     });
     await expect(page.getByTestId("perps-positions-disconnected")).toBeVisible();
-    // Not-live banner + submit disabled unchanged.
-    await expect(page.getByTestId("perps-not-live-banner")).toBeVisible();
+    // The former page-level not-live banner was retired; the disabled
+    // trade form + disclosures banner still preserve the not-live posture.
+    await expect(page.getByTestId("perps-not-live-banner")).toHaveCount(0);
   });
 
   test("connected wallet + empty backend → empty state (no fake rows)", async ({
