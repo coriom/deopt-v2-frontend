@@ -8,6 +8,14 @@
 //     OCO / no-attached);
 //   * UI-level checks pin the success/error copy + per-field
 //     validation states.
+//
+// OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 update: the attached TP/SL
+// inputs now accept human-readable dollar prices (`"15"` for $15,
+// `"5"` for $5). The wire body still contains the 1e8-scaled
+// `trigger_price_1e8` / `limit_price_1e8` strings — the form
+// converts on submit via `humanToScaled1e8`. Validation copy is
+// also human-friendly: `"TP trigger price is required"` /
+// `"must be greater than 0"` / `"must be a valid price"`.
 
 import { test, expect, type Route } from "@playwright/test";
 import {
@@ -159,10 +167,10 @@ test.describe("/options ticket — attached TP/SL", () => {
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
     await page
       .getByTestId("direct-orderbook-attach-tp-trigger")
-      .fill("1500000000");
+      .fill("15");
     await page
       .getByTestId("direct-orderbook-attach-tp-limit")
-      .fill("1500000000");
+      .fill("15");
 
     await page.getByTestId("direct-orderbook-submit").click();
     await expect(
@@ -190,10 +198,10 @@ test.describe("/options ticket — attached TP/SL", () => {
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
     await page
       .getByTestId("direct-orderbook-attach-sl-trigger")
-      .fill("500000000");
+      .fill("5");
     await page
       .getByTestId("direct-orderbook-attach-sl-limit")
-      .fill("500000000");
+      .fill("5");
 
     await page.getByTestId("direct-orderbook-submit").click();
     await expect(
@@ -220,16 +228,16 @@ test.describe("/options ticket — attached TP/SL", () => {
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
     await page
       .getByTestId("direct-orderbook-attach-tp-trigger")
-      .fill("1500000000");
+      .fill("15");
     await page
       .getByTestId("direct-orderbook-attach-tp-limit")
-      .fill("1500000000");
+      .fill("15");
     await page
       .getByTestId("direct-orderbook-attach-sl-trigger")
-      .fill("500000000");
+      .fill("5");
     await page
       .getByTestId("direct-orderbook-attach-sl-limit")
-      .fill("500000000");
+      .fill("5");
 
     await expect(
       page.getByTestId("direct-orderbook-attach-oco-copy"),
@@ -254,18 +262,16 @@ test.describe("/options ticket — attached TP/SL", () => {
 
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
     await page.getByTestId("direct-orderbook-attach-tp-trigger").fill("0");
-    await page
-      .getByTestId("direct-orderbook-attach-tp-limit")
-      .fill("1500000000");
+    await page.getByTestId("direct-orderbook-attach-tp-limit").fill("15");
 
     await expect(
       page.getByTestId("direct-orderbook-attach-tp-trigger-error"),
-    ).toContainText(/> 0/);
+    ).toContainText(/greater than 0/);
     await expect(page.getByTestId("direct-orderbook-submit")).toBeDisabled();
     expect(captured.request).toBeNull();
   });
 
-  test("invalid SL limit (non-digit) disables submit + shows inline error", async ({
+  test("invalid SL limit (non-decimal) disables submit + shows inline error", async ({
     page,
   }) => {
     const captured: Captured = { request: null };
@@ -274,14 +280,12 @@ test.describe("/options ticket — attached TP/SL", () => {
     await fillBaseTicket(page);
 
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
-    await page
-      .getByTestId("direct-orderbook-attach-sl-trigger")
-      .fill("500000000");
-    await page.getByTestId("direct-orderbook-attach-sl-limit").fill("0.5");
+    await page.getByTestId("direct-orderbook-attach-sl-trigger").fill("5");
+    await page.getByTestId("direct-orderbook-attach-sl-limit").fill("abc");
 
     await expect(
       page.getByTestId("direct-orderbook-attach-sl-limit-error"),
-    ).toContainText(/non-negative integer/);
+    ).toContainText(/valid price/);
     await expect(page.getByTestId("direct-orderbook-submit")).toBeDisabled();
     expect(captured.request).toBeNull();
   });
@@ -302,10 +306,10 @@ test.describe("/options ticket — attached TP/SL", () => {
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
     await page
       .getByTestId("direct-orderbook-attach-tp-trigger")
-      .fill("1500000000");
+      .fill("15");
     await page
       .getByTestId("direct-orderbook-attach-tp-limit")
-      .fill("1500000000");
+      .fill("15");
 
     await page.getByTestId("direct-orderbook-submit").click();
     await expect(

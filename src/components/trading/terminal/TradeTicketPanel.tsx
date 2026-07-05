@@ -26,13 +26,15 @@ import { useSelectedOption } from "@/lib/workspace-selected-option";
 import { useWallet } from "@/lib/wallet";
 import { AccountLifecyclePanel } from "@/components/trading/AccountLifecyclePanel";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
-import { OptionsTwapForm } from "@/components/trading/OptionsTwapForm";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
 import { NativeSelect } from "@/components/ui/NativeSelect";
-import { isOptionsTwapEnabled } from "@/lib/options-twap-flag";
 
-type TicketMode = "orderbook" | "twap" | "rfq";
+// OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — TWAP is no longer a separate
+// ticket mode; it lives under the `Order Type` dropdown inside
+// `DirectOrderbookForm`. The top-level dropdown routes between
+// products (Orderbook vs. RFQ), not between execution styles.
+type TicketMode = "orderbook" | "rfq";
 type Side = "buy" | "sell";
 type TradeTab = "payoff" | "greeks" | "trades" | "book";
 
@@ -94,16 +96,7 @@ export function TradeTicketPanel() {
             <DirectOrderbookForm
               key={leg?.seriesId ?? "__no_selection__"}
               initialSeriesId={leg?.seriesId ?? undefined}
-              onSwitchToTwap={
-                isOptionsTwapEnabled() ? () => setMode("twap") : undefined
-              }
             />
-            <AccountLifecyclePanel address={address} />
-          </div>
-        )}
-        {mode === "twap" && (
-          <div data-testid="trade-body-twap" className="flex flex-col gap-3 p-3">
-            <OptionsTwapForm optionSeriesId={leg?.seriesId ?? ""} />
             <AccountLifecyclePanel address={address} />
           </div>
         )}
@@ -293,15 +286,6 @@ function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) 
           <option value="orderbook" className="bg-zinc-950 text-zinc-100">
             Orderbook
           </option>
-          {isOptionsTwapEnabled() && (
-            <option
-              value="twap"
-              className="bg-zinc-950 text-zinc-100"
-              data-testid="trade-mode-option-twap"
-            >
-              TWAP
-            </option>
-          )}
           <option value="rfq" className="bg-zinc-950 text-zinc-100">
             RFQ
           </option>

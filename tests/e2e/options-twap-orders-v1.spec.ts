@@ -1,20 +1,25 @@
 /**
  * options-twap-orders-v1.spec.ts
  *
- * Pins the default (flag-off) posture of the Options TWAP order type
- * after `OPTIONS-TWAP-ORDERS-V1`. Under
- * `NEXT_PUBLIC_OPTIONS_TWAP_ENABLED=false` (the CI default):
+ * Pins the default (flag-off) posture of the Options TWAP order type.
+ * Under `NEXT_PUBLIC_OPTIONS_TWAP_ENABLED=false` (the CI default):
  *
- *   - The `TWAP` option does NOT appear in the trade mode dropdown.
+ *   - After `OPTIONS-ADVANCED-ORDER-TICKET-UX-V1`, TWAP is an
+ *     `Order Type` inside the ticket (not a top-level ticket mode).
+ *     The `Order Type` dropdown MUST NOT expose the TWAP option
+ *     when the flag is off.
+ *   - The top-level `trade-mode-select` never carries a TWAP option
+ *     regardless of flag state (products vs. execution styles).
  *   - No `/options/twap-orders` request fires on any interaction.
- *   - Setting mode="twap" via the URL would surface the "not enabled"
- *     disabled-copy, but the option cannot be selected via the UI.
+ *   - `OptionsTwapForm` never mounts.
  *   - Existing orderbook + RFQ modes are unchanged.
  *
  * Flag-on wiring (canonical byte freeze + form field IDs) is
  * validated by the node contract test
  * `tests/node/options-twap-canonical.contract.mjs` and by the backend
- * `twap_*` tests in `tests/options_tests.rs`.
+ * `twap_*` tests in `tests/options_tests.rs`. The flag-on wiring of
+ * the Order Type dropdown is covered by
+ * `tests/e2e/options-advanced-order-ticket-ux-v1.spec.ts`.
  */
 import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
@@ -61,12 +66,23 @@ test("default build: OptionsTwapForm is not mounted anywhere", async ({
   await expect(page.getByTestId("options-twap-submit")).toHaveCount(0);
 });
 
-test("default build: no TWAP-mode body renders even after direct DOM inspection", async ({
+test("default build: no TWAP body renders under any dropdown selection", async ({
   page,
 }) => {
   await installMockWallet(page);
   await page.goto("/options");
+  // Legacy top-level twap-mode body must never appear (removed in
+  // OPTIONS-ADVANCED-ORDER-TICKET-UX-V1).
   await expect(page.getByTestId("trade-body-twap")).toHaveCount(0);
+  // Order Type dropdown must NOT expose a TWAP option when the
+  // flag is off.
+  const orderType = page.getByTestId("options-order-type-select");
+  await expect(orderType).toBeVisible();
+  await expect(
+    orderType.locator('option[value="twap"]'),
+  ).toHaveCount(0);
+  // And the flag-on TWAP body id must not be present either.
+  await expect(page.getByTestId("options-order-type-body-twap")).toHaveCount(0);
 });
 
 test("default build: /options still loads (Options behavior does not regress)", async ({
