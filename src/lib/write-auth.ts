@@ -71,7 +71,9 @@ export type WriteAuthAction =
   | "OPTION_RFQ_QUOTE_SUBMIT"
   | "OPTION_RFQ_ACCEPT"
   | "OPTION_RFQ_CANCEL"
-  | "OPTION_EXECUTION_INTENT_SIGNATURE_SUBMIT";
+  | "OPTION_EXECUTION_INTENT_SIGNATURE_SUBMIT"
+  | "OPTION_TWAP_CREATE"
+  | "OPTION_TWAP_CANCEL";
 
 // ---------------------------------------------------------------------
 // Canonical payload encoding
@@ -496,6 +498,48 @@ export const canonical = {
       ["taker", cv.addr(args.taker)],
       ["option_rfq_id", cv.str(args.optionRfqId)],
       ["quote_id", cv.str(args.quoteId)],
+    ]);
+  },
+
+  /**
+   * OPTIONS-TWAP-ORDERS-V1 — byte-identical to backend
+   * `canonical_option_twap_create`. Field order:
+   * account | option_series_id | side | size_1e8 | limit_price_1e8 |
+   * running_time_ms | child_count | client_order_id.
+   */
+  optionTwapCreate(args: {
+    account: Address;
+    optionSeriesId: string;
+    side: "buy" | "sell";
+    size1e8: string;
+    limitPrice1e8: string;
+    runningTimeMs: number | bigint;
+    childCount: number;
+    clientOrderId?: string | null;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_TWAP_CREATE", [
+      ["account", cv.addr(args.account)],
+      ["option_series_id", cv.str(args.optionSeriesId)],
+      ["side", cv.str(args.side)],
+      ["size_1e8", cv.str(args.size1e8)],
+      ["limit_price_1e8", cv.str(args.limitPrice1e8)],
+      ["running_time_ms", cv.u64(BigInt(args.runningTimeMs))],
+      ["child_count", cv.u64(BigInt(args.childCount))],
+      [
+        "client_order_id",
+        args.clientOrderId == null ? cv.null() : cv.str(args.clientOrderId),
+      ],
+    ]);
+  },
+
+  /**
+   * OPTIONS-TWAP-ORDERS-V1 — byte-identical to backend
+   * `canonical_option_twap_cancel`. Field order: account | option_twap_id.
+   */
+  optionTwapCancel(args: { account: Address; optionTwapId: string }): Uint8Array {
+    return canonicalPayload("OPTION_TWAP_CANCEL", [
+      ["account", cv.addr(args.account)],
+      ["option_twap_id", cv.str(args.optionTwapId)],
     ]);
   },
 };

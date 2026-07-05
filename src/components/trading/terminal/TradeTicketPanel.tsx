@@ -26,11 +26,13 @@ import { useSelectedOption } from "@/lib/workspace-selected-option";
 import { useWallet } from "@/lib/wallet";
 import { AccountLifecyclePanel } from "@/components/trading/AccountLifecyclePanel";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
+import { OptionsTwapForm } from "@/components/trading/OptionsTwapForm";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
 import { NativeSelect } from "@/components/ui/NativeSelect";
+import { isOptionsTwapEnabled } from "@/lib/options-twap-flag";
 
-type TicketMode = "orderbook" | "rfq";
+type TicketMode = "orderbook" | "twap" | "rfq";
 type Side = "buy" | "sell";
 type TradeTab = "payoff" | "greeks" | "trades" | "book";
 
@@ -84,7 +86,7 @@ export function TradeTicketPanel() {
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-        {mode === "orderbook" ? (
+        {mode === "orderbook" && (
           <div
             data-testid="trade-body-orderbook"
             className="flex flex-col gap-3 p-3"
@@ -95,7 +97,14 @@ export function TradeTicketPanel() {
             />
             <AccountLifecyclePanel address={address} />
           </div>
-        ) : (
+        )}
+        {mode === "twap" && (
+          <div data-testid="trade-body-twap" className="flex flex-col gap-3 p-3">
+            <OptionsTwapForm optionSeriesId={leg?.seriesId ?? ""} />
+            <AccountLifecyclePanel address={address} />
+          </div>
+        )}
+        {mode === "rfq" && (
           <RfqTicketBody
             side={side}
             setSide={setSide}
@@ -281,6 +290,15 @@ function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) 
           <option value="orderbook" className="bg-zinc-950 text-zinc-100">
             Orderbook
           </option>
+          {isOptionsTwapEnabled() && (
+            <option
+              value="twap"
+              className="bg-zinc-950 text-zinc-100"
+              data-testid="trade-mode-option-twap"
+            >
+              TWAP
+            </option>
+          )}
           <option value="rfq" className="bg-zinc-950 text-zinc-100">
             RFQ
           </option>

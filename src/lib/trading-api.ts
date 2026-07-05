@@ -1058,6 +1058,138 @@ export function acceptOptionsRfqQuote(
 // / taker / mm_account addresses. Returns the same
 // `OptionRfqFillResponse` shape that the accept endpoint returns
 // inline. Response carries NO signatures / authorization / secrets.
+// OPTIONS-TWAP-ORDERS-V1 — TWAP parent/child client methods.
+
+export type OptionTwapStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "cancelled"
+  | "failed"
+  | "expired";
+
+export type OptionTwapChildStatus =
+  | "scheduled"
+  | "submitted"
+  | "filled"
+  | "partially_filled"
+  | "rejected"
+  | "expired"
+  | "failed";
+
+export interface OptionTwapOrderResponse {
+  option_twap_id: string;
+  account: string;
+  option_series_id: string;
+  side: "buy" | "sell";
+  size_1e8: string;
+  remaining_size_1e8: string;
+  limit_price_1e8: string;
+  running_time_ms: number;
+  child_count: number;
+  child_interval_ms: number;
+  next_execution_at_ms: number;
+  started_at_ms: number;
+  ends_at_ms: number;
+  status: OptionTwapStatus;
+  created_child_count: number;
+  filled_size_1e8: string;
+  failed_child_count: number;
+  client_order_id: string | null;
+  last_error: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface OptionTwapChildResponse {
+  option_twap_child_id: string;
+  option_twap_id: string;
+  sequence: number;
+  scheduled_at_ms: number;
+  submitted_at_ms: number | null;
+  child_order_id: string | null;
+  status: OptionTwapChildStatus;
+  requested_size_1e8: string;
+  filled_size_1e8: string;
+  limit_price_1e8: string;
+  error_message: string | null;
+}
+
+export interface CreateOptionTwapRequest {
+  account: string;
+  option_series_id: string;
+  side: "buy" | "sell";
+  size_1e8: string;
+  limit_price_1e8: string;
+  running_time_ms: number;
+  child_count: number;
+  client_order_id?: string | null;
+  authorization: import("./write-auth").AuthorizationEnvelope;
+}
+
+export function createOptionsTwapOrder(
+  body: CreateOptionTwapRequest,
+  signal?: AbortSignal,
+): Promise<OptionTwapOrderResponse> {
+  return rawRequest<OptionTwapOrderResponse>(
+    "POST",
+    `/options/twap-orders`,
+    body,
+    signal,
+  );
+}
+
+export function listOptionsTwapOrders(
+  opts?: { account?: string; signal?: AbortSignal },
+): Promise<OptionTwapOrderResponse[]> {
+  const qs = new URLSearchParams();
+  if (opts?.account) qs.set("account", opts.account.toLowerCase());
+  const suffix = qs.toString().length ? `?${qs.toString()}` : "";
+  return rawRequest<OptionTwapOrderResponse[]>(
+    "GET",
+    `/options/twap-orders${suffix}`,
+    undefined,
+    opts?.signal,
+  );
+}
+
+export function getOptionsTwapOrder(
+  optionTwapId: string,
+  signal?: AbortSignal,
+): Promise<OptionTwapOrderResponse> {
+  return rawRequest<OptionTwapOrderResponse>(
+    "GET",
+    `/options/twap-orders/${optionTwapId}`,
+    undefined,
+    signal,
+  );
+}
+
+export function listOptionsTwapChildren(
+  optionTwapId: string,
+  signal?: AbortSignal,
+): Promise<OptionTwapChildResponse[]> {
+  return rawRequest<OptionTwapChildResponse[]>(
+    "GET",
+    `/options/twap-orders/${optionTwapId}/children`,
+    undefined,
+    signal,
+  );
+}
+
+export function cancelOptionsTwapOrder(
+  optionTwapId: string,
+  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  signal?: AbortSignal,
+): Promise<OptionTwapOrderResponse> {
+  return rawRequest<OptionTwapOrderResponse>(
+    "POST",
+    `/options/twap-orders/${optionTwapId}/cancel`,
+    body,
+    signal,
+  );
+}
+
 export function listOptionsRfqFills(
   opts?: {
     account?: string;
