@@ -169,27 +169,27 @@ export function DirectOrderbookForm({
       onSubmit={handleSubmit}
       className="flex flex-col gap-3 text-zinc-100"
     >
-      <label className="text-xs text-zinc-300">
-        Option series id
+      <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+        Series
         <input
           type="text"
           value={seriesId}
           onChange={(e) => setSeriesId(e.target.value)}
-          placeholder="0x… (paste from /options/series)"
+          placeholder="0x…"
           data-testid="direct-orderbook-series-id"
-          className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-[11px] focus:border-emerald-500/60 focus:outline-none"
+          className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-[11px] normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
         />
       </label>
 
-      <label className="text-xs text-zinc-300">
-        Account (EVM address)
+      <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+        Account
         <input
           type="text"
           value={account}
           onChange={(e) => setAccount(e.target.value)}
           placeholder="0x…"
           data-testid="direct-orderbook-account"
-          className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-[11px] focus:border-emerald-500/60 focus:outline-none"
+          className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-[11px] normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
         />
       </label>
 
@@ -225,26 +225,26 @@ export function DirectOrderbookForm({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <label className="text-xs text-zinc-300">
-          Price (1e8)
+        <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+          Limit Price
           <input
             type="text"
             inputMode="numeric"
             value={price1e8}
             onChange={(e) => setPrice1e8(e.target.value)}
             data-testid="direct-orderbook-price"
-            className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
+            className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 text-right font-mono text-xs normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
           />
         </label>
-        <label className="text-xs text-zinc-300">
-          Size (1e8)
+        <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+          Amount
           <input
             type="text"
             inputMode="numeric"
             value={size1e8}
             onChange={(e) => setSize1e8(e.target.value)}
             data-testid="direct-orderbook-size"
-            className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
+            className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 text-right font-mono text-xs normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
           />
         </label>
       </div>
@@ -274,8 +274,8 @@ export function DirectOrderbookForm({
         className="flex flex-col gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-300"
       >
         <header className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-emerald-200">
-            Attach TP / SL (optional)
+          <h3 className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+            Attach TP / SL
           </h3>
           <span
             data-testid="direct-orderbook-attached-help"
@@ -284,16 +284,6 @@ export function DirectOrderbookForm({
             activates after fill
           </span>
         </header>
-        <div className="flex flex-col gap-1 text-[10px] leading-snug text-zinc-500">
-          <span>
-            Attached TP/SL becomes active only after the entry order
-            fills.
-          </span>
-          <span>
-            For partial fills, TP/SL covers the filled size only.
-            Standalone TP/SL remains available after entry.
-          </span>
-        </div>
         <div className="flex gap-3">
           <label className="flex items-center gap-1 text-xs text-zinc-300">
             <input
@@ -411,10 +401,9 @@ export function DirectOrderbookForm({
         {tpEnabled && slEnabled ? (
           <p
             data-testid="direct-orderbook-attach-oco-copy"
-            className="text-[10px] leading-snug text-zinc-400"
+            className="text-[10px] text-zinc-500"
           >
-            OCO is on by default. When one leg triggers, the other is
-            cancelled.
+            OCO on.
           </p>
         ) : null}
       </section>
@@ -425,7 +414,13 @@ export function DirectOrderbookForm({
         data-testid="direct-orderbook-submit"
         className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold text-black hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
       >
-        {phase === "submitting" ? "Submitting…" : "Submit to orderbook"}
+        {phase === "submitting"
+          ? "Submitting…"
+          : !size1e8 || size1e8 === "0"
+            ? "Enter amount"
+            : side === "buy"
+              ? "Buy"
+              : "Sell"}
       </button>
 
       {phase === "err" && errorMessage ? (

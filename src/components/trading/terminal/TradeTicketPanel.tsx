@@ -26,7 +26,6 @@ import { useSelectedOption } from "@/lib/workspace-selected-option";
 import { useWallet } from "@/lib/wallet";
 import { AccountLifecyclePanel } from "@/components/trading/AccountLifecyclePanel";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
-import { TpSlManager } from "@/components/trading/TpSlManager";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
 import { NativeSelect } from "@/components/ui/NativeSelect";
@@ -94,7 +93,6 @@ export function TradeTicketPanel() {
               key={leg?.seriesId ?? "__no_selection__"}
               initialSeriesId={leg?.seriesId ?? undefined}
             />
-            <TpSlManager address={address} seriesId={leg?.seriesId ?? null} />
             <AccountLifecyclePanel address={address} />
           </div>
         ) : (
@@ -205,11 +203,9 @@ function TradeTabBody({
     return (
       <div
         data-testid="trade-tab-greeks-body"
-        className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-400"
+        className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-500"
       >
-        Delta / Gamma / Vega / Theta are not exposed by the current backend for
-        this instrument. Portfolio-level greeks land in a follow-up milestone.
-        Honest dashes are shown in the chain and detail panel meanwhile.
+        Greeks are not available yet for this instrument.
       </div>
     );
   }
@@ -224,11 +220,11 @@ function TradeTabBody({
   return (
     <div
       data-testid="trade-tab-book-body"
-      className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-400"
+      className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-500"
     >
       {leg && row
-        ? `Orderbook snapshot for ${row.strikeLabel} ${leg.isCall ? "Call" : "Put"} — coming from the direct orderbook adapter in a follow-up milestone.`
-        : "Pick an instrument in the chain to preview its resting orders here."}
+        ? `Orderbook for ${row.strikeLabel} ${leg.isCall ? "Call" : "Put"} — coming soon.`
+        : "Pick an instrument to preview its book."}
     </div>
   );
 }
@@ -415,10 +411,7 @@ function RfqTicketBody(props: RfqTicketBodyProps) {
       </div>
 
       <p className="text-[10px] text-zinc-500">
-        Request a private quote on this instrument. The RFQ executor is not
-        live in this testnet beta — submission is disabled. TIF and post-only
-        do not apply to paired RFQ execution and are intentionally absent
-        here.
+        RFQ submit is not enabled in this environment.
       </p>
     </div>
   );
