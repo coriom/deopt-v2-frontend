@@ -94,6 +94,9 @@ export function TradeTicketPanel() {
             <DirectOrderbookForm
               key={leg?.seriesId ?? "__no_selection__"}
               initialSeriesId={leg?.seriesId ?? undefined}
+              onSwitchToTwap={
+                isOptionsTwapEnabled() ? () => setMode("twap") : undefined
+              }
             />
             <AccountLifecyclePanel address={address} />
           </div>

@@ -53,10 +53,17 @@ export interface DirectOrderbookFormProps {
    *  the parent should also pass a matching `key` so React remounts
    *  the form and the new initial value takes effect. */
   initialSeriesId?: string;
+  /** Optional handler invoked when the operator clicks the inline
+   *  TWAP button in the attached-legs row. Only rendered when this
+   *  prop is provided — the caller is responsible for gating on
+   *  `isOptionsTwapEnabled()` so the button never appears in
+   *  default-off builds. */
+  onSwitchToTwap?: () => void;
 }
 
 export function DirectOrderbookForm({
   initialSeriesId,
+  onSwitchToTwap,
 }: DirectOrderbookFormProps = {}) {
   const { address: walletAddress, isExpectedChain, signTypedData } = useWallet();
   const [seriesId, setSeriesId] = useState(initialSeriesId ?? "");
@@ -284,7 +291,7 @@ export function DirectOrderbookForm({
             activates after fill
           </span>
         </header>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           <label className="flex items-center gap-1 text-xs text-zinc-300">
             <input
               type="checkbox"
@@ -293,7 +300,7 @@ export function DirectOrderbookForm({
               data-testid="direct-orderbook-attach-tp-toggle"
               className="size-3.5 accent-emerald-500"
             />
-            Take Profit
+            TP
           </label>
           <label className="flex items-center gap-1 text-xs text-zinc-300">
             <input
@@ -303,8 +310,18 @@ export function DirectOrderbookForm({
               data-testid="direct-orderbook-attach-sl-toggle"
               className="size-3.5 accent-red-500"
             />
-            Stop Loss
+            SL
           </label>
+          {onSwitchToTwap ? (
+            <button
+              type="button"
+              onClick={onSwitchToTwap}
+              data-testid="direct-orderbook-attach-twap-switch"
+              className="rounded border border-zinc-800 bg-black/40 px-2 py-0.5 text-[11px] font-semibold text-zinc-300 hover:border-emerald-500/60 hover:text-emerald-200"
+            >
+              TWAP
+            </button>
+          ) : null}
         </div>
         {tpEnabled ? (
           <div className="grid grid-cols-2 gap-2">
