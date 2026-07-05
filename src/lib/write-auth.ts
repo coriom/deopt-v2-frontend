@@ -416,10 +416,74 @@ export const canonical = {
     ]);
   },
 
+  /**
+   * OPTIONS-RFQ-CREATE-AND-LIFECYCLE-V1 — field order must stay
+   * byte-identical to backend `canonical_option_rfq_create` in
+   * `src/api/routes.rs`. Nullable fields serialise as literal `null`.
+   */
+  optionRfqCreate(args: {
+    taker: Address;
+    optionSeriesId: string;
+    side: "buy" | "sell";
+    size1e8: string;
+    limitPrice1e8?: string | null;
+    ttlMs?: number | bigint | null;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_RFQ_CREATE", [
+      ["taker", cv.addr(args.taker)],
+      ["option_series_id", cv.str(args.optionSeriesId)],
+      ["side", cv.str(args.side)],
+      ["size_1e8", cv.str(args.size1e8)],
+      [
+        "limit_price_1e8",
+        args.limitPrice1e8 == null ? cv.null() : cv.str(args.limitPrice1e8),
+      ],
+      [
+        "ttl_ms",
+        args.ttlMs == null ? cv.null() : cv.u64(BigInt(args.ttlMs)),
+      ],
+    ]);
+  },
+
   optionRfqCancel(args: { taker: Address; optionRfqId: string }): Uint8Array {
     return canonicalPayload("OPTION_RFQ_CANCEL", [
       ["taker", cv.addr(args.taker)],
       ["option_rfq_id", cv.str(args.optionRfqId)],
+    ]);
+  },
+
+  /**
+   * OPTIONS-RFQ-MAKER-QUOTE-SUBMIT-V1 — field order must stay
+   * byte-identical to backend `canonical_option_rfq_quote_submit`:
+   * option_rfq_id | mm_account | price_1e8 | size_1e8 |
+   * client_quote_id | quote_nonce | quote_ttl_ms.
+   */
+  optionRfqQuoteSubmit(args: {
+    optionRfqId: string;
+    mmAccount: Address;
+    price1e8: string;
+    size1e8: string;
+    clientQuoteId?: string | null;
+    quoteNonce?: number | bigint | null;
+    quoteTtlMs?: number | bigint | null;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_RFQ_QUOTE_SUBMIT", [
+      ["option_rfq_id", cv.str(args.optionRfqId)],
+      ["mm_account", cv.addr(args.mmAccount)],
+      ["price_1e8", cv.str(args.price1e8)],
+      ["size_1e8", cv.str(args.size1e8)],
+      [
+        "client_quote_id",
+        args.clientQuoteId == null ? cv.null() : cv.str(args.clientQuoteId),
+      ],
+      [
+        "quote_nonce",
+        args.quoteNonce == null ? cv.null() : cv.u64(BigInt(args.quoteNonce)),
+      ],
+      [
+        "quote_ttl_ms",
+        args.quoteTtlMs == null ? cv.null() : cv.u64(BigInt(args.quoteTtlMs)),
+      ],
     ]);
   },
 

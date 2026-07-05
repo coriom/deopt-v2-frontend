@@ -831,6 +831,351 @@ export function cancelOptionOrder(
 }
 
 // ---------------------------------------------------------------------
+// OPTIONS-RFQ-CREATE-AND-LIFECYCLE-V1 — typed Options RFQ client
+// methods. Wire contracts mirror `src/api/routes.rs`. All numeric
+// fields are 8-decimal string ("1e8") — never a JS number. IDs are
+// UUID strings.
+// ---------------------------------------------------------------------
+
+export type OptionRfqStatus =
+  | "Open"
+  | "Expired"
+  | "Accepted"
+  | "Cancelled"
+  | "Failed";
+
+export type OptionRfqQuoteStatus =
+  | "Active"
+  | "Expired"
+  | "Accepted"
+  | "Rejected"
+  | "Cancelled";
+
+export type OptionRfqQuoteSignatureStatus =
+  | "NotRequired"
+  | "Verified"
+  | "Missing"
+  | "Invalid"
+  | "SignerMismatch";
+
+export interface OptionSeriesResponse {
+  option_series_id: string;
+  underlying: string;
+  base_asset: string;
+  quote_asset: string;
+  settlement_asset: string;
+  expiry: number;
+  strike_1e8: string;
+  is_call: boolean;
+  contract_size_1e8: string;
+  status: string;
+  source: string;
+  onchain_product_id: string | null;
+  onchain_series_id: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export function listOptionsSeries(
+  opts?: {
+    underlying?: string;
+    expiry?: number;
+    is_call?: boolean;
+    status?: string;
+    signal?: AbortSignal;
+  },
+): Promise<OptionSeriesResponse[]> {
+  const qs = new URLSearchParams();
+  if (opts?.underlying) qs.set("underlying", opts.underlying);
+  if (opts?.expiry !== undefined) qs.set("expiry", String(opts.expiry));
+  if (opts?.is_call !== undefined) qs.set("is_call", String(opts.is_call));
+  if (opts?.status) qs.set("status", opts.status);
+  const suffix = qs.toString().length ? `?${qs.toString()}` : "";
+  return rawRequest<OptionSeriesResponse[]>(
+    "GET",
+    `/options/series${suffix}`,
+    undefined,
+    opts?.signal,
+  );
+}
+
+export interface CreateOptionRfqRequest {
+  taker: string;
+  option_series_id: string;
+  side: "buy" | "sell";
+  size_1e8: string;
+  limit_price_1e8?: string | null;
+  ttl_ms?: number | null;
+  authorization: import("./write-auth").AuthorizationEnvelope;
+}
+
+export interface OptionRfqResponse {
+  option_rfq_id: string;
+  taker: string;
+  option_series_id: string;
+  side: "buy" | "sell";
+  size_1e8: string;
+  limit_price_1e8: string | null;
+  status: OptionRfqStatus;
+  created_at_ms: number;
+  expires_at_ms: number;
+  accepted_quote_id: string | null;
+  option_fill_id: string | null;
+}
+
+export interface OptionRfqQuoteResponse {
+  quote_id: string;
+  option_rfq_id: string;
+  mm_account: string;
+  session_id: string | null;
+  client_quote_id: string | null;
+  price_1e8: string;
+  size_1e8: string;
+  status: OptionRfqQuoteStatus;
+  created_at_ms: number;
+  expires_at_ms: number;
+  signature: string | null;
+  quote_digest: string | null;
+  quote_nonce: string | null;
+  signature_status: OptionRfqQuoteSignatureStatus;
+  recovered_signer: string | null;
+}
+
+export function createOptionsRfq(
+  body: CreateOptionRfqRequest,
+  signal?: AbortSignal,
+): Promise<OptionRfqResponse> {
+  return rawRequest<OptionRfqResponse>(
+    "POST",
+    `/options/rfqs`,
+    body,
+    signal,
+  );
+}
+
+export function listOptionsRfqs(
+  signal?: AbortSignal,
+): Promise<OptionRfqResponse[]> {
+  return rawRequest<OptionRfqResponse[]>(
+    "GET",
+    `/options/rfqs`,
+    undefined,
+    signal,
+  );
+}
+
+export function getOptionsRfq(
+  optionRfqId: string,
+  signal?: AbortSignal,
+): Promise<OptionRfqResponse> {
+  return rawRequest<OptionRfqResponse>(
+    "GET",
+    `/options/rfqs/${optionRfqId}`,
+    undefined,
+    signal,
+  );
+}
+
+export function listOptionsRfqQuotes(
+  optionRfqId: string,
+  signal?: AbortSignal,
+): Promise<OptionRfqQuoteResponse[]> {
+  return rawRequest<OptionRfqQuoteResponse[]>(
+    "GET",
+    `/options/rfqs/${optionRfqId}/quotes`,
+    undefined,
+    signal,
+  );
+}
+
+export function cancelOptionsRfq(
+  optionRfqId: string,
+  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  signal?: AbortSignal,
+): Promise<OptionRfqResponse> {
+  return rawRequest<OptionRfqResponse>(
+    "POST",
+    `/options/rfqs/${optionRfqId}/cancel`,
+    body,
+    signal,
+  );
+}
+
+// OPTIONS-RFQ-QUOTE-SIGNING-ACCEPT-V1 — taker accept flow.
+//
+// Backend contract (see `deopt-v2-backend/src/api/routes.rs::accept_option_rfq_quote`):
+//   POST /options/rfqs/{option_rfq_id}/accept/{quote_id}
+//   Body: AuthorizationOnlyBody — a single write-auth envelope
+//         signed by the RFQ's taker (canonical field order:
+//         taker | option_rfq_id | quote_id).
+//   Response: rfq/quote status transitions to Accepted, plus a
+//   full `OptionRfqFillResponse` describing the created fill row.
+
+export interface OptionRfqFillResponse {
+  fill_id: string;
+  option_rfq_id: string;
+  quote_id: string;
+  option_series_id: string;
+  buyer: string;
+  seller: string;
+  taker: string;
+  mm_account: string;
+  taker_side: "buy" | "sell";
+  price_1e8: string;
+  size_1e8: string;
+  created_at_ms: number;
+}
+
+export interface AcceptOptionRfqQuoteResponse {
+  option_rfq_id: string;
+  quote_id: string;
+  status: OptionRfqStatus;
+  quote_status: OptionRfqQuoteStatus;
+  option_fill_id: string;
+  fill: OptionRfqFillResponse;
+  mm_notification_sent: boolean;
+  mm_notification_warning: string | null;
+}
+
+export function acceptOptionsRfqQuote(
+  optionRfqId: string,
+  quoteId: string,
+  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  signal?: AbortSignal,
+): Promise<AcceptOptionRfqQuoteResponse> {
+  return rawRequest<AcceptOptionRfqQuoteResponse>(
+    "POST",
+    `/options/rfqs/${optionRfqId}/accept/${quoteId}`,
+    body,
+    signal,
+  );
+}
+
+// OPTIONS-RFQ-TRADES-FEED-V1 — public list of accepted RFQ fills.
+//
+// `GET /options/rfq-fills?account=&option_rfq_id=&limit=`.
+// Newest-first. `account` matches any of the fill's buyer / seller
+// / taker / mm_account addresses. Returns the same
+// `OptionRfqFillResponse` shape that the accept endpoint returns
+// inline. Response carries NO signatures / authorization / secrets.
+export function listOptionsRfqFills(
+  opts?: {
+    account?: string;
+    option_rfq_id?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  },
+): Promise<OptionRfqFillResponse[]> {
+  const qs = new URLSearchParams();
+  if (opts?.account) qs.set("account", opts.account.toLowerCase());
+  if (opts?.option_rfq_id) qs.set("option_rfq_id", opts.option_rfq_id);
+  if (opts?.limit !== undefined) qs.set("limit", String(opts.limit));
+  const suffix = qs.toString().length ? `?${qs.toString()}` : "";
+  return rawRequest<OptionRfqFillResponse[]>(
+    "GET",
+    `/options/rfq-fills${suffix}`,
+    undefined,
+    opts?.signal,
+  );
+}
+
+// OPTIONS-RFQ-MAKER-QUOTE-SUBMIT-V1 — maker quote flow.
+//
+// Two backend endpoints:
+//   POST /options/rfqs/{id}/quote-signing-payload
+//     Auth: none. Returns the exact EIP-712 typed data the maker
+//     wallet must sign. The response carries `types` + `message`
+//     already in camelCase, matching viem's `signTypedData` shape.
+//
+//   POST /options/rfqs/{id}/quotes
+//     Auth: maker (mm_account) write-auth envelope + optional
+//     maker EIP-712 quote signature (required when backend runs in
+//     `OPTION_RFQ_QUOTE_SIGNATURE_MODE=Strict`).
+
+export interface OptionRfqQuoteSigningPayloadRequest {
+  mm_account: string;
+  price_1e8: string;
+  size_1e8: string;
+  client_quote_id?: string | null;
+  quote_nonce: number;
+  quote_ttl_ms: number;
+}
+
+export interface OptionRfqQuoteSigningPayloadDomain {
+  name: string;
+  version: string;
+  chainId: number;
+  verifyingContract: string;
+}
+
+export interface OptionRfqQuoteSigningPayloadTypeField {
+  name: string;
+  type: string;
+}
+
+export interface OptionRfqQuoteSigningPayloadMessage {
+  optionRfqId: string;
+  mmAccount: string;
+  optionSeriesId: string;
+  takerIsBuyer: boolean;
+  price1e8: string;
+  size1e8: string;
+  quoteNonce: string;
+  expiry: string;
+}
+
+export interface OptionRfqQuoteSigningPayloadResponse {
+  option_rfq_id: string;
+  option_rfq_id_b32: string;
+  option_series_id_b32: string;
+  digest: string;
+  domain: OptionRfqQuoteSigningPayloadDomain;
+  primary_type: string;
+  types: OptionRfqQuoteSigningPayloadTypeField[];
+  message: OptionRfqQuoteSigningPayloadMessage;
+}
+
+export function getOptionsRfqQuoteSigningPayload(
+  optionRfqId: string,
+  body: OptionRfqQuoteSigningPayloadRequest,
+  signal?: AbortSignal,
+): Promise<OptionRfqQuoteSigningPayloadResponse> {
+  return rawRequest<OptionRfqQuoteSigningPayloadResponse>(
+    "POST",
+    `/options/rfqs/${optionRfqId}/quote-signing-payload`,
+    body,
+    signal,
+  );
+}
+
+export interface SubmitOptionRfqQuoteRequest {
+  mm_account: string;
+  session_id?: string | null;
+  client_quote_id?: string | null;
+  price_1e8: string;
+  size_1e8: string;
+  quote_nonce?: number | null;
+  quote_ttl_ms?: number | null;
+  /** EIP-712 signature over the quote-signing-payload message.
+   *  Required in Strict signature mode, ignored in Disabled mode. */
+  signature?: string | null;
+  authorization: import("./write-auth").AuthorizationEnvelope;
+}
+
+export function submitOptionsRfqQuote(
+  optionRfqId: string,
+  body: SubmitOptionRfqQuoteRequest,
+  signal?: AbortSignal,
+): Promise<OptionRfqQuoteResponse> {
+  return rawRequest<OptionRfqQuoteResponse>(
+    "POST",
+    `/options/rfqs/${optionRfqId}/quotes`,
+    body,
+    signal,
+  );
+}
+
+// ---------------------------------------------------------------------
 // PERPS-MINIMAL-MARKET-AND-PRICE-V1 — read-only Perps market + price.
 //
 // The backend returns 503 `perps_read_layer_is_disabled...` when the

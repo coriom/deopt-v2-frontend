@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyPreset,
   initialStrategyState,
   summariseStrategy,
   updateLeg,
+  type StrategyLeg,
   type StrategyPresetId,
   type StrategyState,
   type StrategyUnderlying,
@@ -15,6 +16,31 @@ import { NativeSelect } from "@/components/ui/NativeSelect";
 import { StrategyPresets } from "./StrategyPresets";
 import { StrategyLegEditor } from "./StrategyLegEditor";
 import { StrategyPayoffChart } from "./StrategyPayoffChart";
+import { RfqStatusPanel } from "./RfqStatusPanel";
+import { RfqQuotesTab } from "./RfqQuotesTab";
+import { RfqAcceptModal } from "./RfqAcceptModal";
+import { RfqTradesTab } from "./RfqTradesTab";
+import {
+  isOptionsRfqEnabled,
+  OPTIONS_RFQ_ENABLED_ENV,
+} from "@/lib/options-rfq-flag";
+import { useWallet } from "@/lib/wallet";
+import {
+  cancelOptionsRfq,
+  createOptionsRfq,
+  listOptionsRfqs,
+  listOptionsSeries,
+  TradingApiError,
+  type OptionRfqQuoteResponse,
+  type OptionRfqResponse,
+  type OptionSeriesResponse,
+} from "@/lib/trading-api";
+import {
+  buildAuthorization,
+  canonical,
+  type SignTypedDataFn,
+} from "@/lib/write-auth";
+import { underlyingDisplaySymbol } from "@/lib/underlying-symbols";
 
 type Tab = "payoff" | "greeks" | "trades" | "book";
 
@@ -25,12 +51,105 @@ const TABS: readonly { id: Tab; label: string }[] = [
   { id: "book", label: "Book" },
 ] as const;
 
+type SubmitPhase =
+  | { kind: "idle" }
+  | { kind: "resolving_series" }
+  | { kind: "requesting_challenge" }
+  | { kind: "awaiting_signature" }
+  | { kind: "submitting" }
+  | { kind: "success"; rfqId: string }
+  | { kind: "error"; message: string };
+
+const ONE_E6 = BigInt("1000000");
+
+function strikeTo1e8(strike: number): string {
+  if (!Number.isFinite(strike) || strike <= 0) return "0";
+  // Multiply as decimal-safe integer to avoid float noise.
+  const cents = Math.round(strike * 100);
+  return (BigInt(cents) * ONE_E6).toString();
+}
+
+function amountTo1e8(amount: number, ratio: number): string {
+  const total = amount * ratio;
+  if (!Number.isFinite(total) || total <= 0) return "0";
+  const scaled = Math.round(total * 1_000_000); // 6-dec precision
+  return (BigInt(scaled) * BigInt("100")).toString(); // scale up to 1e8
+}
+
+function matchSeries(
+  series: readonly OptionSeriesResponse[],
+  args: {
+    underlyingSymbol: StrategyUnderlying;
+    expiryMs: number;
+    isCall: boolean;
+    strike: number;
+  },
+): OptionSeriesResponse | undefined {
+  const wantStrike1e8 = strikeTo1e8(args.strike);
+  return series.find((s) => {
+    if (s.is_call !== args.isCall) return false;
+    // Backend `expiry` is milliseconds (u64). Compare loosely because
+    // callers may pass a rounded day boundary.
+    if (Number(s.expiry) !== args.expiryMs) return false;
+    if (s.strike_1e8 !== wantStrike1e8) return false;
+    const sym = underlyingDisplaySymbol(s.underlying);
+    return sym === args.underlyingSymbol;
+  });
+}
+
+function isSingleLeg(state: StrategyState): boolean {
+  return state.legs.length === 1;
+}
+
+function primaryLeg(state: StrategyState): StrategyLeg | null {
+  return isSingleLeg(state) ? state.legs[0] : null;
+}
+
 export function RfqStrategyWorkspace() {
   const [state, setState] = useState<StrategyState>(() => initialStrategyState("BTC"));
   const [tab, setTab] = useState<Tab>("payoff");
   const [copied, setCopied] = useState(false);
+  const [phase, setPhase] = useState<SubmitPhase>({ kind: "idle" });
+  const [rfqs, setRfqs] = useState<OptionRfqResponse[]>([]);
+  const [rfqsLoading, setRfqsLoading] = useState(false);
+  const [rfqsError, setRfqsError] = useState<string | null>(null);
+  const [selectedRfqId, setSelectedRfqId] = useState<string | null>(null);
+  const [acceptTarget, setAcceptTarget] =
+    useState<OptionRfqQuoteResponse | null>(null);
+  const [quoteRefreshNonce, setQuoteRefreshNonce] = useState(0);
+  /**
+   * OPTIONS-RFQ-TRADES-FEED-V1 — bumped whenever the Trades feed
+   * needs to refetch from `GET /options/rfq-fills` (post-accept,
+   * post-maker-submit, or user Refresh). The previous milestone's
+   * session-local `sessionAcceptedFills` has been dropped — the
+   * backend feed is now the single source of truth.
+   */
+  const [tradesRefreshNonce, setTradesRefreshNonce] = useState(0);
 
+  const rfqEnabled = isOptionsRfqEnabled();
+  const wallet = useWallet();
   const summary = useMemo(() => summariseStrategy(state), [state]);
+  const canSubmit = rfqEnabled && isSingleLeg(state) && state.amount > 0;
+
+  // Wallet gating (only meaningful when flag is on).
+  const walletBlockers = useMemo(() => {
+    if (!rfqEnabled) return null;
+    if (!wallet.hasProvider) return "Connect a Base Sepolia wallet to request quotes.";
+    if (!wallet.address) return "Connect your wallet to request quotes.";
+    if (wallet.isMainnet) return "Mainnet is disabled — switch to Base Sepolia.";
+    if (!wallet.isExpectedChain) return "Wrong network — switch to Base Sepolia.";
+    return null;
+  }, [rfqEnabled, wallet.hasProvider, wallet.address, wallet.isMainnet, wallet.isExpectedChain]);
+
+  const strategyBlocker = useMemo(() => {
+    if (!rfqEnabled) return null;
+    if (state.legs.length === 0) return "Add at least one leg to request a quote.";
+    if (state.legs.length > 1) {
+      return "Backend RFQ is single-leg per RFQ — multi-leg atomic RFQs will be added in a follow-up milestone.";
+    }
+    if (state.amount <= 0) return "Amount must be greater than zero.";
+    return null;
+  }, [rfqEnabled, state.legs.length, state.amount]);
 
   const onPreset = useCallback(
     (id: StrategyPresetId) => setState((s) => applyPreset(s, id)),
@@ -52,9 +171,229 @@ export function RfqStrategyWorkspace() {
     }
   }, [state]);
 
+  const refreshRfqs = useCallback(async () => {
+    if (!rfqEnabled) {
+      setRfqs([]);
+      return;
+    }
+    setRfqsLoading(true);
+    setRfqsError(null);
+    try {
+      const all = await listOptionsRfqs();
+      // Filter to the connected wallet's RFQs when a wallet is present.
+      const filtered = wallet.address
+        ? all.filter(
+            (r) => r.taker.toLowerCase() === wallet.address!.toLowerCase(),
+          )
+        : [];
+      setRfqs(filtered);
+    } catch (e) {
+      setRfqsError(
+        e instanceof TradingApiError ? e.message : "Failed to load RFQs.",
+      );
+    } finally {
+      setRfqsLoading(false);
+    }
+  }, [rfqEnabled, wallet.address]);
+
+  // Auto-refresh RFQ list on wallet change + on mount.
+  const hasRunInitialRefresh = useRef(false);
+  useEffect(() => {
+    if (!rfqEnabled) return;
+    if (!wallet.address) {
+      setRfqs([]);
+      return;
+    }
+    if (hasRunInitialRefresh.current === false) {
+      hasRunInitialRefresh.current = true;
+    }
+    void refreshRfqs();
+  }, [rfqEnabled, wallet.address, refreshRfqs]);
+
+  const onRequestQuote = useCallback(async () => {
+    if (!canSubmit || walletBlockers || strategyBlocker) return;
+    if (!wallet.address) return;
+    const leg = primaryLeg(state);
+    if (!leg) return;
+
+    setPhase({ kind: "resolving_series" });
+    try {
+      const series = await listOptionsSeries({
+        is_call: leg.optionType === "call",
+      });
+      const matched = matchSeries(series, {
+        underlyingSymbol: state.underlying,
+        expiryMs: state.expiryMs,
+        isCall: leg.optionType === "call",
+        strike: leg.strike,
+      });
+      if (!matched) {
+        setPhase({
+          kind: "error",
+          message: `No listed ${state.underlying} ${leg.optionType} series matches strike $${leg.strike.toLocaleString("en-US")} + expiry ${new Date(state.expiryMs).toISOString().slice(0, 10)}.`,
+        });
+        return;
+      }
+
+      const size1e8 = amountTo1e8(state.amount, leg.ratio);
+      if (size1e8 === "0") {
+        setPhase({
+          kind: "error",
+          message: "Amount resolves to zero contracts.",
+        });
+        return;
+      }
+
+      const canonicalBytes = canonical.optionRfqCreate({
+        taker: wallet.address,
+        optionSeriesId: matched.option_series_id,
+        side: leg.side,
+        size1e8,
+        limitPrice1e8: null,
+        ttlMs: null,
+      });
+
+      setPhase({ kind: "requesting_challenge" });
+      const signTyped: SignTypedDataFn = async (args) => {
+        setPhase({ kind: "awaiting_signature" });
+        return wallet.signTypedData(args);
+      };
+      const authorization = await buildAuthorization({
+        account: wallet.address,
+        action: "OPTION_RFQ_CREATE",
+        canonical: canonicalBytes,
+        signTypedData: signTyped,
+      });
+
+      setPhase({ kind: "submitting" });
+      const created = await createOptionsRfq({
+        taker: wallet.address,
+        option_series_id: matched.option_series_id,
+        side: leg.side,
+        size_1e8: size1e8,
+        limit_price_1e8: null,
+        ttl_ms: null,
+        authorization,
+      });
+      setPhase({ kind: "success", rfqId: created.option_rfq_id });
+      setSelectedRfqId(created.option_rfq_id);
+      await refreshRfqs();
+      setTab("book");
+    } catch (e) {
+      setPhase({
+        kind: "error",
+        message:
+          e instanceof TradingApiError
+            ? e.message
+            : (e as Error).message || "Request Quote failed.",
+      });
+    }
+  }, [
+    canSubmit,
+    walletBlockers,
+    strategyBlocker,
+    wallet,
+    state,
+    refreshRfqs,
+  ]);
+
+  const selectedRfq = useMemo(
+    () =>
+      selectedRfqId
+        ? rfqs.find((r) => r.option_rfq_id === selectedRfqId) ?? null
+        : null,
+    [selectedRfqId, rfqs],
+  );
+
+  const onAcceptClick = useCallback((quote: OptionRfqQuoteResponse) => {
+    setAcceptTarget(quote);
+  }, []);
+
+  // Never insert an optimistic row here — the child form has already
+  // received the backend-confirmed quote, but the source of truth is
+  // `GET /options/rfqs/{id}/quotes`. Bumping the refresh nonce forces
+  // the Book tab to refetch that endpoint. Same for the Trades feed
+  // (a maker submit doesn't produce a fill, but a subsequent accept
+  // may, and this keeps the two feeds in sync).
+  const onMakerQuoteSubmitted = useCallback(() => {
+    setQuoteRefreshNonce((n) => n + 1);
+    setTradesRefreshNonce((n) => n + 1);
+  }, []);
+
+  const onAcceptModalCancel = useCallback(() => {
+    setAcceptTarget(null);
+  }, []);
+
+  const onAcceptSuccess = useCallback(async () => {
+    // OPTIONS-RFQ-TRADES-FEED-V1 — the accept response is no
+    // longer stored session-locally. The backend has persisted
+    // the fill row synchronously, so we just bump the Trades
+    // refresh nonce and let `GET /options/rfq-fills` produce
+    // the authoritative view.
+    setAcceptTarget(null);
+    setQuoteRefreshNonce((n) => n + 1);
+    setTradesRefreshNonce((n) => n + 1);
+    setTab("trades");
+    await refreshRfqs();
+  }, [refreshRfqs]);
+
+  const onCancelRfq = useCallback(
+    async (rfqId: string) => {
+      if (!rfqEnabled || !wallet.address) return;
+      try {
+        const canonicalBytes = canonical.optionRfqCancel({
+          taker: wallet.address,
+          optionRfqId: rfqId,
+        });
+        const authorization = await buildAuthorization({
+          account: wallet.address,
+          action: "OPTION_RFQ_CANCEL",
+          canonical: canonicalBytes,
+          signTypedData: wallet.signTypedData,
+        });
+        await cancelOptionsRfq(rfqId, { authorization });
+        await refreshRfqs();
+      } catch (e) {
+        setRfqsError(
+          e instanceof TradingApiError
+            ? e.message
+            : (e as Error).message || "Cancel failed.",
+        );
+      }
+    },
+    [rfqEnabled, wallet.address, wallet.signTypedData, refreshRfqs],
+  );
+
+  const ctaDisabled =
+    !rfqEnabled ||
+    !canSubmit ||
+    !!walletBlockers ||
+    !!strategyBlocker ||
+    phase.kind === "resolving_series" ||
+    phase.kind === "requesting_challenge" ||
+    phase.kind === "awaiting_signature" ||
+    phase.kind === "submitting";
+
+  const ctaLabel = !rfqEnabled
+    ? "Request Quote — not enabled"
+    : phase.kind === "resolving_series"
+      ? "Resolving series…"
+      : phase.kind === "requesting_challenge"
+        ? "Requesting challenge…"
+        : phase.kind === "awaiting_signature"
+          ? "Awaiting wallet signature…"
+          : phase.kind === "submitting"
+            ? "Submitting…"
+            : "Request Quote";
+
+  const disabledReasonForTooltip = !rfqEnabled
+    ? `RFQ creation is disabled in this environment (${OPTIONS_RFQ_ENABLED_ENV}=false).`
+    : (walletBlockers ?? strategyBlocker ?? undefined);
+
   return (
     <div
       data-testid="rfq-strategy-workspace"
+      data-rfq-enabled={rfqEnabled ? "true" : "false"}
       className="flex h-full min-h-0 flex-col gap-3 p-4 text-zinc-200"
     >
       <header className="flex flex-wrap items-center justify-between gap-2 rounded border border-zinc-800 bg-zinc-950 px-3 py-2">
@@ -66,7 +405,9 @@ export function RfqStrategyWorkspace() {
             data-testid="rfq-strategy-status-pill"
             className="rounded border border-zinc-700 bg-black/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-zinc-400"
           >
-            builder foundation — Request Quote not live yet
+            {rfqEnabled
+              ? "single-leg RFQ create — live"
+              : "builder foundation — Request Quote not live yet"}
           </span>
         </div>
         <NativeSelect
@@ -141,14 +482,52 @@ export function RfqStrategyWorkspace() {
           <div className="mt-auto flex flex-col gap-2 border-t border-zinc-900 pt-3">
             <button
               type="button"
-              disabled
+              disabled={ctaDisabled}
               data-testid="rfq-strategy-request-quote"
-              data-ticket-mode="disabled"
-              title="RFQ creation is not live yet — deferred to OPTIONS-RFQ-CREATE-AND-LIFECYCLE-V1"
-              className="cursor-not-allowed rounded bg-zinc-800 px-3 py-2 text-[12px] font-semibold text-zinc-500"
+              data-ticket-mode={ctaDisabled ? "disabled" : "ready"}
+              data-phase={phase.kind}
+              title={disabledReasonForTooltip}
+              onClick={ctaDisabled ? undefined : onRequestQuote}
+              className={
+                ctaDisabled
+                  ? "cursor-not-allowed rounded bg-zinc-800 px-3 py-2 text-[12px] font-semibold text-zinc-500"
+                  : "rounded bg-emerald-500 px-3 py-2 text-[12px] font-semibold text-zinc-950 hover:bg-emerald-400"
+              }
             >
-              Request Quote — not live yet
+              {ctaLabel}
             </button>
+            {phase.kind === "success" && (
+              <p
+                data-testid="rfq-strategy-submit-success"
+                className="rounded border border-emerald-500/30 bg-emerald-500/5 px-2 py-1 text-[10px] text-emerald-300"
+              >
+                RFQ created: <span className="font-mono">{phase.rfqId}</span>
+              </p>
+            )}
+            {phase.kind === "error" && (
+              <p
+                data-testid="rfq-strategy-submit-error"
+                className="rounded border border-red-500/40 bg-red-500/5 px-2 py-1 text-[10px] text-red-300"
+              >
+                {phase.message}
+              </p>
+            )}
+            {walletBlockers && (
+              <p
+                data-testid="rfq-strategy-wallet-blocker"
+                className="text-[10px] text-amber-400"
+              >
+                {walletBlockers}
+              </p>
+            )}
+            {strategyBlocker && (
+              <p
+                data-testid="rfq-strategy-strategy-blocker"
+                className="text-[10px] text-amber-400"
+              >
+                {strategyBlocker}
+              </p>
+            )}
             <button
               type="button"
               onClick={onCopyStrategy}
@@ -157,15 +536,32 @@ export function RfqStrategyWorkspace() {
             >
               {copied ? "Copied!" : "Copy strategy JSON"}
             </button>
-            <p className="text-[10px] text-zinc-500">
-              RFQ creation is not live yet. The backend supports Options RFQ
-              routes end-to-end; wiring is deferred to
-              <code className="mx-1 rounded bg-zinc-900 px-1 text-emerald-300">
-                OPTIONS-RFQ-CREATE-AND-LIFECYCLE-V1
-              </code>
-              so counter-party discovery + signing UX land in one milestone.
-            </p>
+            {!rfqEnabled && (
+              <p
+                data-testid="rfq-strategy-disabled-note"
+                className="text-[10px] text-zinc-500"
+              >
+                RFQ creation is disabled in this environment
+                (<code className="mx-1 rounded bg-zinc-900 px-1 text-emerald-300">
+                  {OPTIONS_RFQ_ENABLED_ENV}=false
+                </code>
+                ). Backend routes are wired; the operator flips this flag
+                per environment.
+              </p>
+            )}
           </div>
+
+          {rfqEnabled && (
+            <RfqStatusPanel
+              rfqs={rfqs}
+              loading={rfqsLoading}
+              error={rfqsError}
+              selectedRfqId={selectedRfqId}
+              onSelect={setSelectedRfqId}
+              onCancel={onCancelRfq}
+              onRefresh={refreshRfqs}
+            />
+          )}
         </section>
 
         {/* Right panel: summary + tabs */}
@@ -223,23 +619,35 @@ export function RfqStrategyWorkspace() {
               </div>
             )}
             {tab === "trades" && (
-              <div className="rounded border border-zinc-800 bg-black/40 p-4 text-[11px] text-zinc-500">
-                No RFQ trades yet. Once RFQ creation lands, executed trades
-                will show here per-strategy.
-              </div>
+              <RfqTradesTab
+                rfqEnabled={rfqEnabled}
+                account={wallet.address ?? null}
+                selectedRfqId={selectedRfqId}
+                refreshNonce={tradesRefreshNonce}
+              />
             )}
             {tab === "book" && (
-              <div className="rounded border border-zinc-800 bg-black/40 p-4 text-[11px] text-zinc-500">
-                RFQ quote book is not live yet. Backend routes
-                (<code className="rounded bg-zinc-900 px-1 text-emerald-300">
-                  /options/rfqs
-                </code>
-                ) exist but no counter-party maker has quoted here.
-              </div>
+              <RfqQuotesTab
+                rfqEnabled={rfqEnabled}
+                selectedRfq={selectedRfq}
+                takerAddress={wallet.address ?? null}
+                onAcceptClick={onAcceptClick}
+                refreshNonce={quoteRefreshNonce}
+                onMakerQuoteSubmitted={onMakerQuoteSubmitted}
+              />
             )}
           </div>
         </section>
       </div>
+
+      {acceptTarget && selectedRfq && (
+        <RfqAcceptModal
+          rfq={selectedRfq}
+          quote={acceptTarget}
+          onCancel={onAcceptModalCancel}
+          onAccepted={onAcceptSuccess}
+        />
+      )}
     </div>
   );
 }
