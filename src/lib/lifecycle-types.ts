@@ -34,7 +34,8 @@ export type LifecycleChannel =
   | "account.perp_orders"
   | "account.perp_fills"
   | "account.perp_positions"
-  | "account.perp_funding";
+  | "account.perp_funding"
+  | "account.rfqs";
 
 export interface OrderUpdated {
   type: "order_updated";
@@ -226,6 +227,75 @@ export interface PerpFundingPaymentCreated {
   created_at_ms: number;
 }
 
+/**
+ * OPTIONS-RFQ-LIFECYCLE-WS-V1 — Options RFQ lifecycle deltas
+ * routed on `account.rfqs`. Every field is a scalar already
+ * exposed by the public REST surface. NEVER a signature,
+ * write-auth nonce, envelope, header, or bearer token.
+ */
+export interface OptionRfqCreated {
+  type: "option_rfq_created";
+  option_rfq_id: string;
+  option_series_id: string;
+  taker: string;
+  side: "buy" | "sell";
+  size_1e8: string;
+  limit_price_1e8: string | null;
+  status: string;
+  created_at_ms: number;
+  expires_at_ms: number;
+}
+
+export interface OptionRfqQuoteSubmitted {
+  type: "option_rfq_quote_submitted";
+  option_rfq_id: string;
+  quote_id: string;
+  option_series_id: string;
+  taker: string;
+  mm_account: string;
+  price_1e8: string;
+  size_1e8: string;
+  status: string;
+  created_at_ms: number;
+  expires_at_ms: number;
+}
+
+export interface OptionRfqAccepted {
+  type: "option_rfq_accepted";
+  option_rfq_id: string;
+  quote_id: string;
+  option_series_id: string;
+  taker: string;
+  mm_account: string;
+  rfq_status: string;
+  quote_status: string;
+  option_fill_id: string;
+  accepted_at_ms: number;
+}
+
+export interface OptionRfqFillCreated {
+  type: "option_rfq_fill_created";
+  option_rfq_id: string;
+  quote_id: string;
+  fill_id: string;
+  option_series_id: string;
+  taker: string;
+  mm_account: string;
+  taker_side: "buy" | "sell";
+  price_1e8: string;
+  size_1e8: string;
+  created_at_ms: number;
+}
+
+export interface OptionRfqCancelled {
+  type: "option_rfq_cancelled";
+  option_rfq_id: string;
+  option_series_id: string;
+  taker: string;
+  status: string;
+  cancelled_at_ms: number;
+}
+
 export type LifecyclePayload =
   | OrderUpdated
   | FillCreated
@@ -237,7 +307,12 @@ export type LifecyclePayload =
   | PerpPositionUpdated
   | PerpOrderRejected
   | PerpPositionLiquidated
-  | PerpFundingPaymentCreated;
+  | PerpFundingPaymentCreated
+  | OptionRfqCreated
+  | OptionRfqQuoteSubmitted
+  | OptionRfqAccepted
+  | OptionRfqFillCreated
+  | OptionRfqCancelled;
 
 /** Parsed lifecycle frame ready for UI consumption. */
 export interface LifecycleEvent {

@@ -25,6 +25,8 @@ import {
   OPTIONS_RFQ_ENABLED_ENV,
 } from "@/lib/options-rfq-flag";
 import { useWallet } from "@/lib/wallet";
+import { useLifecycleStream } from "@/hooks/useLifecycleStream";
+import type { LifecycleEvent } from "@/lib/lifecycle-types";
 import {
   cancelOptionsRfq,
   createOptionsRfq,
@@ -209,6 +211,61 @@ export function RfqStrategyWorkspace() {
     }
     void refreshRfqs();
   }, [rfqEnabled, wallet.address, refreshRfqs]);
+
+  // OPTIONS-RFQ-LIFECYCLE-WS-V1 — subscribe to `account.rfqs`
+  // lifecycle deltas so create / quote-submitted / accepted /
+  // fill-created / cancelled events trigger REST refetches
+  // automatically. We only mount the subscription when the RFQ
+  // feature flag is on AND a wallet is connected — the underlying
+  // WS client only actually subscribes to `account.rfqs` in that
+  // case (see `SUBSCRIBE_CHANNELS` in `lifecycle-ws.ts`).
+  const lifecycle = useLifecycleStream();
+  useEffect(() => {
+    if (!rfqEnabled) return;
+    if (!wallet.address) return;
+    const unsubscribe = lifecycle.subscribe("account.rfqs", (event: LifecycleEvent) => {
+      const payload = event.payload;
+      switch (payload.type) {
+        case "option_rfq_created":
+        case "option_rfq_cancelled":
+          // RFQ status list needs to reflect the new/updated row.
+          void refreshRfqs();
+          return;
+        case "option_rfq_quote_submitted":
+          // Book tab refetches the quotes for the selected RFQ.
+          // If the delta is for the currently-selected RFQ (or any
+          // RFQ the current user owns as taker), bumping the nonce
+          // is enough — the Book tab only refetches when its own
+          // selectedRfqId matches.
+          setQuoteRefreshNonce((n) => n + 1);
+          return;
+        case "option_rfq_accepted":
+        case "option_rfq_fill_created":
+          // Accept produces two events (Accepted + FillCreated).
+          // Refetch the RFQ list (status changed to Accepted),
+          // the quote list (statuses changed), and the trades feed.
+          void refreshRfqs();
+          setQuoteRefreshNonce((n) => n + 1);
+          setTradesRefreshNonce((n) => n + 1);
+          return;
+        default:
+          // Unknown / non-RFQ payload — ignore safely.
+          return;
+      }
+    });
+    return unsubscribe;
+  }, [rfqEnabled, wallet.address, lifecycle, refreshRfqs]);
+
+  // Reconnect / resync guard — on every successful (re)subscribe,
+  // refresh the REST state so we bridge any missed deltas.
+  useEffect(() => {
+    if (!rfqEnabled) return;
+    if (!wallet.address) return;
+    if (lifecycle.resyncToken === 0) return;
+    void refreshRfqs();
+    setQuoteRefreshNonce((n) => n + 1);
+    setTradesRefreshNonce((n) => n + 1);
+  }, [rfqEnabled, wallet.address, lifecycle.resyncToken, refreshRfqs]);
 
   const onRequestQuote = useCallback(async () => {
     if (!canSubmit || walletBlockers || strategyBlocker) return;
@@ -409,6 +466,30 @@ export function RfqStrategyWorkspace() {
               ? "single-leg RFQ create — live"
               : "builder foundation — Request Quote not live yet"}
           </span>
+          {rfqEnabled && wallet.address && (
+            <span
+              data-testid="rfq-strategy-lifecycle-status"
+              data-lifecycle-status={lifecycle.status}
+              title={lifecycle.statusDetail ?? undefined}
+              className={
+                lifecycle.status === "subscribed"
+                  ? "rounded border border-emerald-500/40 bg-emerald-500/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-emerald-300"
+                  : lifecycle.status === "reconnecting" ||
+                      lifecycle.status === "connecting" ||
+                      lifecycle.status === "authenticating"
+                    ? "rounded border border-amber-500/40 bg-amber-500/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-300"
+                    : "rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-zinc-400"
+              }
+            >
+              {lifecycle.status === "subscribed"
+                ? "Live updates on"
+                : lifecycle.status === "reconnecting" ||
+                    lifecycle.status === "connecting" ||
+                    lifecycle.status === "authenticating"
+                  ? "Live updates reconnecting"
+                  : "Manual refresh only"}
+            </span>
+          )}
         </div>
         <NativeSelect
           aria-label="Underlying"

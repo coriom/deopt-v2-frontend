@@ -21,6 +21,7 @@
 // with a `onResync` callback fired after a successful re-subscribe so
 // the consumer can refetch REST snapshots and bridge any missed deltas.
 
+import { isOptionsRfqEnabled } from "./options-rfq-flag";
 import { parseLifecycleFrame } from "./lifecycle-parse";
 import type {
   LifecycleConnectionStatus,
@@ -28,11 +29,20 @@ import type {
 } from "./lifecycle-types";
 import { tradingApiBaseUrl } from "./trading-api";
 
-const SUBSCRIBE_CHANNELS = [
-  "account.orders",
-  "account.fills",
-  "account.conditional_orders",
-] as const;
+/**
+ * OPTIONS-RFQ-LIFECYCLE-WS-V1 — `account.rfqs` is added ONLY when
+ * `NEXT_PUBLIC_OPTIONS_RFQ_ENABLED=true` at build time. Default
+ * builds subscribe to the three long-standing channels only, so the
+ * WS traffic profile stays identical unless the operator opts in.
+ */
+const SUBSCRIBE_CHANNELS: readonly string[] = isOptionsRfqEnabled()
+  ? [
+      "account.orders",
+      "account.fills",
+      "account.conditional_orders",
+      "account.rfqs",
+    ]
+  : ["account.orders", "account.fills", "account.conditional_orders"];
 
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;

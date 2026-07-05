@@ -22,6 +22,11 @@ import type {
   LifecycleChannel,
   LifecycleEvent,
   LifecyclePayload,
+  OptionRfqAccepted,
+  OptionRfqCancelled,
+  OptionRfqCreated,
+  OptionRfqFillCreated,
+  OptionRfqQuoteSubmitted,
   OrderRejected,
   OrderUpdated,
   PerpFillCreated,
@@ -40,6 +45,7 @@ const LIFECYCLE_CHANNELS: ReadonlySet<LifecycleChannel> = new Set([
   "account.perp_fills",
   "account.perp_positions",
   "account.perp_funding",
+  "account.rfqs",
 ]);
 
 export function parseLifecycleFrame(raw: string): LifecycleEvent | null {
@@ -112,6 +118,17 @@ function parsePayload(raw: unknown): LifecyclePayload | null {
       return parsePerpPositionLiquidated(raw);
     case "perp_funding_payment_created":
       return parsePerpFundingPaymentCreated(raw);
+    // OPTIONS-RFQ-LIFECYCLE-WS-V1 — Options RFQ payload variants.
+    case "option_rfq_created":
+      return parseOptionRfqCreated(raw);
+    case "option_rfq_quote_submitted":
+      return parseOptionRfqQuoteSubmitted(raw);
+    case "option_rfq_accepted":
+      return parseOptionRfqAccepted(raw);
+    case "option_rfq_fill_created":
+      return parseOptionRfqFillCreated(raw);
+    case "option_rfq_cancelled":
+      return parseOptionRfqCancelled(raw);
     default:
       // Unknown variant — return null so callers skip the frame
       // gracefully. Forward-compat: backend can add variants without
@@ -537,6 +554,189 @@ function parsePerpOrderRejected(raw: Record<string, unknown>): PerpOrderRejected
     reason_message: nullableString(raw.reason_message),
     reason_source,
     created_at_ms,
+  };
+}
+
+// OPTIONS-RFQ-LIFECYCLE-WS-V1 — RFQ payload parsers.
+
+function parseOptionRfqCreated(raw: Record<string, unknown>): OptionRfqCreated | null {
+  const option_rfq_id = raw.option_rfq_id;
+  const option_series_id = raw.option_series_id;
+  const taker = raw.taker;
+  const side = raw.side;
+  const size_1e8 = raw.size_1e8;
+  const status = raw.status;
+  const created_at_ms = raw.created_at_ms;
+  const expires_at_ms = raw.expires_at_ms;
+  if (
+    typeof option_rfq_id !== "string" ||
+    typeof option_series_id !== "string" ||
+    typeof taker !== "string" ||
+    !(side === "buy" || side === "sell") ||
+    typeof size_1e8 !== "string" ||
+    typeof status !== "string" ||
+    typeof created_at_ms !== "number" ||
+    typeof expires_at_ms !== "number"
+  ) {
+    return null;
+  }
+  return {
+    type: "option_rfq_created",
+    option_rfq_id,
+    option_series_id,
+    taker,
+    side,
+    size_1e8,
+    limit_price_1e8: nullableString(raw.limit_price_1e8),
+    status,
+    created_at_ms,
+    expires_at_ms,
+  };
+}
+
+function parseOptionRfqQuoteSubmitted(
+  raw: Record<string, unknown>,
+): OptionRfqQuoteSubmitted | null {
+  const option_rfq_id = raw.option_rfq_id;
+  const quote_id = raw.quote_id;
+  const option_series_id = raw.option_series_id;
+  const taker = raw.taker;
+  const mm_account = raw.mm_account;
+  const price_1e8 = raw.price_1e8;
+  const size_1e8 = raw.size_1e8;
+  const status = raw.status;
+  const created_at_ms = raw.created_at_ms;
+  const expires_at_ms = raw.expires_at_ms;
+  if (
+    typeof option_rfq_id !== "string" ||
+    typeof quote_id !== "string" ||
+    typeof option_series_id !== "string" ||
+    typeof taker !== "string" ||
+    typeof mm_account !== "string" ||
+    typeof price_1e8 !== "string" ||
+    typeof size_1e8 !== "string" ||
+    typeof status !== "string" ||
+    typeof created_at_ms !== "number" ||
+    typeof expires_at_ms !== "number"
+  ) {
+    return null;
+  }
+  return {
+    type: "option_rfq_quote_submitted",
+    option_rfq_id,
+    quote_id,
+    option_series_id,
+    taker,
+    mm_account,
+    price_1e8,
+    size_1e8,
+    status,
+    created_at_ms,
+    expires_at_ms,
+  };
+}
+
+function parseOptionRfqAccepted(raw: Record<string, unknown>): OptionRfqAccepted | null {
+  const option_rfq_id = raw.option_rfq_id;
+  const quote_id = raw.quote_id;
+  const option_series_id = raw.option_series_id;
+  const taker = raw.taker;
+  const mm_account = raw.mm_account;
+  const rfq_status = raw.rfq_status;
+  const quote_status = raw.quote_status;
+  const option_fill_id = raw.option_fill_id;
+  const accepted_at_ms = raw.accepted_at_ms;
+  if (
+    typeof option_rfq_id !== "string" ||
+    typeof quote_id !== "string" ||
+    typeof option_series_id !== "string" ||
+    typeof taker !== "string" ||
+    typeof mm_account !== "string" ||
+    typeof rfq_status !== "string" ||
+    typeof quote_status !== "string" ||
+    typeof option_fill_id !== "string" ||
+    typeof accepted_at_ms !== "number"
+  ) {
+    return null;
+  }
+  return {
+    type: "option_rfq_accepted",
+    option_rfq_id,
+    quote_id,
+    option_series_id,
+    taker,
+    mm_account,
+    rfq_status,
+    quote_status,
+    option_fill_id,
+    accepted_at_ms,
+  };
+}
+
+function parseOptionRfqFillCreated(
+  raw: Record<string, unknown>,
+): OptionRfqFillCreated | null {
+  const option_rfq_id = raw.option_rfq_id;
+  const quote_id = raw.quote_id;
+  const fill_id = raw.fill_id;
+  const option_series_id = raw.option_series_id;
+  const taker = raw.taker;
+  const mm_account = raw.mm_account;
+  const taker_side = raw.taker_side;
+  const price_1e8 = raw.price_1e8;
+  const size_1e8 = raw.size_1e8;
+  const created_at_ms = raw.created_at_ms;
+  if (
+    typeof option_rfq_id !== "string" ||
+    typeof quote_id !== "string" ||
+    typeof fill_id !== "string" ||
+    typeof option_series_id !== "string" ||
+    typeof taker !== "string" ||
+    typeof mm_account !== "string" ||
+    !(taker_side === "buy" || taker_side === "sell") ||
+    typeof price_1e8 !== "string" ||
+    typeof size_1e8 !== "string" ||
+    typeof created_at_ms !== "number"
+  ) {
+    return null;
+  }
+  return {
+    type: "option_rfq_fill_created",
+    option_rfq_id,
+    quote_id,
+    fill_id,
+    option_series_id,
+    taker,
+    mm_account,
+    taker_side,
+    price_1e8,
+    size_1e8,
+    created_at_ms,
+  };
+}
+
+function parseOptionRfqCancelled(raw: Record<string, unknown>): OptionRfqCancelled | null {
+  const option_rfq_id = raw.option_rfq_id;
+  const option_series_id = raw.option_series_id;
+  const taker = raw.taker;
+  const status = raw.status;
+  const cancelled_at_ms = raw.cancelled_at_ms;
+  if (
+    typeof option_rfq_id !== "string" ||
+    typeof option_series_id !== "string" ||
+    typeof taker !== "string" ||
+    typeof status !== "string" ||
+    typeof cancelled_at_ms !== "number"
+  ) {
+    return null;
+  }
+  return {
+    type: "option_rfq_cancelled",
+    option_rfq_id,
+    option_series_id,
+    taker,
+    status,
+    cancelled_at_ms,
   };
 }
 
