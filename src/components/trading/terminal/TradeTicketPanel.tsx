@@ -1,42 +1,52 @@
 "use client";
 
-// TradeTicketPanel — FRONTEND-OPTIONS-DIRECT-ORDERBOOK-V1
+// TradeTicketPanel — OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1
 //
-// Workspace `trade` widget for the options terminal. Two clean modes:
+// The trade widget is now driven by the multi-leg chain selection
+// (`useSelectedLegs`) and a single `Execution` dropdown:
 //
-//   * `orderbook` (default) — submits a real direct order to
-//     `POST /options/orders` via the shared `DirectOrderbookForm`
-//     component. Honours GTC / IOC / FOK + post-only end-to-end with
-//     the deterministic matching engine (see
-//     `MATCHING-TIF-SEMANTICS-OPTIONS-V1`).
+//   * `Auto` (default) — routes based on how many legs the user has
+//                        selected in the chain:
+//                          - 0 legs → picker guidance (form kept as
+//                            an advanced fallback for testers).
+//                          - 1 leg → single-leg Book (existing
+//                            DirectOrderbookForm).
+//                          - 2+ legs → multi-leg RFQ; the backend
+//                            does not ship atomic multi-leg RFQ
+//                            yet so the ticket surfaces an honest
+//                            blocker with the forward milestone
+//                            `OPTIONS-MULTI-LEG-ATOMIC-RFQ-V1`.
+//   * `Book` — single-leg orderbook only. Multi-leg surfaces the
+//              honest `Use RFQ for strategies` blocker.
+//   * `RFQ`  — single-leg RFQ create flow (gated on
+//              `NEXT_PUBLIC_OPTIONS_RFQ_ENABLED`) or the honest
+//              multi-leg blocker.
 //
-//   * `rfq` — keeps the existing illustrative RFQ-style row. The
-//     RFQ executor is not live in this testnet beta; the body
-//     surfaces this explicitly via static copy. NO TIF / post-only
-//     fields are exposed in this mode — they do not apply.
-//
-// The instrument title at the top reflects the user's current chain
-// selection (via `useSelectedOption`) so the operator can paste-and-go
-// into the orderbook form, but the form also accepts a manual series
-// id for arbitrary submissions.
+// The Payoff / Greeks / Trades / Book tabs remain unchanged and
+// keep reading the legacy single-leg `useSelectedOption()` view so
+// existing coverage passes without churn.
 
 import { useMemo, useState } from "react";
 import type { OptionLeg, OptionsChainRow } from "@/lib/options-chain-model";
-import { useSelectedOption } from "@/lib/workspace-selected-option";
+import {
+  useSelectedLegs,
+  useSelectedOption,
+} from "@/lib/workspace-selected-option";
 import { useWallet } from "@/lib/wallet";
 import { AccountLifecyclePanel } from "@/components/trading/AccountLifecyclePanel";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
 import { NativeSelect } from "@/components/ui/NativeSelect";
+import {
+  resolveExecutionMode,
+  type RequestedExecutionMode,
+  type SelectedOptionLeg,
+} from "@/lib/execution-mode";
+import { isOptionsRfqEnabled } from "@/lib/options-rfq-flag";
 
-// OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — TWAP is no longer a separate
-// ticket mode; it lives under the `Order Type` dropdown inside
-// `DirectOrderbookForm`. The top-level dropdown routes between
-// products (Orderbook vs. RFQ), not between execution styles.
-type TicketMode = "orderbook" | "rfq";
-type Side = "buy" | "sell";
 type TradeTab = "payoff" | "greeks" | "trades" | "book";
+type Side = "buy" | "sell";
 
 const TRADE_TABS: readonly { id: TradeTab; label: string }[] = [
   { id: "payoff", label: "Payoff" },
@@ -58,57 +68,79 @@ function deriveInstrumentTitle(
   return `K = ${row.strikeLabel} ${kind} · exp ${row.expiryLabel}`;
 }
 
+function strategyTitle(legs: SelectedOptionLeg[]): string | null {
+  if (legs.length < 2) return null;
+  const sameUnderlying = legs.every((l) => l.underlying === legs[0].underlying);
+  const sameExpiry = legs.every((l) => l.expiry === legs[0].expiry);
+  const strikes = legs.map((l) => l.strike).join("/");
+  const underlying = sameUnderlying && legs[0].underlying
+    ? legs[0].underlying
+    : "Multi";
+  const expiry = sameExpiry ? ` · exp ${legs[0].expiry}` : "";
+  return `${underlying} · legs ${strikes}${expiry}`;
+}
+
 export function TradeTicketPanel() {
   const { selected } = useSelectedOption();
+  const { legs, removeLegAt, updateLegRatio, clearLegs } = useSelectedLegs();
   const leg = selected?.leg ?? null;
   const row = selected?.row ?? null;
   const { address } = useWallet();
 
-  const instrumentTitle = useMemo(
-    () => deriveInstrumentTitle(leg, row),
-    [leg, row],
+  const primaryTitle = useMemo(
+    () => strategyTitle(legs) ?? deriveInstrumentTitle(leg, row),
+    [legs, leg, row],
   );
 
-  const [mode, setMode] = useState<TicketMode>("orderbook");
+  const [mode, setMode] = useState<RequestedExecutionMode>("auto");
   const [side, setSide] = useState<Side>("buy");
   const [amount, setAmount] = useState("");
   const [activeTab, setActiveTab] = useState<TradeTab>("payoff");
+
+  const rfqEnabled = isOptionsRfqEnabled();
+  const resolved = useMemo(
+    () =>
+      resolveExecutionMode({
+        requestedMode: mode,
+        selectedLegs: legs,
+        rfqEnabled,
+      }),
+    [mode, legs, rfqEnabled],
+  );
 
   return (
     <div
       data-testid="trade-panel"
       data-trade-mode={mode}
+      data-resolved-mode={resolved.kind}
+      data-leg-count={legs.length}
       data-trade-side={side}
       className="flex h-full min-h-0 flex-col overflow-hidden rounded border border-zinc-800 bg-black/60 text-zinc-200"
     >
       <TradeHeader
-        instrumentTitle={instrumentTitle}
+        instrumentTitle={primaryTitle}
         mode={mode}
         onModeChange={setMode}
       />
 
+      <SelectedLegsStrip
+        legs={legs}
+        onRemove={removeLegAt}
+        onRatioChange={updateLegRatio}
+        onClear={clearLegs}
+      />
+
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-        {mode === "orderbook" && (
-          <div
-            data-testid="trade-body-orderbook"
-            className="flex flex-col gap-3 p-3"
-          >
-            <DirectOrderbookForm
-              key={leg?.seriesId ?? "__no_selection__"}
-              initialSeriesId={leg?.seriesId ?? undefined}
-            />
-            <AccountLifecyclePanel address={address} />
-          </div>
-        )}
-        {mode === "rfq" && (
-          <RfqTicketBody
-            side={side}
-            setSide={setSide}
-            instrumentTitle={instrumentTitle}
-            amount={amount}
-            setAmount={setAmount}
-          />
-        )}
+        <TradeBody
+          resolved={resolved}
+          leg={leg}
+          address={address}
+          side={side}
+          setSide={setSide}
+          instrumentTitle={primaryTitle}
+          amount={amount}
+          setAmount={setAmount}
+        />
 
         <TradeTabsSection
           active={activeTab}
@@ -117,6 +149,217 @@ export function TradeTicketPanel() {
           row={row}
         />
       </div>
+    </div>
+  );
+}
+
+// ---------- Body router ----------
+
+interface TradeBodyProps {
+  resolved: ReturnType<typeof resolveExecutionMode>;
+  leg: OptionLeg | null;
+  address: string | null;
+  side: Side;
+  setSide: (s: Side) => void;
+  instrumentTitle: string;
+  amount: string;
+  setAmount: (v: string) => void;
+}
+
+function TradeBody(props: TradeBodyProps) {
+  const {
+    resolved,
+    leg,
+    address,
+    side,
+    setSide,
+    instrumentTitle,
+    amount,
+    setAmount,
+  } = props;
+
+  if (resolved.kind === "book" || resolved.kind === "empty") {
+    // For both `empty` (no leg selected) and `book` (single leg), we
+    // render the DirectOrderbookForm. In the `empty` case the form
+    // is a manual fallback available via the Advanced toggle, so
+    // testers can still submit an arbitrary series id.
+    const prefill =
+      resolved.kind === "book" ? resolved.leg.seriesId : leg?.seriesId;
+    return (
+      <div
+        data-testid="trade-body-orderbook"
+        data-testid-alias="trade-body-book"
+        className="flex flex-col gap-3 p-3"
+      >
+        {resolved.kind === "empty" ? (
+          <div
+            data-testid="ticket-picker-hint"
+            role="note"
+            className="rounded border border-zinc-800 bg-zinc-950/60 p-2 text-[11px] text-zinc-400"
+          >
+            Click a <span className="font-semibold text-emerald-300">Bid</span>{" "}
+            or <span className="font-semibold text-emerald-300">Ask</span> cell
+            in the chain to build an order. Advanced testers can still enter a
+            manual series id below.
+          </div>
+        ) : null}
+        <DirectOrderbookForm
+          key={prefill ?? "__no_selection__"}
+          initialSeriesId={prefill ?? undefined}
+        />
+        <AccountLifecyclePanel address={address} />
+      </div>
+    );
+  }
+
+  if (resolved.kind === "book_blocked_multileg") {
+    return (
+      <div
+        data-testid="trade-body-book-blocked-multileg"
+        role="alert"
+        className="flex flex-col gap-2 p-3 text-[11px]"
+      >
+        <p className="rounded border border-amber-500/40 bg-amber-950/30 p-3 text-amber-200">
+          Book execution supports one leg at a time. Switch execution to{" "}
+          <span className="font-semibold">RFQ</span> to price a strategy across
+          your selected legs.
+        </p>
+      </div>
+    );
+  }
+
+  if (resolved.kind === "rfq_multileg_blocked") {
+    return (
+      <div
+        data-testid="trade-body-rfq-multileg-blocked"
+        role="alert"
+        className="flex flex-col gap-2 p-3 text-[11px]"
+      >
+        <p className="rounded border border-amber-500/40 bg-amber-950/30 p-3 text-amber-200">
+          Multi-leg RFQ execution is not live yet. The backend ships one leg
+          per RFQ today; atomic multi-leg RFQ is tracked as{" "}
+          <span className="font-mono">OPTIONS-MULTI-LEG-ATOMIC-RFQ-V1</span>.
+        </p>
+      </div>
+    );
+  }
+
+  if (resolved.kind === "rfq_disabled") {
+    return (
+      <div
+        data-testid="trade-body-rfq-disabled"
+        role="note"
+        className="flex flex-col gap-2 p-3 text-[11px]"
+      >
+        <p className="rounded border border-zinc-800 bg-zinc-950/60 p-3 text-zinc-400">
+          RFQ create is disabled by default. Enable{" "}
+          <span className="font-mono">NEXT_PUBLIC_OPTIONS_RFQ_ENABLED</span> to
+          surface the single-leg RFQ ticket. Multi-leg RFQ remains gated on{" "}
+          <span className="font-mono">OPTIONS-MULTI-LEG-ATOMIC-RFQ-V1</span>.
+        </p>
+      </div>
+    );
+  }
+
+  // rfq_single
+  return (
+    <RfqTicketBody
+      side={side}
+      setSide={setSide}
+      instrumentTitle={instrumentTitle}
+      amount={amount}
+      setAmount={setAmount}
+    />
+  );
+}
+
+// ---------- Selected Legs strip ----------
+
+interface SelectedLegsStripProps {
+  legs: SelectedOptionLeg[];
+  onRemove: (index: number) => void;
+  onRatioChange: (index: number, ratio: string) => void;
+  onClear: () => void;
+}
+
+function SelectedLegsStrip({
+  legs,
+  onRemove,
+  onRatioChange,
+  onClear,
+}: SelectedLegsStripProps) {
+  if (legs.length === 0) {
+    return (
+      <div
+        data-testid="ticket-legs-empty"
+        className="border-b border-zinc-800 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-zinc-500"
+      >
+        No legs selected
+      </div>
+    );
+  }
+  return (
+    <div
+      data-testid="ticket-legs-list"
+      data-leg-count={legs.length}
+      className="flex flex-wrap items-center gap-2 border-b border-zinc-800 px-2 py-1.5"
+    >
+      {legs.map((l, index) => {
+        const dirLabel = l.side === "buy" ? "Buy" : "Sell";
+        const dirColor =
+          l.side === "buy" ? "text-emerald-300" : "text-red-300";
+        return (
+          <div
+            key={`${l.seriesId}-${l.sourcePriceSide}-${index}`}
+            data-testid={`ticket-leg-${index}`}
+            data-leg-side={l.side}
+            className="flex items-center gap-1 rounded border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[11px]"
+          >
+            <span
+              data-testid={`ticket-leg-${index}-direction`}
+              className={`font-semibold ${dirColor}`}
+            >
+              {dirLabel}
+            </span>
+            <span
+              data-testid={`ticket-leg-${index}-instrument`}
+              className="text-zinc-200"
+              title={`${l.underlying} ${l.strike} ${l.optionType} · exp ${l.expiry}`}
+            >
+              {l.strike} {l.optionType === "call" ? "C" : "P"}
+              {l.expiry ? ` · ${l.expiry}` : ""}
+            </span>
+            <label className="flex items-center gap-0.5 text-[10px] text-zinc-500">
+              <span className="uppercase tracking-[0.16em]">×</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={l.ratio}
+                onChange={(e) => onRatioChange(index, e.target.value)}
+                data-testid={`ticket-leg-${index}-ratio`}
+                className="w-8 rounded border border-zinc-800 bg-black/40 px-1 text-right font-mono text-[10px] text-zinc-200 focus:border-emerald-500/60 focus:outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              data-testid={`ticket-leg-${index}-remove`}
+              aria-label={`Remove ${dirLabel} ${l.strike} ${l.optionType}`}
+              className="rounded border border-transparent px-1 text-zinc-500 hover:border-zinc-700 hover:text-red-300"
+            >
+              ✕
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={onClear}
+        data-testid="ticket-legs-clear"
+        className="ml-auto text-[10px] uppercase tracking-[0.16em] text-zinc-500 hover:text-red-300"
+      >
+        Clear all
+      </button>
     </div>
   );
 }
@@ -255,8 +498,8 @@ function PickInstrumentEmpty({ tab }: { tab: string }) {
 
 interface TradeHeaderProps {
   instrumentTitle: string;
-  mode: TicketMode;
-  onModeChange: (m: TicketMode) => void;
+  mode: RequestedExecutionMode;
+  onModeChange: (m: RequestedExecutionMode) => void;
 }
 
 function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) {
@@ -275,16 +518,21 @@ function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) 
         </span>
       </div>
       <label className="flex items-center gap-1">
-        <span className="sr-only">Ticket mode</span>
+        <span className="sr-only">Execution</span>
         <NativeSelect
           data-testid="trade-mode-select"
-          aria-label="Ticket mode"
+          aria-label="Execution"
           value={mode}
-          onChange={(e) => onModeChange(e.target.value as TicketMode)}
+          onChange={(e) =>
+            onModeChange(e.target.value as RequestedExecutionMode)
+          }
           variant="bordered"
         >
-          <option value="orderbook" className="bg-zinc-950 text-zinc-100">
-            Orderbook
+          <option value="auto" className="bg-zinc-950 text-zinc-100">
+            Auto
+          </option>
+          <option value="book" className="bg-zinc-950 text-zinc-100">
+            Book
           </option>
           <option value="rfq" className="bg-zinc-950 text-zinc-100">
             RFQ

@@ -16,7 +16,13 @@ import {
   filterByExpiry,
 } from "@/lib/options-chain-model";
 import type { Product, Series, SeriesId } from "@/lib/trading-types";
-import { useSelectedOption } from "@/lib/workspace-selected-option";
+import {
+  useSelectedLegs,
+  useSelectedOption,
+} from "@/lib/workspace-selected-option";
+import { legKey, type SelectedOptionLeg } from "@/lib/execution-mode";
+import { underlyingDisplaySymbol } from "@/lib/underlying-symbols";
+import { scaled1e8ToHuman } from "@/lib/price-scaling";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { useChainColumnPrefs } from "@/hooks/useChainColumnPrefs";
 import { ChainColumnsMenu } from "./ChainColumnsMenu";
@@ -55,7 +61,13 @@ function useSeriesById(seriesIds: SeriesId[]) {
 export function OptionsChainTerminalCore() {
   const products = useProducts();
   const { selected, setSelected } = useSelectedOption();
+  const { legs, addOrToggleLeg } = useSelectedLegs();
   const chainPrefs = useChainColumnPrefs();
+
+  const selectedLegKeys = useMemo(
+    () => new Set(legs.map((l) => legKey(l))),
+    [legs],
+  );
 
   const allProducts = useMemo<Product[]>(
     () => products.data?.data.products ?? [],
@@ -187,10 +199,50 @@ export function OptionsChainTerminalCore() {
       <OptionsChainGrid
         rows={visibleRows}
         selectedSeriesId={selected?.leg.seriesId ?? null}
+        selectedLegKeys={selectedLegKeys}
         prefs={chainPrefs}
         onSelect={(leg, row) =>
           setSelected({ leg, row, productId: leg.productId })
         }
+        onCellAction={({ leg, row, columnId }) => {
+          if (leg.seriesId === null) return;
+          if (columnId !== "bid" && columnId !== "ask") return;
+          const sourcePriceSide = columnId;
+          const sideForOrder = columnId === "ask" ? "buy" : "sell";
+          const displayPrice =
+            columnId === "bid"
+              ? leg.bid !== null && leg.bidAvail === "live"
+                ? leg.bid
+                : undefined
+              : leg.ask !== null && leg.askAvail === "live"
+                ? leg.ask
+                : undefined;
+          const productLike = filteredProducts.find(
+            (p) => p.product_id === leg.productId,
+          );
+          const underlyingLabel = productLike
+            ? underlyingDisplaySymbol(
+                productLike.underlying,
+                productLike.underlying_symbol,
+              )
+            : "";
+          const nextLeg: SelectedOptionLeg = {
+            seriesId: leg.seriesId,
+            underlying: underlyingLabel,
+            expiry: row.expiryLabel,
+            strike: row.strikeLabel,
+            optionType: leg.isCall ? "call" : "put",
+            side: sideForOrder,
+            sourcePriceSide,
+            displayPrice: displayPrice
+              ? scaled1e8ToHuman(displayPrice)
+              : undefined,
+            ratio: "1",
+            productId: leg.productId,
+          };
+          addOrToggleLeg(nextLeg);
+          setSelected({ leg, row, productId: leg.productId });
+        }}
       />
     </div>
   );

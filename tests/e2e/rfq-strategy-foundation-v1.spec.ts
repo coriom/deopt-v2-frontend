@@ -127,22 +127,27 @@ test("Greeks / Trades / Book tabs show honest empty states", async ({ page }) =>
 
   await page.getByTestId("rfq-strategy-tab-trades").click();
   // After OPTIONS-RFQ-QUOTE-SIGNING-ACCEPT-V1 the Trades tab is
-  // flag-conditional. Flag off → "not enabled in this environment".
-  // Flag on + no fills accepted this session → "No RFQ fills accepted
-  // in this session yet." Both branches keep the "no fake fills"
-  // guarantee — this test pins the disabled branch honestly.
+  // flag-conditional:
+  //   * flag off → "not enabled in this environment"
+  //   * flag on + no wallet → "Connect a … wallet to view your RFQ trades."
+  //   * flag on + connected wallet + no session fills → "No RFQ fills accepted…"
+  //   * flag on + real fills → live table (out of scope here)
+  // All branches keep the "no fake fills" guarantee — this test
+  // pins whichever honest empty-state the current build surfaces.
   await expect(page.getByTestId("rfq-strategy-tab-body-trades")).toContainText(
-    /(No RFQ trades yet|No RFQ fills accepted|not enabled in this environment)/i,
+    /(No RFQ trades yet|No RFQ fills accepted|not enabled in this environment|Connect a Base Sepolia wallet)/i,
   );
 
   await page.getByTestId("rfq-strategy-tab-book").click();
   // After OPTIONS-RFQ-CREATE-AND-LIFECYCLE-V1 the Book copy is
-  // flag-conditional: when NEXT_PUBLIC_OPTIONS_RFQ_ENABLED=false the
-  // panel says "not enabled in this environment". When on it renders
-  // a real quote list. Both branches keep the "no fake quotes"
-  // guarantee — this test pins only the disabled branch's honesty.
+  // flag-conditional:
+  //   * flag off → "RFQ quote book is not live yet" /
+  //     "not enabled in this environment"
+  //   * flag on + no RFQ selected → "Select an RFQ from the panel …"
+  //   * flag on + selected RFQ → live quote list (out of scope)
+  // All branches keep the "no fake quotes" guarantee.
   await expect(page.getByTestId("rfq-strategy-tab-body-book")).toContainText(
-    /(RFQ quote book is not live yet|not enabled in this environment)/i,
+    /(RFQ quote book is not live yet|not enabled in this environment|Select an RFQ from the panel)/i,
   );
 });
 

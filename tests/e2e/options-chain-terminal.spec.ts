@@ -256,16 +256,23 @@ test("/options page DOM has no amber/yellow brand class + no admin/RPC leak", as
   expect(html).not.toMatch(/mainnet\.base\.org/);
 });
 
-test("Trade widget exposes the Orderbook/RFQ mode selector", async ({ page }) => {
+test("Trade widget exposes the Auto/Book/RFQ execution selector", async ({ page }) => {
   await setupChain(page);
   await installMockWallet(page);
   await page.goto("/options");
   const select = page.getByTestId("trade-mode-select");
   await expect(select).toBeVisible();
-  await expect(select).toHaveValue("orderbook");
+  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — the selector routes
+  // execution style: Auto, Book, RFQ (defaults to Auto).
+  await expect(select).toHaveValue("auto");
+  await expect(select.locator('option[value="auto"]')).toHaveCount(1);
+  await expect(select.locator('option[value="book"]')).toHaveCount(1);
+  await expect(select.locator('option[value="rfq"]')).toHaveCount(1);
+  // With 0 legs + rfq → honest disabled body OR single-leg RFQ body,
+  // depending on `NEXT_PUBLIC_OPTIONS_RFQ_ENABLED`. Neither renders
+  // the orderbook body.
   await select.selectOption("rfq");
-  await expect(page.getByTestId("trade-body-rfq")).toBeVisible();
   await expect(page.getByTestId("trade-body-orderbook")).toHaveCount(0);
-  await select.selectOption("orderbook");
+  await select.selectOption("book");
   await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
 });

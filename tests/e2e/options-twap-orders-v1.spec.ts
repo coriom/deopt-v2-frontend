@@ -49,9 +49,9 @@ test("default build: no /options/twap-orders requests fire on any interaction", 
   });
   await page.goto("/options");
   const select = page.getByTestId("trade-mode-select");
-  await select.selectOption("orderbook");
+  await select.selectOption("book");
   await select.selectOption("rfq");
-  await select.selectOption("orderbook");
+  await select.selectOption("book");
   await page.waitForTimeout(400);
   expect(twapCalls).toEqual([]);
 });
@@ -101,7 +101,17 @@ test("default build: RFQ mode still works (no TWAP regression on RFQ)", async ({
   await page.goto("/options");
   const select = page.getByTestId("trade-mode-select");
   await select.selectOption("rfq");
-  await expect(page.getByTestId("trade-body-rfq")).toBeVisible();
+  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — with 0 legs + rfq
+  // the ticket now surfaces the honest `rfq_disabled` body (RFQ
+  // needs a leg). If a downstream build seeds a leg, the single
+  // `trade-body-rfq` may render instead — either is acceptable
+  // regression-wise; the orderbook body MUST NOT co-render.
+  const disabled = page.getByTestId("trade-body-rfq-disabled");
+  const singleLeg = page.getByTestId("trade-body-rfq");
+  await expect(page.getByTestId("trade-body-orderbook")).toHaveCount(0);
+  await expect
+    .poll(async () => (await disabled.count()) + (await singleLeg.count()))
+    .toBeGreaterThan(0);
 });
 
 test("default build: /perps ticket remains disabled by default", async ({

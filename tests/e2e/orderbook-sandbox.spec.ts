@@ -127,6 +127,9 @@ async function fillForm(
     size?: string;
   } = { tif: "GTC" },
 ) {
+  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — series id is hidden
+  // behind the Advanced tester affordance; open it first.
+  await page.getByTestId("direct-orderbook-advanced-summary").click();
   await page.getByTestId("direct-orderbook-series-id").fill(SERIES_ID);
   await page.getByTestId("direct-orderbook-account").fill(ACCOUNT);
   if (opts.size) {

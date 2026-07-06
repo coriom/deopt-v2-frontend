@@ -299,17 +299,16 @@ export function DirectOrderbookForm({
           data-testid="options-order-type-body-limit"
           className="flex flex-col gap-3"
         >
-          <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-            Series
-            <input
-              type="text"
-              value={seriesId}
-              onChange={(e) => setSeriesId(e.target.value)}
-              placeholder="0x…"
-              data-testid="direct-orderbook-series-id"
-              className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-[11px] normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
-            />
-          </label>
+          {/* OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — the Series
+              input is now a tester-only affordance. In the normal
+              flow the operator clicks a Bid/Ask cell in the chain
+              and `initialSeriesId` pre-fills the state. The
+              `Advanced` toggle keeps the raw series id available
+              for tester submissions and Playwright E2E coverage. */}
+          <AdvancedSeriesInput
+            seriesId={seriesId}
+            setSeriesId={setSeriesId}
+          />
 
           <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
             Account
@@ -614,6 +613,46 @@ export function DirectOrderbookForm({
         </div>
       ) : null}
     </form>
+  );
+}
+
+function AdvancedSeriesInput({
+  seriesId,
+  setSeriesId,
+}: {
+  seriesId: string;
+  setSeriesId: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      data-testid="direct-orderbook-advanced"
+      data-open={open ? "true" : "false"}
+      className="rounded border border-dashed border-zinc-800 bg-zinc-950/40 px-2 py-1 text-[10px] text-zinc-500"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        data-testid="direct-orderbook-advanced-summary"
+        aria-expanded={open}
+        className="cursor-pointer select-none text-[10px] uppercase tracking-[0.16em] text-zinc-500 hover:text-emerald-200"
+      >
+        {open ? "▾" : "▸"} Advanced · manual series id (testers)
+      </button>
+      {open ? (
+        <label className="mt-2 block text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+          Series
+          <input
+            type="text"
+            value={seriesId}
+            onChange={(e) => setSeriesId(e.target.value)}
+            placeholder="0x…"
+            data-testid="direct-orderbook-series-id"
+            className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-[11px] normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
+          />
+        </label>
+      ) : null}
+    </div>
   );
 }
 

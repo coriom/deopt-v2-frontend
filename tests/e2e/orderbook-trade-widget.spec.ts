@@ -118,6 +118,10 @@ async function fillOrderbookForm(
   page: import("@playwright/test").Page,
   opts: { tif: "GTC" | "IOC" | "FOK"; postOnly?: boolean; size?: string },
 ) {
+  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — the raw series id
+  // input lives under the Advanced tester-only affordance now. Open
+  // it before filling; chain-click is the normal user flow.
+  await page.getByTestId("direct-orderbook-advanced-summary").click();
   await page.getByTestId("direct-orderbook-series-id").fill(SERIES_ID);
   // Production form requires the account input to match the connected
   // wallet address (write-auth submitter check).
@@ -249,7 +253,13 @@ test.describe("Trade workspace widget — direct orderbook end-to-end", () => {
     });
     await gotoTradeOrderbook(page);
     await page.getByTestId("trade-mode-select").selectOption("rfq");
-    await expect(page.getByTestId("trade-body-rfq")).toBeVisible();
+    // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — with 0 legs + rfq
+    // requested, the body is either the honest `rfq_disabled`
+    // blocker (flag off) or the single-leg `trade-body-rfq` (flag
+    // on). Both count as "not orderbook" — the goal of this
+    // honesty test is that switching to RFQ REMOVES the orderbook
+    // TIF/post controls, not that a specific RFQ body renders.
+    await expect(page.getByTestId("trade-body-orderbook")).toHaveCount(0);
     await expect(page.getByTestId("direct-orderbook-tif-trigger")).toHaveCount(
       0,
     );

@@ -113,6 +113,9 @@ async function gotoTicket(page: import("@playwright/test").Page) {
 }
 
 async function fillBaseTicket(page: import("@playwright/test").Page) {
+  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — series id is hidden
+  // behind the Advanced tester affordance; open it first.
+  await page.getByTestId("direct-orderbook-advanced-summary").click();
   await page.getByTestId("direct-orderbook-series-id").fill(SERIES_ID);
   await page
     .getByTestId("direct-orderbook-account")

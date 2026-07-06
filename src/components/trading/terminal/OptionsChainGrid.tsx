@@ -30,6 +30,21 @@ interface OptionsChainGridProps {
   rows: OptionsChainRow[];
   selectedSeriesId: string | null;
   onSelect: (leg: OptionLeg, row: OptionsChainRow) => void;
+  /** OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — fired when the
+   *  user clicks a `bid` or `ask` cell that has a live price. The
+   *  parent decides whether to append/toggle a Buy leg (Ask) or
+   *  Sell leg (Bid) in the multi-leg store. When omitted or the
+   *  column has no live price, cell click falls back to the legacy
+   *  `onSelect` behaviour. */
+  onCellAction?: (payload: {
+    leg: OptionLeg;
+    row: OptionsChainRow;
+    columnId: ColumnId;
+  }) => void;
+  /** Set of `${seriesId}|${sourcePriceSide}` keys that are currently
+   *  in the multi-leg selection — used to highlight bid/ask cells
+   *  independently of the legacy single-leg `selectedSeriesId`. */
+  selectedLegKeys?: Set<string>;
   /** Optional pre-hoisted prefs (so the ☰ menu can live in the
    *  banner and share state with the grid). When omitted the grid
    *  falls back to its own hook call — same underlying store. */
@@ -47,6 +62,8 @@ export function OptionsChainGrid({
   rows,
   selectedSeriesId,
   onSelect,
+  onCellAction,
+  selectedLegKeys,
   prefs: prefsProp,
 }: OptionsChainGridProps) {
   const localPrefs = useChainColumnPrefs();
@@ -182,37 +199,19 @@ export function OptionsChainGrid({
             ))}
           </div>
           <div role="rowgroup">
-            {rows.map((row) => {
-              const selected =
-                row.call.seriesId !== null &&
-                row.call.seriesId === selectedSeriesId;
-              const disabled = row.call.seriesId === null;
-              return (
-                <div
-                  key={`call-row-${row.strike1e8}-${row.expiryMs}`}
-                  className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
-                  style={sideGridStyle}
-                >
-                  {visible.map((id) => (
-                    <BodyCell
-                      key={`call-${id}`}
-                      side="call"
-                      text={fmt(row.call, id)}
-                      selected={selected}
-                      disabled={disabled}
-                      onClick={() => !disabled && onSelect(row.call, row)}
-                      testid={
-                        visible[0] === id
-                          ? `chain-call-${row.strike1e8}-${row.expiryMs}`
-                          : undefined
-                      }
-                      dataSelected={selected}
-                      dataAvailable={!disabled}
-                    />
-                  ))}
-                </div>
-              );
-            })}
+            {rows.map((row) =>
+              renderChainRow({
+                side: "call",
+                row,
+                leg: row.call,
+                visible,
+                selectedSeriesId,
+                selectedLegKeys,
+                onSelect,
+                onCellAction,
+                sideGridStyle,
+              }),
+            )}
           </div>
         </div>
 
@@ -264,37 +263,19 @@ export function OptionsChainGrid({
             ))}
           </div>
           <div role="rowgroup">
-            {rows.map((row) => {
-              const selected =
-                row.put.seriesId !== null &&
-                row.put.seriesId === selectedSeriesId;
-              const disabled = row.put.seriesId === null;
-              return (
-                <div
-                  key={`put-row-${row.strike1e8}-${row.expiryMs}`}
-                  className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
-                  style={sideGridStyle}
-                >
-                  {visible.map((id) => (
-                    <BodyCell
-                      key={`put-${id}`}
-                      side="put"
-                      text={fmt(row.put, id)}
-                      selected={selected}
-                      disabled={disabled}
-                      onClick={() => !disabled && onSelect(row.put, row)}
-                      testid={
-                        visible[0] === id
-                          ? `chain-put-${row.strike1e8}-${row.expiryMs}`
-                          : undefined
-                      }
-                      dataSelected={selected}
-                      dataAvailable={!disabled}
-                    />
-                  ))}
-                </div>
-              );
-            })}
+            {rows.map((row) =>
+              renderChainRow({
+                side: "put",
+                row,
+                leg: row.put,
+                visible,
+                selectedSeriesId,
+                selectedLegKeys,
+                onSelect,
+                onCellAction,
+                sideGridStyle,
+              }),
+            )}
           </div>
         </div>
       </div>{/* /chain body 3-column flex */}
@@ -305,6 +286,114 @@ export function OptionsChainGrid({
         else renders &ldquo;{DASH}&rdquo;. Toggle columns via the ☰ menu;
         drag a header to reorder.
       </div>
+    </div>
+  );
+}
+
+// ── row + cell rendering ─────────────────────────────────────────
+
+interface RenderChainRowProps {
+  side: "call" | "put";
+  row: OptionsChainRow;
+  leg: OptionLeg;
+  visible: ColumnId[];
+  selectedSeriesId: string | null;
+  selectedLegKeys?: Set<string>;
+  onSelect: (leg: OptionLeg, row: OptionsChainRow) => void;
+  onCellAction?: (payload: {
+    leg: OptionLeg;
+    row: OptionsChainRow;
+    columnId: ColumnId;
+  }) => void;
+  sideGridStyle: React.CSSProperties;
+}
+
+function renderChainRow(props: RenderChainRowProps) {
+  const {
+    side,
+    row,
+    leg,
+    visible,
+    selectedSeriesId,
+    selectedLegKeys,
+    onSelect,
+    onCellAction,
+    sideGridStyle,
+  } = props;
+  const seriesId = leg.seriesId;
+  const rowSelected = seriesId !== null && seriesId === selectedSeriesId;
+  const rowDisabled = seriesId === null;
+  return (
+    <div
+      key={`${side}-row-${row.strike1e8}-${row.expiryMs}`}
+      className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
+      style={sideGridStyle}
+    >
+      {visible.map((id) => {
+        const text = fmt(leg, id);
+        const isBid = id === "bid";
+        const isAsk = id === "ask";
+        const isPriceSide = isBid || isAsk;
+        const priceLive =
+          (isBid && leg.bidAvail === "live" && leg.bid !== null) ||
+          (isAsk && leg.askAvail === "live" && leg.ask !== null);
+        const priceCellKey = isBid
+          ? seriesId !== null
+            ? `${seriesId}|bid`
+            : null
+          : isAsk
+            ? seriesId !== null
+              ? `${seriesId}|ask`
+              : null
+            : null;
+        const inMultiSelection =
+          isPriceSide &&
+          priceCellKey !== null &&
+          selectedLegKeys?.has(priceCellKey) === true;
+        // A bid/ask cell is clickable when the series exists AND a
+        // live price is available AND the parent registered
+        // `onCellAction`. All other cells fall back to the legacy
+        // whole-row single-select behaviour.
+        const cellClickable = isPriceSide
+          ? priceLive && seriesId !== null && Boolean(onCellAction)
+          : !rowDisabled;
+        const cellDisabled = !cellClickable;
+        const cellSelected = isPriceSide ? inMultiSelection : rowSelected;
+        // Testids:
+        //   * `chain-bid-{side}-{strike}-{expiry}` — bid button
+        //   * `chain-ask-{side}-{strike}-{expiry}` — ask button
+        //   * `chain-{call|put}-{strike}-{expiry}` — legacy first
+        //      column marker (kept for regression coverage)
+        let testid: string | undefined;
+        if (isBid) {
+          testid = `chain-bid-${side}-${row.strike1e8}-${row.expiryMs}`;
+        } else if (isAsk) {
+          testid = `chain-ask-${side}-${row.strike1e8}-${row.expiryMs}`;
+        } else if (visible[0] === id) {
+          testid = `chain-${side}-${row.strike1e8}-${row.expiryMs}`;
+        }
+        const onClick = () => {
+          if (cellDisabled) return;
+          if (isPriceSide && onCellAction) {
+            onCellAction({ leg, row, columnId: id });
+            return;
+          }
+          onSelect(leg, row);
+        };
+        return (
+          <BodyCell
+            key={`${side}-${id}`}
+            side={side}
+            text={text}
+            selected={cellSelected}
+            disabled={cellDisabled}
+            onClick={onClick}
+            testid={testid}
+            dataSelected={cellSelected}
+            dataAvailable={!cellDisabled}
+          />
+        );
+      })}
     </div>
   );
 }

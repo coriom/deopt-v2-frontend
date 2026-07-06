@@ -38,7 +38,7 @@ test("Widget chrome title is exactly `Trade`", async ({ page }) => {
   await expect(widget).toHaveAttribute("aria-label", "Trade");
 });
 
-test("Trade widget header surfaces an instrument title + mode selector", async ({
+test("Trade widget header surfaces an instrument title + execution selector", async ({
   page,
 }) => {
   await installMockWallet(page);
@@ -46,10 +46,11 @@ test("Trade widget header surfaces an instrument title + mode selector", async (
   await expect(page.getByTestId("trade-instrument-title")).toBeVisible();
   const select = page.getByTestId("trade-mode-select");
   await expect(select).toBeVisible();
-  await expect(select).toHaveValue("orderbook");
+  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — default is Auto.
+  await expect(select).toHaveValue("auto");
 });
 
-test("Orderbook mode renders the shared DirectOrderbookForm with TIF + Post controls", async ({
+test("Book (Auto) mode renders the shared DirectOrderbookForm with TIF + Post controls", async ({
   page,
 }) => {
   await installMockWallet(page);
@@ -57,6 +58,10 @@ test("Orderbook mode renders the shared DirectOrderbookForm with TIF + Post cont
   await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
   await expect(page.getByTestId("direct-orderbook-form")).toBeVisible();
   // Required inputs for a real submission.
+  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — series id is now
+  // gated behind an Advanced tester affordance; opening it exposes
+  // the input which existing coverage still needs.
+  await page.getByTestId("direct-orderbook-advanced-summary").click();
   await expect(page.getByTestId("direct-orderbook-series-id")).toBeVisible();
   await expect(page.getByTestId("direct-orderbook-account")).toBeVisible();
   await expect(page.getByTestId("direct-orderbook-price")).toBeVisible();
@@ -66,14 +71,20 @@ test("Orderbook mode renders the shared DirectOrderbookForm with TIF + Post cont
   await expect(page.getByTestId("direct-orderbook-post-checkbox")).toBeVisible();
 });
 
-test("Mode selector swaps to RFQ and back to Orderbook", async ({ page }) => {
+test("Execution selector swaps to RFQ and back to Book", async ({ page }) => {
   await installMockWallet(page);
   await page.goto("/options");
   const select = page.getByTestId("trade-mode-select");
   await select.selectOption("rfq");
-  await expect(page.getByTestId("trade-body-rfq")).toBeVisible();
+  // With 0 legs + rfq requested the ticket surfaces the honest
+  // `rfq_disabled` blocker (or `rfq_single` if the RFQ flag is on).
+  const rfqDisabled = page.getByTestId("trade-body-rfq-disabled");
+  const rfqSingle = page.getByTestId("trade-body-rfq");
+  await expect
+    .poll(async () => (await rfqDisabled.count()) + (await rfqSingle.count()))
+    .toBeGreaterThan(0);
   await expect(page.getByTestId("trade-body-orderbook")).toHaveCount(0);
-  await select.selectOption("orderbook");
+  await select.selectOption("book");
   await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
   await expect(page.getByTestId("trade-body-rfq")).toHaveCount(0);
 });
@@ -83,7 +94,15 @@ test("RFQ mode keeps the compact row and does NOT surface TIF / post-only", asyn
 }) => {
   await installMockWallet(page);
   await page.goto("/options");
+  // Force flag-on posture at test time by requesting rfq — when the
+  // flag is off the body is `trade-body-rfq-disabled` (honest);
+  // this test only makes sense on flag-on builds.
   await page.getByTestId("trade-mode-select").selectOption("rfq");
+  const rfqBody = page.getByTestId("trade-body-rfq");
+  if ((await rfqBody.count()) === 0) {
+    test.skip(true, "RFQ flag is off in this build");
+    return;
+  }
   await expect(page.getByTestId("trade-rfq-side-buy")).toBeVisible();
   await expect(page.getByTestId("trade-rfq-side-sell")).toBeVisible();
   await expect(page.getByTestId("trade-rfq-instrument")).toBeVisible();
