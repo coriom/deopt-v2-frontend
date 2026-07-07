@@ -963,6 +963,12 @@ export function listOptionsSeries(
 
 export interface CreateOptionRfqRequest {
   taker: string;
+  /**
+   * SUBACCOUNTS-RFQ-INTEGRATION-V1 — taker subaccount. Omit for
+   * legacy Account-1 behaviour. Non-default requires the envelope
+   * to carry `version: 2` and v2 canonical bytes.
+   */
+  subaccount_id?: number;
   option_series_id: string;
   side: "buy" | "sell";
   size_1e8: string;
@@ -974,6 +980,11 @@ export interface CreateOptionRfqRequest {
 export interface OptionRfqResponse {
   option_rfq_id: string;
   taker: string;
+  /**
+   * SUBACCOUNTS-RFQ-INTEGRATION-V1 — subaccount the taker signed
+   * for. Backend emits `1` for pre-migration rows.
+   */
+  taker_subaccount_id?: number;
   option_series_id: string;
   side: "buy" | "sell";
   size_1e8: string;
@@ -989,6 +1000,11 @@ export interface OptionRfqQuoteResponse {
   quote_id: string;
   option_rfq_id: string;
   mm_account: string;
+  /**
+   * SUBACCOUNTS-RFQ-INTEGRATION-V1 — subaccount the maker signed
+   * for.
+   */
+  maker_subaccount_id?: number;
   session_id: string | null;
   client_quote_id: string | null;
   price_1e8: string;
@@ -1052,7 +1068,10 @@ export function listOptionsRfqQuotes(
 
 export function cancelOptionsRfq(
   optionRfqId: string,
-  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  body: {
+    authorization: import("./write-auth").AuthorizationEnvelope;
+    subaccount_id?: number;
+  },
   signal?: AbortSignal,
 ): Promise<OptionRfqResponse> {
   return rawRequest<OptionRfqResponse>(
@@ -1082,6 +1101,12 @@ export interface OptionRfqFillResponse {
   seller: string;
   taker: string;
   mm_account: string;
+  /**
+   * SUBACCOUNTS-RFQ-INTEGRATION-V1 — both sides captured on the fill
+   * for side-aware filtering by the RFQ fills feed.
+   */
+  taker_subaccount_id?: number;
+  maker_subaccount_id?: number;
   taker_side: "buy" | "sell";
   price_1e8: string;
   size_1e8: string;
@@ -1102,7 +1127,10 @@ export interface AcceptOptionRfqQuoteResponse {
 export function acceptOptionsRfqQuote(
   optionRfqId: string,
   quoteId: string,
-  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  body: {
+    authorization: import("./write-auth").AuthorizationEnvelope;
+    subaccount_id?: number;
+  },
   signal?: AbortSignal,
 ): Promise<AcceptOptionRfqQuoteResponse> {
   return rawRequest<AcceptOptionRfqQuoteResponse>(
@@ -1276,6 +1304,13 @@ export function listOptionsRfqFills(
     account?: string;
     option_rfq_id?: string;
     limit?: number;
+    /**
+     * SUBACCOUNTS-RFQ-INTEGRATION-V1 — side-aware subaccount filter.
+     * Backend defaults to `Some(1)` when `account` is provided but
+     * this is omitted, preserving pre-migration semantics.
+     */
+    subaccountId?: number;
+    all?: boolean;
     signal?: AbortSignal;
   },
 ): Promise<OptionRfqFillResponse[]> {
@@ -1283,6 +1318,9 @@ export function listOptionsRfqFills(
   if (opts?.account) qs.set("account", opts.account.toLowerCase());
   if (opts?.option_rfq_id) qs.set("option_rfq_id", opts.option_rfq_id);
   if (opts?.limit !== undefined) qs.set("limit", String(opts.limit));
+  if (opts?.all) qs.set("all", "true");
+  else if (opts?.subaccountId !== undefined)
+    qs.set("subaccount_id", String(opts.subaccountId));
   const suffix = qs.toString().length ? `?${qs.toString()}` : "";
   return rawRequest<OptionRfqFillResponse[]>(
     "GET",
@@ -1363,6 +1401,11 @@ export function getOptionsRfqQuoteSigningPayload(
 
 export interface SubmitOptionRfqQuoteRequest {
   mm_account: string;
+  /**
+   * SUBACCOUNTS-RFQ-INTEGRATION-V1 — maker subaccount. Same rules as
+   * `CreateOptionRfqRequest.subaccount_id` but bound to the maker.
+   */
+  subaccount_id?: number;
   session_id?: string | null;
   client_quote_id?: string | null;
   price_1e8: string;

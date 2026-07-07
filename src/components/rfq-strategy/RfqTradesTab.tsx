@@ -6,6 +6,7 @@ import {
   TradingApiError,
   type OptionRfqFillResponse,
 } from "@/lib/trading-api";
+import { useWallet } from "@/lib/wallet";
 
 interface RfqTradesTabProps {
   rfqEnabled: boolean;
@@ -59,6 +60,7 @@ export function RfqTradesTab({
   selectedRfqId,
   refreshNonce,
 }: RfqTradesTabProps) {
+  const { activeSubaccountId } = useWallet();
   const [fills, setFills] = useState<OptionRfqFillResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,10 @@ export function RfqTradesTab({
         account,
         option_rfq_id: selectedRfqId ?? undefined,
         limit: 50,
+        // SUBACCOUNTS-RFQ-INTEGRATION-V1 — side-aware backend filter
+        // returns only fills where this account participated on the
+        // active subaccount (as taker or as maker).
+        subaccountId: activeSubaccountId,
       });
       setFills(rows);
     } catch (e) {
@@ -87,7 +93,7 @@ export function RfqTradesTab({
     } finally {
       setLoading(false);
     }
-  }, [rfqEnabled, account, selectedRfqId]);
+  }, [rfqEnabled, account, selectedRfqId, activeSubaccountId]);
 
   useEffect(() => {
     void refresh();

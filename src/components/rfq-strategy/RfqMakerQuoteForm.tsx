@@ -12,6 +12,7 @@ import {
 import {
   buildAuthorization,
   canonical,
+  canonicalV2,
   type SignTypedDataFn,
 } from "@/lib/write-auth";
 import { useWallet } from "@/lib/wallet";
@@ -75,12 +76,9 @@ export function RfqMakerQuoteForm({ rfq, onSubmitted }: RfqMakerQuoteFormProps) 
     if (!wallet.address) return "Connect your wallet to quote.";
     if (wallet.isMainnet) return "Mainnet is disabled — switch to Base Sepolia.";
     if (!wallet.isExpectedChain) return "Wrong network — switch to Base Sepolia.";
-    // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — Maker quote submission is
-    // still a wallet-level action; blocking on non-default subaccount
-    // avoids silently routing the quote through Account 1 while the
-    // switcher advertises another subaccount.
-    if (wallet.activeSubaccountId > 1)
-      return "RFQ is not subaccount-scoped yet. Switch to Account 1 to quote.";
+    // SUBACCOUNTS-RFQ-INTEGRATION-V1 — maker quote is now subaccount-
+    // aware; non-default routes through v2 canonical + envelope
+    // version 2. No refusal needed here.
     return null;
   })();
 
@@ -161,15 +159,29 @@ export function RfqMakerQuoteForm({ rfq, onSubmitted }: RfqMakerQuoteFormProps) 
       }
 
       // 3. Build the write-auth envelope for OPTION_RFQ_QUOTE_SUBMIT.
-      const canonicalBytes = canonical.optionRfqQuoteSubmit({
-        optionRfqId: rfqId,
-        mmAccount: wallet.address,
-        price1e8,
-        size1e8,
-        clientQuoteId: null,
-        quoteNonce: nonce,
-        quoteTtlMs: ttlMs,
-      });
+      // SUBACCOUNTS-RFQ-INTEGRATION-V1 — non-default maker
+      // subaccounts route through v2 canonical + envelope version 2.
+      const useV2 = wallet.activeSubaccountId > 1;
+      const canonicalBytes = useV2
+        ? canonicalV2.optionRfqQuoteSubmit({
+            optionRfqId: rfqId,
+            mmAccount: wallet.address,
+            subaccountId: wallet.activeSubaccountId,
+            price1e8,
+            size1e8,
+            clientQuoteId: null,
+            quoteNonce: nonce,
+            quoteTtlMs: ttlMs,
+          })
+        : canonical.optionRfqQuoteSubmit({
+            optionRfqId: rfqId,
+            mmAccount: wallet.address,
+            price1e8,
+            size1e8,
+            clientQuoteId: null,
+            quoteNonce: nonce,
+            quoteTtlMs: ttlMs,
+          });
       setPhase({ kind: "requesting_challenge" });
       const signTypedForAuth: SignTypedDataFn = async (args) => {
         setPhase({ kind: "awaiting_write_auth_signature" });
@@ -183,6 +195,7 @@ export function RfqMakerQuoteForm({ rfq, onSubmitted }: RfqMakerQuoteFormProps) 
           action: "OPTION_RFQ_QUOTE_SUBMIT",
           canonical: canonicalBytes,
           signTypedData: signTypedForAuth,
+          version: useV2 ? 2 : undefined,
         });
       } catch (e) {
         const msg = (e as Error).message ?? "signature failed";
@@ -198,6 +211,7 @@ export function RfqMakerQuoteForm({ rfq, onSubmitted }: RfqMakerQuoteFormProps) 
       setPhase({ kind: "submitting" });
       const response = await submitOptionsRfqQuote(rfqId, {
         mm_account: wallet.address,
+        subaccount_id: wallet.activeSubaccountId,
         session_id: null,
         client_quote_id: null,
         price_1e8: price1e8,

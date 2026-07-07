@@ -12,6 +12,7 @@ import {
 import {
   buildAuthorization,
   canonical,
+  canonicalV2,
   type SignTypedDataFn,
 } from "@/lib/write-auth";
 import { useWallet } from "@/lib/wallet";
@@ -92,23 +93,28 @@ export function RfqAcceptModal({
       });
       return;
     }
-    // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — RFQ accept is not subaccount
-    // aware yet, so refuse on non-default subaccounts rather than
-    // silently routing through the wallet aggregate.
-    if (wallet.activeSubaccountId > 1) {
-      setPhase({
-        kind: "error",
-        message:
-          "RFQ is not subaccount-scoped yet. Switch to Account 1 to accept quotes.",
-      });
-      return;
-    }
+    // SUBACCOUNTS-RFQ-INTEGRATION-V1 — accept picks v2 canonical +
+    // envelope version 2 when the RFQ belongs to a non-default
+    // subaccount. Backend enforces cross-subaccount refusal by
+    // comparing the resolved id against the RFQ's persisted
+    // `taker_subaccount_id`, so signing under the wrong subaccount
+    // fails with `InvalidSubaccountRequest`.
+    const effectiveSubaccountId =
+      rfq.taker_subaccount_id ?? wallet.activeSubaccountId;
+    const useV2 = effectiveSubaccountId > 1;
     try {
-      const canonicalBytes = canonical.optionRfqAccept({
-        taker: wallet.address as Address,
-        optionRfqId: rfq.option_rfq_id,
-        quoteId: quote.quote_id,
-      });
+      const canonicalBytes = useV2
+        ? canonicalV2.optionRfqAccept({
+            taker: wallet.address as Address,
+            subaccountId: effectiveSubaccountId,
+            optionRfqId: rfq.option_rfq_id,
+            quoteId: quote.quote_id,
+          })
+        : canonical.optionRfqAccept({
+            taker: wallet.address as Address,
+            optionRfqId: rfq.option_rfq_id,
+            quoteId: quote.quote_id,
+          });
 
       setPhase({ kind: "requesting_challenge" });
       const signTyped: SignTypedDataFn = async (args) => {
@@ -124,6 +130,7 @@ export function RfqAcceptModal({
           action: "OPTION_RFQ_ACCEPT",
           canonical: canonicalBytes,
           signTypedData: signTyped,
+          version: useV2 ? 2 : undefined,
         });
       } catch (e) {
         const msg = (e as Error).message ?? "signature failed";
@@ -141,7 +148,10 @@ export function RfqAcceptModal({
       const response = await acceptOptionsRfqQuote(
         rfq.option_rfq_id,
         quote.quote_id,
-        { authorization },
+        {
+          authorization,
+          subaccount_id: effectiveSubaccountId,
+        },
       );
       setPhase({ kind: "success" });
       onAccepted(response);

@@ -40,6 +40,7 @@ import {
 import {
   buildAuthorization,
   canonical,
+  canonicalV2,
   type SignTypedDataFn,
 } from "@/lib/write-auth";
 import { underlyingDisplaySymbol } from "@/lib/underlying-symbols";
@@ -140,14 +141,10 @@ export function RfqStrategyWorkspace() {
     if (!wallet.address) return "Connect your wallet to request quotes.";
     if (wallet.isMainnet) return "Mainnet is disabled — switch to Base Sepolia.";
     if (!wallet.isExpectedChain) return "Wrong network — switch to Base Sepolia.";
-    // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — RFQ is NOT subaccount-aware
-    // on the backend yet. Blocking here keeps us honest: an operator
-    // on Account 2+ cannot submit an RFQ that would silently route
-    // through the wallet aggregate. Follow-up: SUBACCOUNTS-RFQ-
-    // INTEGRATION-V1.
-    if (wallet.activeSubaccountId > 1) {
-      return "RFQ is not subaccount-scoped yet. Switch to Account 1 or wait for SUBACCOUNTS-RFQ-INTEGRATION-V1.";
-    }
+    // SUBACCOUNTS-RFQ-INTEGRATION-V1 — RFQ is now subaccount-aware
+    // end-to-end (create + quote + accept + cancel + fills feed). The
+    // previous "switch to Account 1" refusal is gone; non-default
+    // subaccounts route through v2 canonical + envelope version 2.
     return null;
   }, [
     rfqEnabled,
@@ -155,7 +152,6 @@ export function RfqStrategyWorkspace() {
     wallet.address,
     wallet.isMainnet,
     wallet.isExpectedChain,
-    wallet.activeSubaccountId,
   ]);
 
   const strategyBlocker = useMemo(() => {
@@ -197,11 +193,24 @@ export function RfqStrategyWorkspace() {
     setRfqsError(null);
     try {
       const all = await listOptionsRfqs();
-      // Filter to the connected wallet's RFQs when a wallet is present.
+      // Filter to the connected wallet's RFQs when a wallet is
+      // present, AND to the active subaccount so switching the header
+      // chip narrows the RFQ list to that subaccount. Backend list
+      // route stays wallet-aggregate; the frontend filter is safe
+      // because DTOs now carry `taker_subaccount_id`.
       const filtered = wallet.address
-        ? all.filter(
-            (r) => r.taker.toLowerCase() === wallet.address!.toLowerCase(),
-          )
+        ? all.filter((r) => {
+            if (r.taker.toLowerCase() !== wallet.address!.toLowerCase()) {
+              return false;
+            }
+            if (
+              r.taker_subaccount_id !== undefined &&
+              r.taker_subaccount_id !== wallet.activeSubaccountId
+            ) {
+              return false;
+            }
+            return true;
+          })
         : [];
       setRfqs(filtered);
     } catch (e) {
@@ -211,7 +220,7 @@ export function RfqStrategyWorkspace() {
     } finally {
       setRfqsLoading(false);
     }
-  }, [rfqEnabled, wallet.address]);
+  }, [rfqEnabled, wallet.address, wallet.activeSubaccountId]);
 
   // Auto-refresh RFQ list on wallet change + on mount.
   const hasRunInitialRefresh = useRef(false);
@@ -316,14 +325,29 @@ export function RfqStrategyWorkspace() {
         return;
       }
 
-      const canonicalBytes = canonical.optionRfqCreate({
-        taker: wallet.address,
-        optionSeriesId: matched.option_series_id,
-        side: leg.side,
-        size1e8,
-        limitPrice1e8: null,
-        ttlMs: null,
-      });
+      // SUBACCOUNTS-RFQ-INTEGRATION-V1 — pick v2 canonical + envelope
+      // version 2 when the operator is on a non-default subaccount so
+      // the backend routes the RFQ to the same subaccount that appears
+      // in the switcher chip.
+      const useV2 = wallet.activeSubaccountId > 1;
+      const canonicalBytes = useV2
+        ? canonicalV2.optionRfqCreate({
+            taker: wallet.address,
+            subaccountId: wallet.activeSubaccountId,
+            optionSeriesId: matched.option_series_id,
+            side: leg.side,
+            size1e8,
+            limitPrice1e8: null,
+            ttlMs: null,
+          })
+        : canonical.optionRfqCreate({
+            taker: wallet.address,
+            optionSeriesId: matched.option_series_id,
+            side: leg.side,
+            size1e8,
+            limitPrice1e8: null,
+            ttlMs: null,
+          });
 
       setPhase({ kind: "requesting_challenge" });
       const signTyped: SignTypedDataFn = async (args) => {
@@ -335,11 +359,13 @@ export function RfqStrategyWorkspace() {
         action: "OPTION_RFQ_CREATE",
         canonical: canonicalBytes,
         signTypedData: signTyped,
+        version: useV2 ? 2 : undefined,
       });
 
       setPhase({ kind: "submitting" });
       const created = await createOptionsRfq({
         taker: wallet.address,
+        subaccount_id: wallet.activeSubaccountId,
         option_series_id: matched.option_series_id,
         side: leg.side,
         size_1e8: size1e8,
@@ -413,17 +439,37 @@ export function RfqStrategyWorkspace() {
     async (rfqId: string) => {
       if (!rfqEnabled || !wallet.address) return;
       try {
-        const canonicalBytes = canonical.optionRfqCancel({
-          taker: wallet.address,
-          optionRfqId: rfqId,
-        });
+        // SUBACCOUNTS-RFQ-INTEGRATION-V1 — cancel through the same
+        // subaccount the RFQ was created under. The row-level target
+        // is preferred but until the frontend surfaces
+        // `taker_subaccount_id` on the RFQ list DTO, the active
+        // subaccount is a safe proxy: the operator is filtering the
+        // list by it via the reads below.
+        const rfqRow = rfqs.find((r) => r.option_rfq_id === rfqId);
+        const effectiveSubaccountId =
+          rfqRow?.taker_subaccount_id ?? wallet.activeSubaccountId;
+        const useV2 = effectiveSubaccountId > 1;
+        const canonicalBytes = useV2
+          ? canonicalV2.optionRfqCancel({
+              taker: wallet.address,
+              subaccountId: effectiveSubaccountId,
+              optionRfqId: rfqId,
+            })
+          : canonical.optionRfqCancel({
+              taker: wallet.address,
+              optionRfqId: rfqId,
+            });
         const authorization = await buildAuthorization({
           account: wallet.address,
           action: "OPTION_RFQ_CANCEL",
           canonical: canonicalBytes,
           signTypedData: wallet.signTypedData,
+          version: useV2 ? 2 : undefined,
         });
-        await cancelOptionsRfq(rfqId, { authorization });
+        await cancelOptionsRfq(rfqId, {
+          authorization,
+          subaccount_id: effectiveSubaccountId,
+        });
         await refreshRfqs();
       } catch (e) {
         setRfqsError(
@@ -433,7 +479,14 @@ export function RfqStrategyWorkspace() {
         );
       }
     },
-    [rfqEnabled, wallet.address, wallet.signTypedData, refreshRfqs],
+    [
+      rfqEnabled,
+      wallet.address,
+      wallet.signTypedData,
+      wallet.activeSubaccountId,
+      rfqs,
+      refreshRfqs,
+    ],
   );
 
   const ctaDisabled =

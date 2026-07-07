@@ -63,7 +63,6 @@ export function FillsPanel({ address }: FillsPanelProps) {
     }
     // Wipe rows on subaccount switch so a stale mixed view can't be
     // observed while the refetch is in flight.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFills(null);
     const ctrl = new AbortController();
     void refresh(ctrl.signal);

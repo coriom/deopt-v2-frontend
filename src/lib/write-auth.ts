@@ -795,4 +795,101 @@ export const canonicalV2 = {
       ["option_twap_id", cv.str(args.optionTwapId)],
     ]);
   },
+
+  // -------------------------------------------------------------------
+  // SUBACCOUNTS-RFQ-INTEGRATION-V1 — v2 canonical builders for RFQ.
+  //
+  // Each mirrors its v1 counterpart with `subaccount_id` emitted
+  // immediately after the party identifier (`taker` for taker-side
+  // actions; `mm_account` for the maker quote submit). Every other
+  // field stays in v1 order so only the digest for a non-default
+  // subaccount diverges — that divergence is what enforces cross-
+  // subaccount replay resistance at the challenge verifier.
+  //
+  // Byte-frozen against the backend by
+  // `tests/subaccounts_rfq_integration_tests.rs::v2_option_rfq_*`.
+  // -------------------------------------------------------------------
+
+  optionRfqCreate(args: {
+    taker: Address;
+    subaccountId: number;
+    optionSeriesId: string;
+    side: "buy" | "sell";
+    size1e8: string;
+    limitPrice1e8?: string | null;
+    ttlMs?: number | bigint | null;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_RFQ_CREATE", [
+      ["taker", cv.addr(args.taker)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["option_series_id", cv.str(args.optionSeriesId)],
+      ["side", cv.str(args.side)],
+      ["size_1e8", cv.str(args.size1e8)],
+      [
+        "limit_price_1e8",
+        args.limitPrice1e8 == null ? cv.null() : cv.str(args.limitPrice1e8),
+      ],
+      [
+        "ttl_ms",
+        args.ttlMs == null ? cv.null() : cv.u64(BigInt(args.ttlMs)),
+      ],
+    ]);
+  },
+
+  optionRfqQuoteSubmit(args: {
+    optionRfqId: string;
+    mmAccount: Address;
+    subaccountId: number;
+    price1e8: string;
+    size1e8: string;
+    clientQuoteId?: string | null;
+    quoteNonce?: number | bigint | null;
+    quoteTtlMs?: number | bigint | null;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_RFQ_QUOTE_SUBMIT", [
+      ["option_rfq_id", cv.str(args.optionRfqId)],
+      ["mm_account", cv.addr(args.mmAccount)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["price_1e8", cv.str(args.price1e8)],
+      ["size_1e8", cv.str(args.size1e8)],
+      [
+        "client_quote_id",
+        args.clientQuoteId == null ? cv.null() : cv.str(args.clientQuoteId),
+      ],
+      [
+        "quote_nonce",
+        args.quoteNonce == null ? cv.null() : cv.u64(BigInt(args.quoteNonce)),
+      ],
+      [
+        "quote_ttl_ms",
+        args.quoteTtlMs == null ? cv.null() : cv.u64(BigInt(args.quoteTtlMs)),
+      ],
+    ]);
+  },
+
+  optionRfqAccept(args: {
+    taker: Address;
+    subaccountId: number;
+    optionRfqId: string;
+    quoteId: string;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_RFQ_ACCEPT", [
+      ["taker", cv.addr(args.taker)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["option_rfq_id", cv.str(args.optionRfqId)],
+      ["quote_id", cv.str(args.quoteId)],
+    ]);
+  },
+
+  optionRfqCancel(args: {
+    taker: Address;
+    subaccountId: number;
+    optionRfqId: string;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_RFQ_CANCEL", [
+      ["taker", cv.addr(args.taker)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["option_rfq_id", cv.str(args.optionRfqId)],
+    ]);
+  },
 };
