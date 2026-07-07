@@ -13,6 +13,7 @@ import {
   TradingApiError,
   type OptionFillRow,
 } from "@/lib/trading-api";
+import { useWallet } from "@/lib/wallet";
 import { useLifecycleStream } from "@/hooks/useLifecycleStream";
 import type { LifecycleEvent } from "@/lib/lifecycle-types";
 import { LifecycleStatusBadge } from "./LifecycleStatusBadge";
@@ -25,6 +26,7 @@ export interface FillsPanelProps {
 }
 
 export function FillsPanel({ address }: FillsPanelProps) {
+  const { activeSubaccountId } = useWallet();
   const { status, statusDetail, resyncToken, subscribe } = useLifecycleStream();
   const [fills, setFills] = useState<OptionFillRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +35,10 @@ export function FillsPanel({ address }: FillsPanelProps) {
     async (signal?: AbortSignal) => {
       if (!address) return;
       try {
-        const rows = await listAccountOptionFills(address, signal);
+        const rows = await listAccountOptionFills(address, {
+          subaccountId: activeSubaccountId,
+          signal,
+        });
         rows.sort((a, b) => b.created_at_ms - a.created_at_ms);
         setFills(rows);
         setError(null);
@@ -44,7 +49,7 @@ export function FillsPanel({ address }: FillsPanelProps) {
         setError(message);
       }
     },
-    [address],
+    [address, activeSubaccountId],
   );
 
   useEffect(() => {
@@ -56,6 +61,10 @@ export function FillsPanel({ address }: FillsPanelProps) {
       setFills(null);
       return;
     }
+    // Wipe rows on subaccount switch so a stale mixed view can't be
+    // observed while the refetch is in flight.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFills(null);
     const ctrl = new AbortController();
     void refresh(ctrl.signal);
     const handle = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
@@ -63,7 +72,7 @@ export function FillsPanel({ address }: FillsPanelProps) {
       ctrl.abort();
       window.clearInterval(handle);
     };
-  }, [address, refresh]);
+  }, [address, activeSubaccountId, refresh]);
 
   useEffect(() => {
     if (resyncToken === 0 || !address) return;
@@ -74,38 +83,20 @@ export function FillsPanel({ address }: FillsPanelProps) {
     void refresh();
   }, [resyncToken, address, refresh]);
 
-  // Apply `account.fills` deltas: prepend new fills by fill_id, dedupe.
+  // Apply `account.fills` deltas. SUBACCOUNTS-FRONTEND-SWITCHER-V1:
+  // WS payloads don't yet carry `subaccount_id`, so a wallet-level
+  // event is ambiguous under the subaccount-scoped filter. We refetch
+  // instead of poisoning the cache with a possibly cross-subaccount
+  // synthesised row. The REST fetch is subaccount-scoped and remains
+  // the source of truth.
   useEffect(() => {
     if (!address) return;
     const unsubscribe = subscribe("account.fills", (event: LifecycleEvent) => {
       if (event.payload.type !== "fill_created") return;
-      const f = event.payload;
-      setFills((prev) => {
-        if (prev === null) return prev;
-        if (prev.some((row) => row.fill_id === f.fill_id)) return prev;
-        // The REST shape carries `buyer`/`seller`/`maker_order_id`/etc;
-        // a delta only carries the slim subset, so we synthesise a
-        // minimal row from the delta + flag it for the next REST poll
-        // to fill in. This keeps the UI live while staying honest.
-        const newRow: OptionFillRow = {
-          fill_id: f.fill_id,
-          option_series_id: f.option_series_id,
-          buy_order_id: f.side === "buy" ? f.order_id : "",
-          sell_order_id: f.side === "sell" ? f.order_id : "",
-          buyer: address,
-          seller: "",
-          taker_side: f.side,
-          price_1e8: f.price_1e8,
-          size_1e8: f.size_1e8,
-          created_at_ms: f.created_at_ms,
-        };
-        const next = [newRow, ...prev];
-        next.sort((a, b) => b.created_at_ms - a.created_at_ms);
-        return next;
-      });
+      void refresh();
     });
     return unsubscribe;
-  }, [address, subscribe]);
+  }, [address, subscribe, refresh]);
 
   return (
     <section

@@ -43,7 +43,7 @@ import type {
   SubmitOptionOrderResponse,
 } from "@/lib/trading-types";
 import { useWallet } from "@/lib/wallet";
-import { buildAuthorization, canonical } from "@/lib/write-auth";
+import { buildAuthorization, canonical, canonicalV2 } from "@/lib/write-auth";
 import { OptionsTwapForm } from "./OptionsTwapForm";
 import { TifPopover, PostCheckbox, type Tif } from "./TifPopover";
 
@@ -128,7 +128,12 @@ export interface DirectOrderbookFormProps {
 export function DirectOrderbookForm({
   initialSeriesId,
 }: DirectOrderbookFormProps = {}) {
-  const { address: walletAddress, isExpectedChain, signTypedData } = useWallet();
+  const {
+    address: walletAddress,
+    isExpectedChain,
+    signTypedData,
+    activeSubaccountId,
+  } = useWallet();
   const [orderType, setOrderType] = useState<OrderType>("limit");
   const [seriesId, setSeriesId] = useState(initialSeriesId ?? "");
   const [account, setAccount] = useState<string>(ZERO_ADDRESS);
@@ -202,19 +207,33 @@ export function DirectOrderbookForm({
           "Account field must match the connected wallet address.",
         );
       }
+      const useV2 = activeSubaccountId > 1;
+      const canonicalBytes = useV2
+        ? canonicalV2.optionOrderSubmit({
+            account: walletAddress,
+            subaccountId: activeSubaccountId,
+            optionSeriesId: seriesId,
+            side,
+            price1e8,
+            size1e8,
+            timeInForce: tifWire(tif),
+            postOnly,
+          })
+        : canonical.optionOrderSubmit({
+            account: walletAddress,
+            optionSeriesId: seriesId,
+            side,
+            price1e8,
+            size1e8,
+            timeInForce: tifWire(tif),
+            postOnly,
+          });
       const authorization = await buildAuthorization({
         account: walletAddress,
         action: "OPTION_ORDER_SUBMIT",
-        canonical: canonical.optionOrderSubmit({
-          account: walletAddress,
-          optionSeriesId: seriesId,
-          side,
-          price1e8,
-          size1e8,
-          timeInForce: tifWire(tif),
-          postOnly,
-        }),
+        canonical: canonicalBytes,
         signTypedData,
+        version: useV2 ? 2 : undefined,
       });
       const scaledState = {
         tpEnabled,
@@ -228,6 +247,7 @@ export function DirectOrderbookForm({
       const body: SubmitOptionOrderRequest = {
         option_series_id: seriesId,
         account: walletAddress,
+        subaccount_id: activeSubaccountId,
         side,
         price_1e8: price1e8,
         size_1e8: size1e8,

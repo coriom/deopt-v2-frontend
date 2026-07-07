@@ -18,7 +18,7 @@ import {
   TradingApiError,
   type OptionTwapOrderResponse,
 } from "@/lib/trading-api";
-import { buildAuthorization, canonical } from "@/lib/write-auth";
+import { buildAuthorization, canonical, canonicalV2 } from "@/lib/write-auth";
 import { useWallet } from "@/lib/wallet";
 import { isOptionsTwapEnabled } from "@/lib/options-twap-flag";
 
@@ -130,7 +130,10 @@ export function OptionsTwapForm({ optionSeriesId }: OptionsTwapFormProps) {
       return;
     }
     try {
-      const rows = await listOptionsTwapOrders({ account: wallet.address });
+      const rows = await listOptionsTwapOrders({
+        account: wallet.address,
+        subaccountId: wallet.activeSubaccountId,
+      });
       setTwaps(rows);
     } catch (e) {
       // best-effort; leave the list as-is so we don't wipe a good view.
@@ -139,7 +142,7 @@ export function OptionsTwapForm({ optionSeriesId }: OptionsTwapFormProps) {
       // block the form.
       console.warn("TWAP list refresh failed:", msg);
     }
-  }, [enabled, wallet.address]);
+  }, [enabled, wallet.address, wallet.activeSubaccountId]);
 
   useEffect(() => {
     void refresh();
@@ -148,16 +151,29 @@ export function OptionsTwapForm({ optionSeriesId }: OptionsTwapFormProps) {
   const submit = useCallback(async () => {
     if (blocker || !wallet.address || !price1e8 || !size1e8) return;
     try {
-      const canonicalBytes = canonical.optionTwapCreate({
-        account: wallet.address as Address,
-        optionSeriesId,
-        side,
-        size1e8,
-        limitPrice1e8: price1e8,
-        runningTimeMs,
-        childCount: childCountNum,
-        clientOrderId: null,
-      });
+      const useV2 = wallet.activeSubaccountId > 1;
+      const canonicalBytes = useV2
+        ? canonicalV2.optionTwapCreate({
+            account: wallet.address as Address,
+            subaccountId: wallet.activeSubaccountId,
+            optionSeriesId,
+            side,
+            size1e8,
+            limitPrice1e8: price1e8,
+            runningTimeMs,
+            childCount: childCountNum,
+            clientOrderId: null,
+          })
+        : canonical.optionTwapCreate({
+            account: wallet.address as Address,
+            optionSeriesId,
+            side,
+            size1e8,
+            limitPrice1e8: price1e8,
+            runningTimeMs,
+            childCount: childCountNum,
+            clientOrderId: null,
+          });
       setPhase({ kind: "requesting_challenge" });
       const signTyped = async (args: Parameters<typeof wallet.signTypedData>[0]) => {
         setPhase({ kind: "awaiting_signature" });
@@ -170,6 +186,7 @@ export function OptionsTwapForm({ optionSeriesId }: OptionsTwapFormProps) {
           action: "OPTION_TWAP_CREATE",
           canonical: canonicalBytes,
           signTypedData: signTyped,
+          version: useV2 ? 2 : undefined,
         });
       } catch (e) {
         const msg = (e as Error).message ?? "signature failed";
@@ -183,6 +200,7 @@ export function OptionsTwapForm({ optionSeriesId }: OptionsTwapFormProps) {
       setPhase({ kind: "submitting" });
       const twap = await createOptionsTwapOrder({
         account: wallet.address,
+        subaccount_id: wallet.activeSubaccountId,
         option_series_id: optionSeriesId,
         side,
         size_1e8: size1e8,
@@ -216,20 +234,33 @@ export function OptionsTwapForm({ optionSeriesId }: OptionsTwapFormProps) {
   ]);
 
   const onCancel = useCallback(
-    async (twapId: string) => {
+    async (twapId: string, rowSubaccountId: number | undefined) => {
       if (!wallet.address) return;
       try {
-        const canonicalBytes = canonical.optionTwapCancel({
-          account: wallet.address as Address,
-          optionTwapId: twapId,
-        });
+        const effectiveSubaccountId =
+          rowSubaccountId ?? wallet.activeSubaccountId;
+        const useV2 = effectiveSubaccountId > 1;
+        const canonicalBytes = useV2
+          ? canonicalV2.optionTwapCancel({
+              account: wallet.address as Address,
+              subaccountId: effectiveSubaccountId,
+              optionTwapId: twapId,
+            })
+          : canonical.optionTwapCancel({
+              account: wallet.address as Address,
+              optionTwapId: twapId,
+            });
         const authorization = await buildAuthorization({
           account: wallet.address as Address,
           action: "OPTION_TWAP_CANCEL",
           canonical: canonicalBytes,
           signTypedData: wallet.signTypedData,
+          version: useV2 ? 2 : undefined,
         });
-        await cancelOptionsTwapOrder(twapId, { authorization });
+        await cancelOptionsTwapOrder(twapId, {
+          authorization,
+          subaccount_id: effectiveSubaccountId,
+        });
         await refresh();
       } catch (e) {
         console.warn(
@@ -479,7 +510,7 @@ export function OptionsTwapForm({ optionSeriesId }: OptionsTwapFormProps) {
                   <button
                     type="button"
                     data-testid={`options-twap-cancel-${t.option_twap_id}`}
-                    onClick={() => onCancel(t.option_twap_id)}
+                    onClick={() => onCancel(t.option_twap_id, t.subaccount_id)}
                     className="rounded border border-zinc-700 px-1 text-[9px] text-zinc-300 hover:border-red-500/60 hover:text-red-300"
                   >
                     Cancel

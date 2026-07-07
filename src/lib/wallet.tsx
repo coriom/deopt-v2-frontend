@@ -6,12 +6,21 @@
 // connected wallet. NO transaction send. NO broadcast. NO mainnet.
 // `signTypedData` requires explicit user click on the trade ticket;
 // there is no auto-signing anywhere.
+//
+// SUBACCOUNTS-FRONTEND-SWITCHER-V1 — extended with an active
+// subaccount context. The backend `(owner_address, subaccount_id)`
+// composite is the source of truth; the wallet context caches the
+// subaccount list and remembers which one the operator selected via
+// `localStorage` (see `subaccount-storage.ts`). All Options
+// mutations and reads consume `activeSubaccountId`. RFQ + Perps are
+// NOT subaccount-aware and continue to route wallet-level.
 
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -29,6 +38,19 @@ import {
   BASE_MAINNET,
   ANVIL,
 } from "./chains";
+import {
+  createSubaccount as apiCreateSubaccount,
+  listSubaccounts as apiListSubaccounts,
+  renameSubaccount as apiRenameSubaccount,
+  type SubaccountDto,
+} from "./trading-api";
+import {
+  DEFAULT_SUBACCOUNT_ID,
+  readActiveSubaccountId,
+  readSubaccountFromUrl,
+  writeActiveSubaccountId,
+} from "./subaccount-storage";
+import { buildAuthorization, canonical } from "./write-auth";
 
 declare global {
   interface Window {
@@ -53,6 +75,8 @@ export type SignResult =
   | { ok: true; signature: `0x${string}` }
   | { ok: false; reason: "rejected" | "no_provider" | "wrong_network" | "error"; message?: string };
 
+export type Subaccount = SubaccountDto;
+
 export interface WalletState {
   address: Address | null;
   chainId: number | null;
@@ -75,6 +99,19 @@ export interface WalletState {
    * shows the user what they're signing.
    */
   signMessage: (message: string) => Promise<SignResult>;
+
+  // -------------------------------------------------------------------
+  // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — active subaccount context.
+  // -------------------------------------------------------------------
+  subaccounts: Subaccount[];
+  activeSubaccountId: number;
+  activeSubaccount: Subaccount | null;
+  isLoadingSubaccounts: boolean;
+  subaccountsError: string | null;
+  refreshSubaccounts: () => Promise<void>;
+  setActiveSubaccountId: (id: number) => void;
+  createSubaccount: (name?: string | null) => Promise<Subaccount>;
+  renameSubaccount: (id: number, name: string) => Promise<Subaccount>;
 }
 
 const Ctx = createContext<WalletState | null>(null);
@@ -90,6 +127,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [hasProvider, setHasProvider] = useState(false);
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
+
+  const [subaccounts, setSubaccounts] = useState<Subaccount[]>([]);
+  const [activeSubaccountId, setActiveSubaccountIdState] = useState<number>(
+    DEFAULT_SUBACCOUNT_ID,
+  );
+  const [isLoadingSubaccounts, setIsLoadingSubaccounts] = useState(false);
+  const [subaccountsError, setSubaccountsError] = useState<string | null>(null);
+  // Track the initial URL param so we honour it on the first fetch for
+  // a given wallet without re-applying on every re-render.
+  const urlSubaccountAppliedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -167,6 +214,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAddress(null);
     setChainId(null);
     setWalletClient(null);
+    setSubaccounts([]);
+    setActiveSubaccountIdState(DEFAULT_SUBACCOUNT_ID);
+    setSubaccountsError(null);
+    urlSubaccountAppliedRef.current = null;
   }, []);
 
   const isMainnet = chainId === BASE_MAINNET.id;
@@ -233,6 +284,138 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [walletClient, address, isMainnet, isExpectedChain],
   );
 
+  // -------------------------------------------------------------------
+  // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — subaccount fetch + persistence.
+  // -------------------------------------------------------------------
+
+  const refreshSubaccounts = useCallback(async () => {
+    if (!address) {
+      setSubaccounts([]);
+      setActiveSubaccountIdState(DEFAULT_SUBACCOUNT_ID);
+      return;
+    }
+    setIsLoadingSubaccounts(true);
+    setSubaccountsError(null);
+    try {
+      const rows = await apiListSubaccounts(address);
+      setSubaccounts(rows);
+      // On the first successful fetch for this wallet, resolve the
+      // active id from: URL param (once) → localStorage → default.
+      const walletKey = address.toLowerCase();
+      const rowsIds = new Set(rows.map((r) => r.subaccount_id));
+      let target: number | null = null;
+      if (urlSubaccountAppliedRef.current !== walletKey) {
+        const urlId = readSubaccountFromUrl();
+        if (urlId != null && rowsIds.has(urlId)) {
+          target = urlId;
+        }
+        urlSubaccountAppliedRef.current = walletKey;
+      }
+      if (target == null) {
+        const persisted = readActiveSubaccountId(address);
+        if (persisted != null && rowsIds.has(persisted)) {
+          target = persisted;
+        }
+      }
+      if (target == null) {
+        target = rowsIds.has(DEFAULT_SUBACCOUNT_ID)
+          ? DEFAULT_SUBACCOUNT_ID
+          : (rows[0]?.subaccount_id ?? DEFAULT_SUBACCOUNT_ID);
+      }
+      setActiveSubaccountIdState(target);
+    } catch (err) {
+      const msg = (err as Error).message || "Failed to load subaccounts";
+      setSubaccountsError(msg);
+      // Fail closed: don't fake account rows. Keep default id so
+      // v1-compatible surfaces continue to work.
+      setSubaccounts([]);
+      setActiveSubaccountIdState(DEFAULT_SUBACCOUNT_ID);
+    } finally {
+      setIsLoadingSubaccounts(false);
+    }
+  }, [address]);
+
+  useEffect(() => {
+    void refreshSubaccounts();
+  }, [refreshSubaccounts]);
+
+  const setActiveSubaccountId = useCallback(
+    (id: number) => {
+      if (!address) return;
+      // Only accept ids we've actually seen from the backend so a
+      // rogue caller can't stick a fake id in localStorage.
+      const found = subaccounts.find((s) => s.subaccount_id === id);
+      if (!found) return;
+      setActiveSubaccountIdState(id);
+      writeActiveSubaccountId(address, id);
+    },
+    [address, subaccounts],
+  );
+
+  const createSubaccount = useCallback(
+    async (name?: string | null): Promise<Subaccount> => {
+      if (!address) {
+        throw new Error("Wallet not connected");
+      }
+      const authorization = await buildAuthorization({
+        account: address,
+        action: "SUBACCOUNT_CREATE",
+        canonical: canonical.subaccountCreate({
+          account: address,
+          name: name ?? null,
+        }),
+        signTypedData,
+      });
+      const created = await apiCreateSubaccount(address, {
+        name: name ?? null,
+        authorization,
+      });
+      // Merge into local list + activate the new subaccount.
+      setSubaccounts((prev) => {
+        const without = prev.filter(
+          (r) => r.subaccount_id !== created.subaccount_id,
+        );
+        return [...without, created].sort(
+          (a, b) => a.subaccount_id - b.subaccount_id,
+        );
+      });
+      setActiveSubaccountIdState(created.subaccount_id);
+      writeActiveSubaccountId(address, created.subaccount_id);
+      return created;
+    },
+    [address, signTypedData],
+  );
+
+  const renameSubaccount = useCallback(
+    async (id: number, name: string): Promise<Subaccount> => {
+      if (!address) {
+        throw new Error("Wallet not connected");
+      }
+      const authorization = await buildAuthorization({
+        account: address,
+        action: "SUBACCOUNT_RENAME",
+        canonical: canonical.subaccountRename({
+          account: address,
+          subaccountId: id,
+          name,
+        }),
+        signTypedData,
+      });
+      const updated = await apiRenameSubaccount(address, id, {
+        name,
+        authorization,
+      });
+      setSubaccounts((prev) =>
+        prev.map((r) => (r.subaccount_id === id ? updated : r)),
+      );
+      return updated;
+    },
+    [address, signTypedData],
+  );
+
+  const activeSubaccount =
+    subaccounts.find((s) => s.subaccount_id === activeSubaccountId) ?? null;
+
   return (
     <Ctx.Provider
       value={{
@@ -247,6 +430,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         disconnect,
         signTypedData,
         signMessage,
+        subaccounts,
+        activeSubaccountId,
+        activeSubaccount,
+        isLoadingSubaccounts,
+        subaccountsError,
+        refreshSubaccounts,
+        setActiveSubaccountId,
+        createSubaccount,
+        renameSubaccount,
       }}
     >
       {children}

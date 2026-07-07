@@ -73,7 +73,9 @@ export type WriteAuthAction =
   | "OPTION_RFQ_CANCEL"
   | "OPTION_EXECUTION_INTENT_SIGNATURE_SUBMIT"
   | "OPTION_TWAP_CREATE"
-  | "OPTION_TWAP_CANCEL";
+  | "OPTION_TWAP_CANCEL"
+  | "SUBACCOUNT_CREATE"
+  | "SUBACCOUNT_RENAME";
 
 // ---------------------------------------------------------------------
 // Canonical payload encoding
@@ -243,6 +245,15 @@ export interface AuthorizationEnvelope {
   deadline_ms: number;
   signature: Hex;
   idempotency_key?: string;
+  /**
+   * SUBACCOUNTS-FRONTEND-SWITCHER-V1 — envelope version. Absent or
+   * `1` selects legacy Options canonical bytes (Account 1). Set to
+   * `2` when the request targets a non-default subaccount; the
+   * backend then reconstructs the v2 canonical which embeds
+   * `subaccount_id` immediately after `account`. RFQ and Perps
+   * actions do not use this field yet.
+   */
+  version?: number;
 }
 
 // ---------------------------------------------------------------------
@@ -324,6 +335,13 @@ export async function buildAuthorization(args: {
   signTypedData: SignTypedDataFn;
   idempotencyKey?: string;
   signal?: AbortSignal;
+  /**
+   * Envelope version to include on the returned envelope. Pass `2`
+   * for Options mutations targeting a non-default subaccount so the
+   * backend selects the v2 canonical reconstruction. Absent / `1`
+   * preserves legacy v1 wire behaviour.
+   */
+  version?: number;
 }): Promise<AuthorizationEnvelope> {
   const challenge = await requestChallenge({
     account: args.account,
@@ -363,6 +381,9 @@ export async function buildAuthorization(args: {
   };
   if (args.idempotencyKey) {
     envelope.idempotency_key = args.idempotencyKey;
+  }
+  if (args.version !== undefined && args.version !== 1) {
+    envelope.version = args.version;
   }
   return envelope;
 }
@@ -539,6 +560,238 @@ export const canonical = {
   optionTwapCancel(args: { account: Address; optionTwapId: string }): Uint8Array {
     return canonicalPayload("OPTION_TWAP_CANCEL", [
       ["account", cv.addr(args.account)],
+      ["option_twap_id", cv.str(args.optionTwapId)],
+    ]);
+  },
+
+  // -------------------------------------------------------------------
+  // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — v1 conditional order create
+  // (previously constructed inline in `TpSlManager`). Extracted to
+  // give v1 and v2 a shared field-list helper.
+  // -------------------------------------------------------------------
+
+  conditionalOrderCreate(args: {
+    account: Address;
+    optionSeriesId: string;
+    quantity1e8: string;
+    linkAsOco: boolean;
+    expiresAtMs?: number | bigint | null;
+    legs: ReadonlyArray<{
+      conditionalType: "take_profit" | "stop_loss";
+      triggerPrice1e8: string;
+      limitPrice1e8: string;
+      triggerCondition?: "gte" | "lte" | null;
+    }>;
+  }): Uint8Array {
+    return canonicalPayload(
+      "CONDITIONAL_ORDER_CREATE",
+      conditionalOrderCreateFields({ ...args, subaccountId: null }),
+    );
+  },
+
+  /**
+   * SUBACCOUNTS-FRONTEND-SWITCHER-V1 — byte-identical to backend
+   * `canonical_subaccount_create`. Field order: account | name.
+   * Never authorised against a specific subaccount — the create
+   * action is always wallet-level.
+   */
+  subaccountCreate(args: {
+    account: Address;
+    name?: string | null;
+  }): Uint8Array {
+    return canonicalPayload("SUBACCOUNT_CREATE", [
+      ["account", cv.addr(args.account)],
+      ["name", args.name == null ? cv.null() : cv.str(args.name)],
+    ]);
+  },
+
+  /**
+   * SUBACCOUNTS-FRONTEND-SWITCHER-V1 — byte-identical to backend
+   * `canonical_subaccount_rename`. Field order:
+   * account | subaccount_id | name.
+   */
+  subaccountRename(args: {
+    account: Address;
+    subaccountId: number;
+    name: string;
+  }): Uint8Array {
+    return canonicalPayload("SUBACCOUNT_RENAME", [
+      ["account", cv.addr(args.account)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["name", cv.str(args.name)],
+    ]);
+  },
+};
+
+// ---------------------------------------------------------------------
+// SUBACCOUNTS-FRONTEND-SWITCHER-V1 — v2 canonical builders.
+//
+// Each helper is byte-identical to its backend `canonical_*_v2`
+// counterpart in `src/api/routes.rs`. The `subaccount_id` key is
+// emitted immediately after `account` for every action.
+//
+// Use these builders when the active subaccount is not the default
+// (subaccount 1). Pair with `buildAuthorization({ ..., version: 2 })`
+// so the backend selects the v2 reconstruction. Sending v2 canonical
+// bytes with a v1 envelope will fail as `PayloadMismatch` at the
+// challenge verifier.
+// ---------------------------------------------------------------------
+
+/**
+ * Shared field-list builder for `CONDITIONAL_ORDER_CREATE`. When
+ * `subaccountId` is provided, emits `subaccount_id` immediately after
+ * `account` and leaves every other field byte-identical to v1.
+ */
+function conditionalOrderCreateFields(args: {
+  account: Address;
+  subaccountId: number | null;
+  optionSeriesId: string;
+  quantity1e8: string;
+  linkAsOco: boolean;
+  expiresAtMs?: number | bigint | null;
+  legs: ReadonlyArray<{
+    conditionalType: "take_profit" | "stop_loss";
+    triggerPrice1e8: string;
+    limitPrice1e8: string;
+    triggerCondition?: "gte" | "lte" | null;
+  }>;
+}): Array<readonly [string, CanonicalValue]> {
+  const fields: Array<readonly [string, CanonicalValue]> = [
+    ["account", cv.addr(args.account)],
+  ];
+  if (args.subaccountId !== null) {
+    fields.push(["subaccount_id", cv.u64(BigInt(args.subaccountId))]);
+  }
+  fields.push(
+    ["option_series_id", cv.str(args.optionSeriesId)],
+    ["quantity_1e8", cv.str(args.quantity1e8)],
+    ["link_as_oco", cv.bool(args.linkAsOco)],
+    [
+      "expires_at_ms",
+      args.expiresAtMs == null ? cv.null() : cv.u64(BigInt(args.expiresAtMs)),
+    ],
+    ["leg_count", cv.u64(BigInt(args.legs.length))],
+  );
+  args.legs.forEach((leg, idx) => {
+    const prefix = `leg${idx}_`;
+    fields.push([`${prefix}conditional_type`, cv.str(leg.conditionalType)]);
+    fields.push([`${prefix}trigger_price_1e8`, cv.str(leg.triggerPrice1e8)]);
+    fields.push([`${prefix}limit_price_1e8`, cv.str(leg.limitPrice1e8)]);
+    fields.push([
+      `${prefix}trigger_condition`,
+      leg.triggerCondition ? cv.str(leg.triggerCondition) : cv.null(),
+    ]);
+  });
+  return fields;
+}
+
+export const canonicalV2 = {
+  optionOrderSubmit(args: {
+    account: Address;
+    subaccountId: number;
+    optionSeriesId: string;
+    side: "buy" | "sell";
+    price1e8: string;
+    size1e8: string;
+    timeInForce: "gtc" | "ioc" | "fok";
+    postOnly: boolean;
+    clientOrderId?: string | null;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_ORDER_SUBMIT", [
+      ["account", cv.addr(args.account)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["option_series_id", cv.str(args.optionSeriesId)],
+      ["side", cv.str(args.side)],
+      ["price_1e8", cv.str(args.price1e8)],
+      ["size_1e8", cv.str(args.size1e8)],
+      ["time_in_force", cv.str(args.timeInForce)],
+      ["post_only", cv.bool(args.postOnly)],
+      [
+        "client_order_id",
+        args.clientOrderId ? cv.str(args.clientOrderId) : cv.null(),
+      ],
+    ]);
+  },
+
+  optionOrderCancel(args: {
+    account: Address;
+    subaccountId: number;
+    orderId: string;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_ORDER_CANCEL", [
+      ["account", cv.addr(args.account)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["order_id", cv.str(args.orderId)],
+    ]);
+  },
+
+  conditionalOrderCreate(args: {
+    account: Address;
+    subaccountId: number;
+    optionSeriesId: string;
+    quantity1e8: string;
+    linkAsOco: boolean;
+    expiresAtMs?: number | bigint | null;
+    legs: ReadonlyArray<{
+      conditionalType: "take_profit" | "stop_loss";
+      triggerPrice1e8: string;
+      limitPrice1e8: string;
+      triggerCondition?: "gte" | "lte" | null;
+    }>;
+  }): Uint8Array {
+    return canonicalPayload(
+      "CONDITIONAL_ORDER_CREATE",
+      conditionalOrderCreateFields({ ...args, subaccountId: args.subaccountId }),
+    );
+  },
+
+  conditionalOrderCancel(args: {
+    account: Address;
+    subaccountId: number;
+    conditionalOrderId: string;
+  }): Uint8Array {
+    return canonicalPayload("CONDITIONAL_ORDER_CANCEL", [
+      ["account", cv.addr(args.account)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["conditional_order_id", cv.str(args.conditionalOrderId)],
+    ]);
+  },
+
+  optionTwapCreate(args: {
+    account: Address;
+    subaccountId: number;
+    optionSeriesId: string;
+    side: "buy" | "sell";
+    size1e8: string;
+    limitPrice1e8: string;
+    runningTimeMs: number | bigint;
+    childCount: number;
+    clientOrderId?: string | null;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_TWAP_CREATE", [
+      ["account", cv.addr(args.account)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["option_series_id", cv.str(args.optionSeriesId)],
+      ["side", cv.str(args.side)],
+      ["size_1e8", cv.str(args.size1e8)],
+      ["limit_price_1e8", cv.str(args.limitPrice1e8)],
+      ["running_time_ms", cv.u64(BigInt(args.runningTimeMs))],
+      ["child_count", cv.u64(BigInt(args.childCount))],
+      [
+        "client_order_id",
+        args.clientOrderId == null ? cv.null() : cv.str(args.clientOrderId),
+      ],
+    ]);
+  },
+
+  optionTwapCancel(args: {
+    account: Address;
+    subaccountId: number;
+    optionTwapId: string;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_TWAP_CANCEL", [
+      ["account", cv.addr(args.account)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
       ["option_twap_id", cv.str(args.optionTwapId)],
     ]);
   },

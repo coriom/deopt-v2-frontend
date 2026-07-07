@@ -140,8 +140,23 @@ export function RfqStrategyWorkspace() {
     if (!wallet.address) return "Connect your wallet to request quotes.";
     if (wallet.isMainnet) return "Mainnet is disabled — switch to Base Sepolia.";
     if (!wallet.isExpectedChain) return "Wrong network — switch to Base Sepolia.";
+    // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — RFQ is NOT subaccount-aware
+    // on the backend yet. Blocking here keeps us honest: an operator
+    // on Account 2+ cannot submit an RFQ that would silently route
+    // through the wallet aggregate. Follow-up: SUBACCOUNTS-RFQ-
+    // INTEGRATION-V1.
+    if (wallet.activeSubaccountId > 1) {
+      return "RFQ is not subaccount-scoped yet. Switch to Account 1 or wait for SUBACCOUNTS-RFQ-INTEGRATION-V1.";
+    }
     return null;
-  }, [rfqEnabled, wallet.hasProvider, wallet.address, wallet.isMainnet, wallet.isExpectedChain]);
+  }, [
+    rfqEnabled,
+    wallet.hasProvider,
+    wallet.address,
+    wallet.isMainnet,
+    wallet.isExpectedChain,
+    wallet.activeSubaccountId,
+  ]);
 
   const strategyBlocker = useMemo(() => {
     if (!rfqEnabled) return null;

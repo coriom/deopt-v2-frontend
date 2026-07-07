@@ -35,8 +35,7 @@ import { useWallet } from "@/lib/wallet";
 import {
   buildAuthorization,
   canonical,
-  canonicalPayload,
-  cv,
+  canonicalV2,
 } from "@/lib/write-auth";
 
 export interface TpSlManagerProps {
@@ -47,7 +46,7 @@ export interface TpSlManagerProps {
 }
 
 export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
-  const { signTypedData } = useWallet();
+  const { signTypedData, activeSubaccountId } = useWallet();
   const [includeTp, setIncludeTp] = useState(true);
   const [includeSl, setIncludeSl] = useState(false);
   const [linkAsOco, setLinkAsOco] = useState(false);
@@ -75,12 +74,20 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
     setListError(null);
     try {
       const all = await listConditionalOrders(address);
-      // Show only the rows relevant to the connected wallet and (when
-      // a series is selected) the current series, so the operator is
-      // not distracted by other instruments.
-      const filtered = seriesId
-        ? all.filter((o) => o.option_series_id === seriesId)
-        : all;
+      // Show only the rows relevant to the connected wallet, the
+      // active subaccount, and (when a series is selected) the
+      // current series. Filter subaccount client-side because the
+      // list route is not yet subaccount-scoped on the backend.
+      const filtered = all.filter((o) => {
+        if (
+          o.subaccount_id !== undefined &&
+          o.subaccount_id !== activeSubaccountId
+        ) {
+          return false;
+        }
+        if (seriesId && o.option_series_id !== seriesId) return false;
+        return true;
+      });
       setOrders(filtered);
     } catch (err) {
       const message =
@@ -89,7 +96,7 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
     } finally {
       setListLoading(false);
     }
-  }, [address, seriesId]);
+  }, [address, seriesId, activeSubaccountId]);
 
   useEffect(() => {
     void refresh();
@@ -117,32 +124,35 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
       });
     }
     try {
-      // ACCOUNT-WRITE-AUTH-HARDENING-V1 — bind every field that the
-      // backend's canonical_conditional_order_create() includes, in
-      // the same order, so the digest matches on the server side.
-      const fields: Array<readonly [string, ReturnType<typeof cv.str> | ReturnType<typeof cv.bool> | ReturnType<typeof cv.u128> | ReturnType<typeof cv.addr> | ReturnType<typeof cv.null> | ReturnType<typeof cv.u64>]> = [
-        ["account", cv.addr(address)],
-        ["option_series_id", cv.str(seriesId)],
-        ["quantity_1e8", cv.str(quantity1e8)],
-        ["link_as_oco", cv.bool(ocoEffective)],
-        ["expires_at_ms", cv.null()],
-        ["leg_count", cv.u64(BigInt(legs.length))],
-      ];
-      legs.forEach((leg, idx) => {
-        const prefix = `leg${idx}_`;
-        fields.push([`${prefix}conditional_type`, cv.str(leg.conditional_type)]);
-        fields.push([`${prefix}trigger_price_1e8`, cv.str(leg.trigger_price_1e8)]);
-        fields.push([`${prefix}limit_price_1e8`, cv.str(leg.limit_price_1e8)]);
-        fields.push([
-          `${prefix}trigger_condition`,
-          leg.trigger_condition ? cv.str(leg.trigger_condition) : cv.null(),
-        ]);
-      });
+      const useV2 = activeSubaccountId > 1;
+      const legsForCanonical = legs.map((leg) => ({
+        conditionalType: leg.conditional_type,
+        triggerPrice1e8: leg.trigger_price_1e8,
+        limitPrice1e8: leg.limit_price_1e8,
+        triggerCondition: leg.trigger_condition ?? null,
+      }));
+      const canonicalBytes = useV2
+        ? canonicalV2.conditionalOrderCreate({
+            account: address as `0x${string}`,
+            subaccountId: activeSubaccountId,
+            optionSeriesId: seriesId,
+            quantity1e8: quantity1e8,
+            linkAsOco: ocoEffective,
+            legs: legsForCanonical,
+          })
+        : canonical.conditionalOrderCreate({
+            account: address as `0x${string}`,
+            optionSeriesId: seriesId,
+            quantity1e8: quantity1e8,
+            linkAsOco: ocoEffective,
+            legs: legsForCanonical,
+          });
       const authorization = await buildAuthorization({
         account: address as `0x${string}`,
         action: "CONDITIONAL_ORDER_CREATE",
-        canonical: canonicalPayload("CONDITIONAL_ORDER_CREATE", fields),
+        canonical: canonicalBytes,
         signTypedData,
+        version: useV2 ? 2 : undefined,
       });
       const created = await createConditionalOrders(address, {
         option_series_id: seriesId,
@@ -150,6 +160,7 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
         legs,
         link_as_oco: ocoEffective,
         authorization,
+        subaccount_id: activeSubaccountId,
       });
       setOkBanner(
         ocoEffective
@@ -166,19 +177,32 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
     }
   };
 
-  const handleCancel = async (id: string) => {
+  const handleCancel = async (id: string, rowSubaccountId: number | undefined) => {
     if (!address) return;
     try {
+      const effectiveSubaccountId = rowSubaccountId ?? activeSubaccountId;
+      const useV2 = effectiveSubaccountId > 1;
+      const canonicalBytes = useV2
+        ? canonicalV2.conditionalOrderCancel({
+            account: address as `0x${string}`,
+            subaccountId: effectiveSubaccountId,
+            conditionalOrderId: id,
+          })
+        : canonical.conditionalOrderCancel({
+            account: address as `0x${string}`,
+            conditionalOrderId: id,
+          });
       const authorization = await buildAuthorization({
         account: address as `0x${string}`,
         action: "CONDITIONAL_ORDER_CANCEL",
-        canonical: canonical.conditionalOrderCancel({
-          account: address as `0x${string}`,
-          conditionalOrderId: id,
-        }),
+        canonical: canonicalBytes,
         signTypedData,
+        version: useV2 ? 2 : undefined,
       });
-      await cancelConditionalOrder(address, id, { authorization });
+      await cancelConditionalOrder(address, id, {
+        authorization,
+        subaccount_id: effectiveSubaccountId,
+      });
       await refresh();
     } catch (err) {
       const message =
@@ -432,7 +456,9 @@ export function TpSlManager({ address, seriesId }: TpSlManagerProps) {
                       <button
                         type="button"
                         data-testid={`tp-sl-cancel-${o.id}`}
-                        onClick={() => void handleCancel(o.id)}
+                        onClick={() =>
+                          void handleCancel(o.id, o.subaccount_id)
+                        }
                         className="rounded border border-transparent px-1 text-zinc-500 hover:border-red-500/40 hover:text-red-200"
                       >
                         cancel

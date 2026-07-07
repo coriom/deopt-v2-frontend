@@ -363,6 +363,13 @@ export function fetchHistoryV2(
     range: HistoryRange;
     page: number;
     pageSize: number;
+    /**
+     * SUBACCOUNTS-FRONTEND-SWITCHER-V1 — active subaccount to filter
+     * on. Omit for the default (backend defaults to subaccount 1).
+     * Pass `all: true` to opt into the wallet-aggregate view.
+     */
+    subaccountId?: number;
+    all?: boolean;
     signal?: AbortSignal;
   },
 ): Promise<Envelope<HistoryV2Data>> {
@@ -371,6 +378,11 @@ export function fetchHistoryV2(
   qs.set("range", opts.range);
   qs.set("page", String(opts.page));
   qs.set("page_size", String(opts.pageSize));
+  if (opts.all) {
+    qs.set("all", "true");
+  } else if (opts.subaccountId !== undefined) {
+    qs.set("subaccount_id", String(opts.subaccountId));
+  }
   return request<HistoryV2Data>(
     "GET",
     `/accounts/${address}/history/v2?${qs.toString()}`,
@@ -444,7 +456,7 @@ export function fetchTradingHealth(
  * so the hook layer stays uniform; M-P2c will harmonise.
  */
 async function rawRequest<T>(
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "DELETE" | "PATCH",
   path: string,
   body?: unknown,
   signal?: AbortSignal,
@@ -656,20 +668,31 @@ export function createConditionalOrders(
 
 export function listConditionalOrders(
   address: string,
-  signal?: AbortSignal,
+  optsOrSignal?:
+    | AbortSignal
+    | { subaccountId?: number; all?: boolean; signal?: AbortSignal },
 ): Promise<ConditionalOrderResponse[]> {
+  const opts = normalizeListOpts(optsOrSignal);
+  const qs = new URLSearchParams();
+  if (opts.all) qs.set("all", "true");
+  else if (opts.subaccountId !== undefined)
+    qs.set("subaccount_id", String(opts.subaccountId));
+  const suffix = qs.toString().length ? `?${qs.toString()}` : "";
   return rawRequest<ConditionalOrderResponse[]>(
     "GET",
-    `/accounts/${address}/conditional-orders`,
+    `/accounts/${address}/conditional-orders${suffix}`,
     undefined,
-    signal,
+    opts.signal,
   );
 }
 
 export function cancelConditionalOrder(
   address: string,
   id: string,
-  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  body: {
+    authorization: import("./write-auth").AuthorizationEnvelope;
+    subaccount_id?: number;
+  },
   signal?: AbortSignal,
 ): Promise<ConditionalOrderResponse> {
   return rawRequest<ConditionalOrderResponse>(
@@ -776,6 +799,12 @@ export interface OptionOrderRow {
   status: string;
   created_at_ms: number;
   updated_at_ms: number;
+  /**
+   * SUBACCOUNTS-OPTIONS-ORDERS-HISTORY-V1 — subaccount that owns the
+   * order. Backend emits `1` for pre-migration rows. May be absent on
+   * older enveloped responses; treat as `1` in that case.
+   */
+  subaccount_id?: number;
 }
 
 export interface OptionFillRow {
@@ -789,37 +818,70 @@ export interface OptionFillRow {
   price_1e8: string;
   size_1e8: string;
   created_at_ms: number;
+  /**
+   * SUBACCOUNTS-OPTIONS-ORDERS-HISTORY-V1 — per-side subaccount ids
+   * so a wallet that owned both sides can still filter by book.
+   */
+  buyer_subaccount_id?: number;
+  seller_subaccount_id?: number;
 }
 
 export function listAccountOptionOrders(
   account: string,
-  signal?: AbortSignal,
+  optsOrSignal?:
+    | AbortSignal
+    | { subaccountId?: number; all?: boolean; signal?: AbortSignal },
 ): Promise<OptionOrderRow[]> {
+  const opts = normalizeListOpts(optsOrSignal);
   const qs = new URLSearchParams({ account: account.toLowerCase() });
+  if (opts.all) qs.set("all", "true");
+  else if (opts.subaccountId !== undefined)
+    qs.set("subaccount_id", String(opts.subaccountId));
   return rawRequest<OptionOrderRow[]>(
     "GET",
     `/options/orders?${qs.toString()}`,
     undefined,
-    signal,
+    opts.signal,
   );
 }
 
 export function listAccountOptionFills(
   account: string,
-  signal?: AbortSignal,
+  optsOrSignal?:
+    | AbortSignal
+    | { subaccountId?: number; all?: boolean; signal?: AbortSignal },
 ): Promise<OptionFillRow[]> {
+  const opts = normalizeListOpts(optsOrSignal);
   const qs = new URLSearchParams({ account: account.toLowerCase() });
+  if (opts.all) qs.set("all", "true");
+  else if (opts.subaccountId !== undefined)
+    qs.set("subaccount_id", String(opts.subaccountId));
   return rawRequest<OptionFillRow[]>(
     "GET",
     `/options/fills?${qs.toString()}`,
     undefined,
-    signal,
+    opts.signal,
   );
+}
+
+function normalizeListOpts(
+  arg?:
+    | AbortSignal
+    | { subaccountId?: number; all?: boolean; signal?: AbortSignal },
+): { subaccountId?: number; all?: boolean; signal?: AbortSignal } {
+  if (arg == null) return {};
+  if (typeof (arg as AbortSignal).aborted === "boolean") {
+    return { signal: arg as AbortSignal };
+  }
+  return arg as { subaccountId?: number; all?: boolean; signal?: AbortSignal };
 }
 
 export function cancelOptionOrder(
   orderId: string,
-  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  body: {
+    authorization: import("./write-auth").AuthorizationEnvelope;
+    subaccount_id?: number;
+  },
   signal?: AbortSignal,
 ): Promise<OptionOrderRow> {
   return rawRequest<OptionOrderRow>(
@@ -1080,6 +1142,12 @@ export type OptionTwapChildStatus =
 export interface OptionTwapOrderResponse {
   option_twap_id: string;
   account: string;
+  /**
+   * SUBACCOUNTS-OPTIONS-CONDITIONAL-TWAP-WS-V1 — owning subaccount.
+   * Backend returns `1` for pre-migration rows. Optional in case an
+   * older enveloped response is still cached client-side.
+   */
+  subaccount_id?: number;
   option_series_id: string;
   side: "buy" | "sell";
   size_1e8: string;
@@ -1117,6 +1185,8 @@ export interface OptionTwapChildResponse {
 
 export interface CreateOptionTwapRequest {
   account: string;
+  /** SUBACCOUNTS-FRONTEND-SWITCHER-V1 — omit for legacy Account 1. */
+  subaccount_id?: number;
   option_series_id: string;
   side: "buy" | "sell";
   size_1e8: string;
@@ -1140,10 +1210,18 @@ export function createOptionsTwapOrder(
 }
 
 export function listOptionsTwapOrders(
-  opts?: { account?: string; signal?: AbortSignal },
+  opts?: {
+    account?: string;
+    subaccountId?: number;
+    all?: boolean;
+    signal?: AbortSignal;
+  },
 ): Promise<OptionTwapOrderResponse[]> {
   const qs = new URLSearchParams();
   if (opts?.account) qs.set("account", opts.account.toLowerCase());
+  if (opts?.all) qs.set("all", "true");
+  else if (opts?.subaccountId !== undefined)
+    qs.set("subaccount_id", String(opts.subaccountId));
   const suffix = qs.toString().length ? `?${qs.toString()}` : "";
   return rawRequest<OptionTwapOrderResponse[]>(
     "GET",
@@ -1179,7 +1257,10 @@ export function listOptionsTwapChildren(
 
 export function cancelOptionsTwapOrder(
   optionTwapId: string,
-  body: { authorization: import("./write-auth").AuthorizationEnvelope },
+  body: {
+    authorization: import("./write-auth").AuthorizationEnvelope;
+    subaccount_id?: number;
+  },
   signal?: AbortSignal,
 ): Promise<OptionTwapOrderResponse> {
   return rawRequest<OptionTwapOrderResponse>(
@@ -1697,6 +1778,84 @@ export function cancelPerpsOrder(
     "DELETE",
     `/perps/orders/${encodeURIComponent(orderId)}?${q}`,
     undefined,
+    signal,
+  );
+}
+
+// ---------------------------------------------------------------------
+// SUBACCOUNTS-FRONTEND-SWITCHER-V1 — subaccount CRUD.
+//
+// The backend exposes `(owner_address, subaccount_id)` composite
+// resource under `/accounts/{address}/subaccounts`. GET lazy-creates
+// subaccount 1 on first access, so a first-connect always sees at
+// least Account 1. Rename PATCHes the `name`; the returned DTO
+// carries a stable `display_name` derived server-side.
+// ---------------------------------------------------------------------
+
+export interface SubaccountDto {
+  owner_address: string;
+  subaccount_id: number;
+  name: string | null;
+  display_name: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+  archived_at_ms?: number | null;
+}
+
+export function listSubaccounts(
+  address: string,
+  signal?: AbortSignal,
+): Promise<SubaccountDto[]> {
+  return rawRequest<{ subaccounts: SubaccountDto[] }>(
+    "GET",
+    `/accounts/${address}/subaccounts`,
+    undefined,
+    signal,
+  ).then((r) => r.subaccounts);
+}
+
+export function getSubaccount(
+  address: string,
+  subaccountId: number,
+  signal?: AbortSignal,
+): Promise<SubaccountDto> {
+  return rawRequest<SubaccountDto>(
+    "GET",
+    `/accounts/${address}/subaccounts/${subaccountId}`,
+    undefined,
+    signal,
+  );
+}
+
+export function createSubaccount(
+  address: string,
+  body: {
+    name?: string | null;
+    authorization: import("./write-auth").AuthorizationEnvelope;
+  },
+  signal?: AbortSignal,
+): Promise<SubaccountDto> {
+  return rawRequest<SubaccountDto>(
+    "POST",
+    `/accounts/${address}/subaccounts`,
+    body,
+    signal,
+  );
+}
+
+export function renameSubaccount(
+  address: string,
+  subaccountId: number,
+  body: {
+    name: string;
+    authorization: import("./write-auth").AuthorizationEnvelope;
+  },
+  signal?: AbortSignal,
+): Promise<SubaccountDto> {
+  return rawRequest<SubaccountDto>(
+    "PATCH",
+    `/accounts/${address}/subaccounts/${subaccountId}`,
+    body,
     signal,
   );
 }

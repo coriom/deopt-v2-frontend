@@ -75,6 +75,12 @@ export function RfqMakerQuoteForm({ rfq, onSubmitted }: RfqMakerQuoteFormProps) 
     if (!wallet.address) return "Connect your wallet to quote.";
     if (wallet.isMainnet) return "Mainnet is disabled — switch to Base Sepolia.";
     if (!wallet.isExpectedChain) return "Wrong network — switch to Base Sepolia.";
+    // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — Maker quote submission is
+    // still a wallet-level action; blocking on non-default subaccount
+    // avoids silently routing the quote through Account 1 while the
+    // switcher advertises another subaccount.
+    if (wallet.activeSubaccountId > 1)
+      return "RFQ is not subaccount-scoped yet. Switch to Account 1 to quote.";
     return null;
   })();
 

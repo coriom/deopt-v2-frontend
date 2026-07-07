@@ -8,6 +8,7 @@ import {
   WrongNetworkBanner,
 } from "@/components/banners";
 import { WalletConnectButton } from "@/components/wallet/WalletConnectButton";
+import { SubaccountSwitcher } from "@/components/wallet/SubaccountSwitcher";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
 import { NavbarRouteIndicator } from "@/components/NavbarRouteIndicator";
 import { PrimaryNavLinks } from "@/components/PrimaryNavLinks";
@@ -71,6 +72,7 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
             className="flex flex-wrap items-center gap-2 sm:gap-3"
           >
             <WidgetMenuButton />
+            <SubaccountSwitcher />
             <WalletConnectButton />
           </div>
         </header>

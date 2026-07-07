@@ -22,7 +22,7 @@ import {
 } from "@/lib/trading-api";
 import type { ConditionalOrderResponse } from "@/lib/trading-types";
 import { useWallet } from "@/lib/wallet";
-import { buildAuthorization, canonical } from "@/lib/write-auth";
+import { buildAuthorization, canonical, canonicalV2 } from "@/lib/write-auth";
 import { useLifecycleStream } from "@/hooks/useLifecycleStream";
 import type { LifecycleEvent } from "@/lib/lifecycle-types";
 import { AttachedPlansPanel } from "./AttachedPlansPanel";
@@ -42,7 +42,7 @@ export interface ConditionalOrdersPanelProps {
 }
 
 export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps) {
-  const { isExpectedChain, signTypedData } = useWallet();
+  const { isExpectedChain, signTypedData, activeSubaccountId } = useWallet();
   const { status, statusDetail, resyncToken, subscribe } = useLifecycleStream();
   const [rows, setRows] = useState<ConditionalOrderResponse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,14 +53,23 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
     async (signal?: AbortSignal) => {
       if (!address) return;
       try {
+        // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — filter client-side because
+        // `/accounts/:address/conditional-orders` doesn't yet accept a
+        // subaccount query param. The route stays wallet-aggregate;
+        // the panel view is subaccount-scoped.
         const all = await listConditionalOrders(address, signal);
-        all.sort((a, b) => {
+        const filtered = all.filter(
+          (r) =>
+            r.subaccount_id === undefined ||
+            r.subaccount_id === activeSubaccountId,
+        );
+        filtered.sort((a, b) => {
           const at = TERMINAL_STATUSES.has(a.status);
           const bt = TERMINAL_STATUSES.has(b.status);
           if (at !== bt) return at ? 1 : -1;
           return b.created_at_ms - a.created_at_ms;
         });
-        setRows(all);
+        setRows(filtered);
         setError(null);
       } catch (err) {
         if ((err as Error)?.name === "AbortError") return;
@@ -69,7 +78,7 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
         setError(message);
       }
     },
-    [address],
+    [address, activeSubaccountId],
   );
 
   useEffect(() => {
@@ -77,6 +86,7 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
       setRows(null);
       return;
     }
+    setRows(null);
     const ctrl = new AbortController();
     void refresh(ctrl.signal);
     const handle = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
@@ -84,7 +94,7 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
       ctrl.abort();
       window.clearInterval(handle);
     };
-  }, [address, refresh]);
+  }, [address, activeSubaccountId, refresh]);
 
   useEffect(() => {
     if (resyncToken === 0 || !address) return;
@@ -124,7 +134,7 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
     return unsubscribe;
   }, [address, subscribe]);
 
-  const handleCancel = async (id: string) => {
+  const handleCancel = async (id: string, rowSubaccountId: number | undefined) => {
     if (!address) return;
     if (!isExpectedChain) {
       setCancelError("Switch to Base Sepolia to sign the cancel envelope.");
@@ -133,16 +143,29 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
     setCancelInFlight(id);
     setCancelError(null);
     try {
+      const effectiveSubaccountId = rowSubaccountId ?? activeSubaccountId;
+      const useV2 = effectiveSubaccountId > 1;
+      const canonicalBytes = useV2
+        ? canonicalV2.conditionalOrderCancel({
+            account: address as `0x${string}`,
+            subaccountId: effectiveSubaccountId,
+            conditionalOrderId: id,
+          })
+        : canonical.conditionalOrderCancel({
+            account: address as `0x${string}`,
+            conditionalOrderId: id,
+          });
       const authorization = await buildAuthorization({
         account: address as `0x${string}`,
         action: "CONDITIONAL_ORDER_CANCEL",
-        canonical: canonical.conditionalOrderCancel({
-          account: address as `0x${string}`,
-          conditionalOrderId: id,
-        }),
+        canonical: canonicalBytes,
         signTypedData,
+        version: useV2 ? 2 : undefined,
       });
-      await cancelConditionalOrder(address, id, { authorization });
+      await cancelConditionalOrder(address, id, {
+        authorization,
+        subaccount_id: effectiveSubaccountId,
+      });
       await refresh();
     } catch (err) {
       const message =
@@ -272,7 +295,9 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
                     {cancelable && (
                       <button
                         type="button"
-                        onClick={() => void handleCancel(r.id)}
+                        onClick={() =>
+                          void handleCancel(r.id, r.subaccount_id)
+                        }
                         disabled={cancelInFlight === r.id}
                         data-testid="conditional-orders-cancel"
                         className="rounded border border-rose-500/30 px-2 py-0.5 text-[10px] text-rose-200 hover:border-rose-400/60 hover:text-rose-100 disabled:opacity-40"

@@ -18,7 +18,7 @@ import {
   type OptionOrderRow,
 } from "@/lib/trading-api";
 import { useWallet } from "@/lib/wallet";
-import { buildAuthorization, canonical } from "@/lib/write-auth";
+import { buildAuthorization, canonical, canonicalV2 } from "@/lib/write-auth";
 import { useLifecycleStream } from "@/hooks/useLifecycleStream";
 import type { LifecycleEvent } from "@/lib/lifecycle-types";
 import { LifecycleStatusBadge } from "./LifecycleStatusBadge";
@@ -31,7 +31,7 @@ export interface OpenOrdersPanelProps {
 }
 
 export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
-  const { isExpectedChain, signTypedData } = useWallet();
+  const { isExpectedChain, signTypedData, activeSubaccountId } = useWallet();
   const { status, statusDetail, resyncToken, subscribe } = useLifecycleStream();
   const [orders, setOrders] = useState<OptionOrderRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +42,10 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
     async (signal?: AbortSignal) => {
       if (!address) return;
       try {
-        const rows = await listAccountOptionOrders(address, signal);
+        const rows = await listAccountOptionOrders(address, {
+          subaccountId: activeSubaccountId,
+          signal,
+        });
         // Stable sort: most-recent first.
         rows.sort((a, b) => b.created_at_ms - a.created_at_ms);
         setOrders(rows);
@@ -54,7 +57,7 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
         setError(message);
       }
     },
-    [address],
+    [address, activeSubaccountId],
   );
 
   useEffect(() => {
@@ -62,6 +65,9 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
       setOrders(null);
       return;
     }
+    // Clear rows the moment the subaccount changes so the operator
+    // never sees a mixed state while the refetch is in flight.
+    setOrders(null);
     const ctrl = new AbortController();
     void refresh(ctrl.signal);
     const handle = window.setInterval(() => {
@@ -71,7 +77,7 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
       ctrl.abort();
       window.clearInterval(handle);
     };
-  }, [address, refresh]);
+  }, [address, activeSubaccountId, refresh]);
 
   // Reconnect → trigger an immediate REST resync to bridge any missed deltas.
   useEffect(() => {
@@ -107,7 +113,11 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
     return unsubscribe;
   }, [address, subscribe]);
 
-  const handleCancel = async (orderId: string, account: string) => {
+  const handleCancel = async (
+    orderId: string,
+    account: string,
+    rowSubaccountId: number | undefined,
+  ) => {
     if (!isExpectedChain) {
       setCancelError("Switch to Base Sepolia to sign the cancel envelope.");
       return;
@@ -115,16 +125,31 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
     setCancelInFlight(orderId);
     setCancelError(null);
     try {
+      // Prefer the row's own subaccount so the ownership check aligns
+      // even if the operator switched between fetch and click.
+      const effectiveSubaccountId = rowSubaccountId ?? activeSubaccountId;
+      const useV2 = effectiveSubaccountId > 1;
+      const canonicalBytes = useV2
+        ? canonicalV2.optionOrderCancel({
+            account: account as `0x${string}`,
+            subaccountId: effectiveSubaccountId,
+            orderId,
+          })
+        : canonical.optionOrderCancel({
+            account: account as `0x${string}`,
+            orderId,
+          });
       const authorization = await buildAuthorization({
         account: account as `0x${string}`,
         action: "OPTION_ORDER_CANCEL",
-        canonical: canonical.optionOrderCancel({
-          account: account as `0x${string}`,
-          orderId,
-        }),
+        canonical: canonicalBytes,
         signTypedData,
+        version: useV2 ? 2 : undefined,
       });
-      await cancelOptionOrder(orderId, { authorization });
+      await cancelOptionOrder(orderId, {
+        authorization,
+        subaccount_id: effectiveSubaccountId,
+      });
       await refresh();
     } catch (err) {
       const message =
@@ -241,7 +266,13 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
                     {cancelable && (
                       <button
                         type="button"
-                        onClick={() => void handleCancel(o.order_id, o.account)}
+                        onClick={() =>
+                          void handleCancel(
+                            o.order_id,
+                            o.account,
+                            o.subaccount_id,
+                          )
+                        }
                         disabled={cancelInFlight === o.order_id}
                         data-testid="open-orders-cancel"
                         className="rounded border border-rose-500/30 px-2 py-0.5 text-[10px] text-rose-200 hover:border-rose-400/60 hover:text-rose-100 disabled:opacity-40"

@@ -371,6 +371,12 @@ export type OptionOrderSide = "buy" | "sell";
 export interface SubmitOptionOrderRequest {
   option_series_id: SeriesId;
   account: EthAddress;
+  /**
+   * SUBACCOUNTS-FRONTEND-SWITCHER-V1 — owning subaccount. Omit for
+   * legacy Account-1 behaviour. Non-default requires the envelope
+   * to carry `version: 2` and v2 canonical bytes.
+   */
+  subaccount_id?: number;
   side: OptionOrderSide;
   price_1e8: DecimalString;
   size_1e8: DecimalString;
@@ -544,6 +550,12 @@ export interface CreateConditionalOrderRequest {
   /** True ⇒ the two legs share an `oco_group_id`. */
   link_as_oco?: boolean;
   expires_at_ms?: number;
+  /**
+   * SUBACCOUNTS-FRONTEND-SWITCHER-V1 — owning subaccount. Omit for
+   * legacy Account-1 behaviour. Non-default requires the envelope
+   * to carry `version: 2` and v2 canonical bytes.
+   */
+  subaccount_id?: number;
   /** ACCOUNT-WRITE-AUTH-HARDENING-V1 — write authorization envelope.
    * Build via `src/lib/write-auth.ts::buildAuthorization`. */
   authorization: import("./write-auth").AuthorizationEnvelope;
@@ -552,6 +564,13 @@ export interface CreateConditionalOrderRequest {
 export interface ConditionalOrderResponse {
   id: string;
   account: EthAddress;
+  /**
+   * SUBACCOUNTS-OPTIONS-CONDITIONAL-TWAP-WS-V1 — owning subaccount.
+   * Backend returns `1` for pre-migration rows. Optional on the
+   * frontend so the type keeps compiling against older enveloped
+   * responses.
+   */
+  subaccount_id?: number;
   option_series_id: SeriesId;
   position_side: PositionSide;
   option_kind: OptionKind;

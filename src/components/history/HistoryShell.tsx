@@ -436,7 +436,7 @@ function isAbort(err: unknown): boolean {
 }
 
 export function HistoryShell() {
-  const { address } = useWallet();
+  const { address, activeSubaccountId } = useWallet();
   const [tab, setTab] = useState<ShellTab>("trades");
   const [range, setRange] = useState<HistoryRange>("last_month");
   const [page, setPage] = useState(1);
@@ -517,7 +517,14 @@ export function HistoryShell() {
     }
     const ctrl = new AbortController();
     setV2State((s) => ({ ...s, loading: true, error: null }));
-    fetchHistoryV2(address, { tab, range, page, pageSize, signal: ctrl.signal })
+    fetchHistoryV2(address, {
+      tab,
+      range,
+      page,
+      pageSize,
+      subaccountId: activeSubaccountId,
+      signal: ctrl.signal,
+    })
       .then((env) => {
         setV2State({ loading: false, error: null, data: env.data });
       })
@@ -526,7 +533,7 @@ export function HistoryShell() {
         setV2State({ loading: false, error: shortenError(err), data: null });
       });
     return () => ctrl.abort();
-  }, [address, tab, range, page, pageSize, refreshNonce]);
+  }, [address, tab, range, page, pageSize, refreshNonce, activeSubaccountId]);
 
   // Reset v2 state on disconnect so we don't leak the previous wallet's
   // rows after a wallet swap.
@@ -550,10 +557,18 @@ export function HistoryShell() {
     setCondState((s) => ({ ...s, loading: true, error: null }));
     listConditionalOrders(address, ctrl.signal)
       .then((rows) => {
+        // Backend hasn't grown a `?subaccount_id=` filter for this
+        // route yet — filter client-side so the Conditional tab
+        // matches the active subaccount view.
+        const filtered = rows.filter(
+          (r) =>
+            r.subaccount_id === undefined ||
+            r.subaccount_id === activeSubaccountId,
+        );
         setCondState({
           loading: false,
           error: null,
-          rows,
+          rows: filtered,
           fetchedAtMs: Date.now(),
         });
       })
@@ -567,7 +582,7 @@ export function HistoryShell() {
         });
       });
     return () => ctrl.abort();
-  }, [address, tab, refreshNonce]);
+  }, [address, tab, refreshNonce, activeSubaccountId]);
 
   const isConditional = tab === "conditional";
 

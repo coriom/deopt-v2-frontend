@@ -92,6 +92,17 @@ export function RfqAcceptModal({
       });
       return;
     }
+    // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — RFQ accept is not subaccount
+    // aware yet, so refuse on non-default subaccounts rather than
+    // silently routing through the wallet aggregate.
+    if (wallet.activeSubaccountId > 1) {
+      setPhase({
+        kind: "error",
+        message:
+          "RFQ is not subaccount-scoped yet. Switch to Account 1 to accept quotes.",
+      });
+      return;
+    }
     try {
       const canonicalBytes = canonical.optionRfqAccept({
         taker: wallet.address as Address,

@@ -617,18 +617,210 @@ function SessionKeysCard() {
 }
 
 function SubaccountsCard() {
+  const {
+    address,
+    subaccounts,
+    activeSubaccountId,
+    isLoadingSubaccounts,
+    subaccountsError,
+    createSubaccount,
+    refreshSubaccounts,
+  } = useWallet();
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    if (!address || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await createSubaccount(null);
+    } catch (e) {
+      setCreateError((e as Error).message || "Failed to create subaccount");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <Card testid="developers-console-subaccounts">
       <CardHeader title="Subaccounts" />
-      <DisabledButton testid="subaccounts-create" leadingPlus>
-        Create Subaccount
-      </DisabledButton>
-      <PlannedTable
-        testid="subaccounts-table"
-        headers={["Subaccount", "Purpose", "Margin Mode", "Status", ""]}
-        emptyText="No subaccounts configured"
-      />
+      <p className="text-[12px] leading-snug text-zinc-500">
+        Subaccounts isolate Options orderbook activity per{" "}
+        <code className="rounded bg-zinc-900 px-1 py-0.5 text-[11px] text-zinc-300">
+          (owner, subaccount_id)
+        </code>
+        . RFQ and Perps subaccount routing are not live yet.
+      </p>
+      {address ? (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleCreate()}
+            disabled={creating}
+            data-testid="subaccounts-create"
+            className="inline-flex w-fit items-center gap-1.5 rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-1.5 text-[13px] text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="text-emerald-400">+</span>
+            {creating ? "Creating…" : "Create Subaccount"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void refreshSubaccounts()}
+            data-testid="subaccounts-refresh"
+            className="text-[12px] text-zinc-400 underline hover:text-zinc-200"
+          >
+            Refresh
+          </button>
+          <span
+            data-testid="subaccounts-active-id"
+            className="text-[12px] text-zinc-500"
+          >
+            Active: Account {activeSubaccountId}
+          </span>
+        </div>
+      ) : (
+        <DisabledButton testid="subaccounts-create" leadingPlus>
+          Connect wallet to create
+        </DisabledButton>
+      )}
+      {createError ? (
+        <p
+          data-testid="subaccounts-create-error"
+          role="alert"
+          className="rounded border border-red-500/40 bg-red-950/30 px-2 py-1 text-[12px] text-red-200"
+        >
+          {createError}
+        </p>
+      ) : null}
+      {subaccountsError ? (
+        <p
+          data-testid="subaccounts-list-error"
+          role="alert"
+          className="rounded border border-red-500/40 bg-red-950/30 px-2 py-1 text-[12px] text-red-200"
+        >
+          {subaccountsError}
+        </p>
+      ) : null}
+      <div className="overflow-x-auto">
+        <table
+          data-testid="subaccounts-table"
+          className="w-full min-w-full border-separate border-spacing-0 text-[13px]"
+        >
+          <thead className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+            <tr>
+              {["Id", "Display", "Custom name", "Created", ""].map((h, i) => (
+                <th
+                  key={`${h}-${i}`}
+                  className="whitespace-nowrap border-b border-zinc-900 px-2 py-2 text-left font-medium"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {!address ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  data-testid="subaccounts-table-disconnected"
+                  className="px-2 py-6 text-center text-[13px] text-zinc-500"
+                >
+                  Connect a wallet to see your subaccounts.
+                </td>
+              </tr>
+            ) : isLoadingSubaccounts && subaccounts.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  data-testid="subaccounts-table-loading"
+                  className="px-2 py-6 text-center text-[13px] text-zinc-500"
+                >
+                  Loading…
+                </td>
+              </tr>
+            ) : subaccounts.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  data-testid="subaccounts-table-empty"
+                  className="px-2 py-6 text-center text-[13px] text-zinc-500"
+                >
+                  No subaccounts yet.
+                </td>
+              </tr>
+            ) : (
+              subaccounts.map((s) => (
+                <tr
+                  key={s.subaccount_id}
+                  data-testid={`subaccounts-row-${s.subaccount_id}`}
+                  data-active={
+                    s.subaccount_id === activeSubaccountId ? "true" : "false"
+                  }
+                  className="border-b border-zinc-900"
+                >
+                  <td className="px-2 py-2 font-mono text-zinc-300">
+                    {s.subaccount_id}
+                  </td>
+                  <td className="px-2 py-2 text-zinc-300">
+                    {s.display_name}
+                  </td>
+                  <td className="px-2 py-2 text-zinc-400">
+                    {s.name ?? "—"}
+                  </td>
+                  <td className="px-2 py-2 font-mono text-[11px] text-zinc-500">
+                    {new Date(s.created_at_ms).toISOString().slice(0, 10)}
+                  </td>
+                  <td className="px-2 py-2 text-right text-[11px]">
+                    {s.subaccount_id === activeSubaccountId ? (
+                      <span className="rounded border border-emerald-500/40 px-1.5 py-0.5 text-emerald-300">
+                        active
+                      </span>
+                    ) : null}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <SubaccountsApiHints />
     </Card>
+  );
+}
+
+function SubaccountsApiHints() {
+  return (
+    <div
+      data-testid="subaccounts-api-hints"
+      className="mt-2 rounded border border-zinc-900 bg-zinc-950 p-2 text-[11px] text-zinc-400"
+    >
+      <p className="mb-1 font-semibold text-zinc-300">
+        Options API — subaccount usage
+      </p>
+      <ul className="space-y-1 leading-snug">
+        <li>
+          <code className="text-zinc-300">GET /options/orders?account=…&amp;subaccount_id=N</code>
+          {" "}— reads default to subaccount 1 when the param is omitted.
+        </li>
+        <li>
+          <code className="text-zinc-300">POST /options/orders</code> — mutation
+          bodies include <code>subaccount_id</code>; non-default requires the
+          write-auth envelope to carry <code>&quot;version&quot;: 2</code>.
+        </li>
+        <li>
+          <code className="text-zinc-300">
+            GET /accounts/:address/history/v2?subaccount_id=N&amp;all=false
+          </code>{" "}
+          — history filters trades + orders by subaccount; transactions tab is
+          wallet-aggregate.
+        </li>
+        <li>
+          RFQ and Perps do not accept <code>subaccount_id</code> yet.
+        </li>
+      </ul>
+    </div>
   );
 }
 
