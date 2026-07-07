@@ -168,18 +168,21 @@ test.describe("OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — execution selector"
     await expect(select.locator("option")).toHaveCount(3);
   });
 
-  test("with 0 legs + Auto, ticket shows picker guidance + Advanced fallback (collapsed by default)", async ({
+  test("with 0 legs + Auto, ticket exposes the Advanced fallback (collapsed by default)", async ({
     page,
   }) => {
     await installMockWallet(page);
     await page.goto("/options");
-    await expect(page.getByTestId("ticket-legs-empty")).toBeVisible();
-    await expect(page.getByTestId("ticket-picker-hint")).toBeVisible();
+    // The legs strip is absent (no chip list, no placeholder) and
+    // the picker hint text was retired for a cleaner ticket. Only
+    // the Advanced fallback for testers remains as the visible
+    // affordance while no leg is selected.
+    await expect(page.getByTestId("ticket-legs-list")).toHaveCount(0);
+    await expect(page.getByTestId("ticket-legs-empty")).toHaveCount(0);
+    await expect(page.getByTestId("ticket-picker-hint")).toHaveCount(0);
     const advanced = page.getByTestId("direct-orderbook-advanced");
     await expect(advanced).toBeVisible();
     await expect(advanced).toHaveAttribute("data-open", "false");
-    // The Series input is NOT mounted while the Advanced toggle is
-    // collapsed (the fallback is opt-in for testers).
     await expect(page.getByTestId("direct-orderbook-series-id")).toHaveCount(0);
   });
 
@@ -312,7 +315,10 @@ test.describe("OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — synthetic leg routi
     await page.goto("/options");
     await seedLegs(page, [CALL_LEG_A, CALL_LEG_B]);
     await page.getByTestId("ticket-legs-clear").click();
-    await expect(page.getByTestId("ticket-legs-empty")).toBeVisible();
+    // After clear: the legs strip unmounts entirely (no chip list,
+    // no placeholder — the "No legs selected" caption was retired).
+    await expect(page.getByTestId("ticket-legs-list")).toHaveCount(0);
+    await expect(page.getByTestId("ticket-legs-empty")).toHaveCount(0);
   });
 
   test("Buy leg chip surfaces emerald direction; Sell leg chip surfaces red direction", async ({

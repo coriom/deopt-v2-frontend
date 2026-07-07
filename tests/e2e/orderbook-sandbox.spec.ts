@@ -132,6 +132,9 @@ async function fillForm(
   await page.getByTestId("direct-orderbook-advanced-summary").click();
   await page.getByTestId("direct-orderbook-series-id").fill(SERIES_ID);
   await page.getByTestId("direct-orderbook-account").fill(ACCOUNT);
+  // Limit Price defaults to empty placeholder `0.0` — fill it so
+  // `canSubmit` is satisfied.
+  await page.getByTestId("direct-orderbook-price").fill("1000000000");
   if (opts.size) {
     await page.getByTestId("direct-orderbook-size").fill(opts.size);
   }

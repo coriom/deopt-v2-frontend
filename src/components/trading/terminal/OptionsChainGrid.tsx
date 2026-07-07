@@ -15,7 +15,7 @@
 // `chain-strike-*`, `options-chain-grid`, `options-chain-empty`) so
 // existing e2e coverage continues to pass.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { OptionLeg, OptionsChainRow } from "@/lib/options-chain-model";
 import {
   useChainColumnPrefs,
@@ -78,6 +78,7 @@ export function OptionsChainGrid({
   const callsRef = useRef<HTMLDivElement>(null);
   const putsRef = useRef<HTMLDivElement>(null);
   const scrollLock = useRef(false);
+  const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
 
   if (rows.length === 0) {
     return (
@@ -96,12 +97,17 @@ export function OptionsChainGrid({
   }
   // Per-side grid template. Both sides use the SAME template so the
   // same subset of columns is visible on both sides at any scroll
-  // position. `minmax(3rem, 1fr)` keeps numeric cells compact but
-  // lets long labels breathe.
+  // position. Fixed 4.5rem per column so the header and body grids
+  // stay aligned — with `minmax(_,1fr)` each grid computed its own
+  // max-content width independently, which drifted the header past
+  // the body row (headers are longer labels than the `—` cells).
+  const COLUMN_WIDTH_REM = 4.5;
   const sideTpl = visible.length > 0
-    ? visible.map(() => "minmax(3rem,1fr)").join(" ")
+    ? `repeat(${visible.length}, ${COLUMN_WIDTH_REM}rem)`
     : "1fr";
   const sideGridStyle = { gridTemplateColumns: sideTpl };
+  const sideMinWidth =
+    visible.length > 0 ? `${visible.length * COLUMN_WIDTH_REM}rem` : undefined;
 
   function onHeaderDragStart(id: ColumnId) {
     setDragId(id);
@@ -148,7 +154,7 @@ export function OptionsChainGrid({
   return (
     <div
       data-testid="options-chain-grid"
-      className="flex h-full min-h-0 flex-col"
+      className="group/chain flex h-full min-h-0 flex-col"
     >
       {/* Toolbar: CALLS / <expiry date> / PUTS. Kept OUTSIDE the
           horizontal-scroll container so the section labels stay
@@ -156,7 +162,7 @@ export function OptionsChainGrid({
           left/right. The center slot shows the current expiry (all
           rows have been filtered by expiry upstream so
           `rows[0].expiryLabel` is representative). */}
-      <div className="flex items-center border-b border-zinc-900 px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
+      <div className="flex items-center px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
         <div className="flex-1 text-center text-emerald-300">Calls</div>
         <div
           data-testid="chain-toolbar-expiry"
@@ -174,16 +180,17 @@ export function OptionsChainGrid({
           sides always show the same subset of columns. */}
       <div className="flex min-h-0 flex-1">
         {/* Calls panel */}
+        <div className="relative min-w-0 flex-1 overflow-hidden">
         <div
           ref={callsRef}
           onScroll={syncFromCalls}
           data-testid="chain-calls-scroll"
-          className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+          className="chain-scroll-hover h-full overflow-y-hidden"
         >
           <div
             data-testid="chain-header-row-call"
-            className="grid min-w-max border-b border-zinc-800 bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
-            style={sideGridStyle}
+            className="grid bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
+            style={{ ...sideGridStyle, minWidth: sideMinWidth }}
           >
             {visible.map((id) => (
               <HeaderCell
@@ -209,45 +216,63 @@ export function OptionsChainGrid({
                 selectedLegKeys,
                 onSelect,
                 onCellAction,
-                sideGridStyle,
+                sideGridStyle: { ...sideGridStyle, minWidth: sideMinWidth },
+                rowKey: `${row.strike1e8}-${row.expiryMs}`,
+                hoveredRowKey,
+                onHoverRow: setHoveredRowKey,
               }),
             )}
           </div>
         </div>
+        <OverlayScrollbar containerRef={callsRef} />
+        </div>
 
-        {/* Strike column — fixed width, non-scrolling. */}
+        {/* Strike column — fixed width, non-scrolling. No
+            border-x and no distinct bg so the column visually
+            blends with the surrounding calls/puts panels; only
+            the numeric strike floats in the middle. */}
         <div
           data-testid="chain-strike-column"
-          className="flex shrink-0 flex-col border-x border-zinc-800 bg-zinc-950 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
+          className="flex shrink-0 flex-col text-[10px] uppercase tracking-[0.12em] text-zinc-500"
           style={{ minWidth: "7rem" }}
         >
-          <div className="border-b border-zinc-800 bg-black/30 px-2 py-1 text-center text-zinc-400">
+          <div className="bg-black/30 px-2 py-1 text-center text-zinc-400">
             Strike
           </div>
           <div role="rowgroup" className="flex flex-1 flex-col">
-            {rows.map((row) => (
-              <div
-                key={`strike-${row.strike1e8}-${row.expiryMs}`}
-                data-testid={`chain-strike-${row.strike1e8}-${row.expiryMs}`}
-                className="flex flex-1 items-center justify-center border-b border-zinc-900 px-2 py-1 font-mono text-[12px] text-zinc-100 last:border-b-0"
-              >
-                {row.strikeLabel}
-              </div>
-            ))}
+            {rows.map((row) => {
+              const rowKey = `${row.strike1e8}-${row.expiryMs}`;
+              const rowHovered = hoveredRowKey === rowKey;
+              return (
+                <div
+                  key={`strike-${row.strike1e8}-${row.expiryMs}`}
+                  data-testid={`chain-strike-${row.strike1e8}-${row.expiryMs}`}
+                  data-row-hovered={rowHovered ? "true" : "false"}
+                  onMouseEnter={() => setHoveredRowKey(rowKey)}
+                  onMouseLeave={() => setHoveredRowKey(null)}
+                  className={`flex flex-1 items-center justify-center px-2 py-1 font-mono text-[12px] text-zinc-100 transition-colors duration-100 ${
+                    rowHovered ? "bg-emerald-500/[0.04]" : ""
+                  }`}
+                >
+                  {row.strikeLabel}
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* Puts panel */}
+        <div className="relative min-w-0 flex-1 overflow-hidden">
         <div
           ref={putsRef}
           onScroll={syncFromPuts}
           data-testid="chain-puts-scroll"
-          className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+          className="chain-scroll-hover h-full overflow-y-hidden"
         >
           <div
             data-testid="chain-header-row-put"
-            className="grid min-w-max border-b border-zinc-800 bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
-            style={sideGridStyle}
+            className="grid bg-black/30 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
+            style={{ ...sideGridStyle, minWidth: sideMinWidth }}
           >
             {visible.map((id) => (
               <HeaderCell
@@ -273,19 +298,113 @@ export function OptionsChainGrid({
                 selectedLegKeys,
                 onSelect,
                 onCellAction,
-                sideGridStyle,
+                sideGridStyle: { ...sideGridStyle, minWidth: sideMinWidth },
+                rowKey: `${row.strike1e8}-${row.expiryMs}`,
+                hoveredRowKey,
+                onHoverRow: setHoveredRowKey,
               }),
             )}
           </div>
         </div>
+        <OverlayScrollbar containerRef={putsRef} />
+        </div>
       </div>{/* /chain body 3-column flex */}
+    </div>
+  );
+}
 
-      {/* Footnote — outside the scroll container so it stays pinned. */}
-      <div className="border-t border-zinc-800 bg-black/40 px-3 py-1.5 text-[10px] text-zinc-500">
-        Only fields wired on the backend render real values; everything
-        else renders &ldquo;{DASH}&rdquo;. Toggle columns via the ☰ menu;
-        drag a header to reorder.
-      </div>
+// ── overlay scrollbar ─────────────────────────────────────────────
+//
+// Native horizontal scrollbar is hidden on the two side panels
+// (see `.chain-scroll-hover` in globals.css). This component
+// renders a floating 3px indicator inside each scroll container's
+// wrapper: it mirrors the container's `scrollLeft` / `scrollWidth`
+// so the operator sees where they are in the horizontal column
+// list. Visibility is driven by the outermost chain root's hover
+// via Tailwind's `group/chain-hover:` variant — the bar disappears
+// the instant the mouse leaves the chain widget.
+//
+// The bar sits absolute at the bottom of the wrapper so it
+// visually overlaps the last strike row, not below it.
+
+function OverlayScrollbar({
+  containerRef,
+}: {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const [state, setState] = useState<{
+    widthPct: number;
+    leftPct: number;
+    present: boolean;
+  }>({ widthPct: 0, leftPct: 0, present: false });
+  const [dragging, setDragging] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      if (scrollWidth <= clientWidth + 1) {
+        setState({ widthPct: 0, leftPct: 0, present: false });
+        return;
+      }
+      const widthPct = Math.max(6, (clientWidth / scrollWidth) * 100);
+      const leftPct = (scrollLeft / scrollWidth) * 100;
+      setState({ widthPct, leftPct, present: true });
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [containerRef]);
+
+  const handleThumbPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const track = trackRef.current;
+    const scrollEl = containerRef.current;
+    if (!track || !scrollEl) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startScrollLeft = scrollEl.scrollLeft;
+    const trackWidth = track.getBoundingClientRect().width;
+    const scrollRatio =
+      trackWidth > 0 ? scrollEl.scrollWidth / trackWidth : 1;
+    setDragging(true);
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      scrollEl.scrollLeft = startScrollLeft + dx * scrollRatio;
+    };
+    const onUp = () => {
+      setDragging(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  if (!state.present) return null;
+  return (
+    <div
+      ref={trackRef}
+      aria-hidden="true"
+      className={`pointer-events-none absolute inset-x-1 bottom-1 h-[5px] transition-opacity duration-300 ease-out ${
+        dragging ? "opacity-100" : "opacity-0 group-hover/chain:opacity-100"
+      }`}
+    >
+      <div
+        onPointerDown={handleThumbPointerDown}
+        className="pointer-events-auto absolute h-full cursor-grab touch-none rounded-full bg-zinc-500/40 transition-colors duration-150 hover:bg-zinc-500/70 active:cursor-grabbing active:bg-zinc-400/85"
+        style={{
+          width: `${state.widthPct}%`,
+          left: `${state.leftPct}%`,
+        }}
+      />
     </div>
   );
 }
@@ -306,6 +425,9 @@ interface RenderChainRowProps {
     columnId: ColumnId;
   }) => void;
   sideGridStyle: React.CSSProperties;
+  rowKey: string;
+  hoveredRowKey: string | null;
+  onHoverRow: (key: string | null) => void;
 }
 
 function renderChainRow(props: RenderChainRowProps) {
@@ -319,14 +441,23 @@ function renderChainRow(props: RenderChainRowProps) {
     onSelect,
     onCellAction,
     sideGridStyle,
+    rowKey,
+    hoveredRowKey,
+    onHoverRow,
   } = props;
   const seriesId = leg.seriesId;
   const rowSelected = seriesId !== null && seriesId === selectedSeriesId;
   const rowDisabled = seriesId === null;
+  const rowHovered = hoveredRowKey === rowKey;
   return (
     <div
       key={`${side}-row-${row.strike1e8}-${row.expiryMs}`}
-      className="grid min-w-max border-b border-zinc-900 text-[11px] last:border-b-0"
+      data-row-hovered={rowHovered ? "true" : "false"}
+      onMouseEnter={() => onHoverRow(rowKey)}
+      onMouseLeave={() => onHoverRow(null)}
+      className={`grid text-[11px] transition-colors duration-100 ${
+        rowHovered ? "bg-emerald-500/[0.04]" : ""
+      }`}
       style={sideGridStyle}
     >
       {visible.map((id) => {
@@ -385,7 +516,6 @@ function renderChainRow(props: RenderChainRowProps) {
             key={`${side}-${id}`}
             side={side}
             text={text}
-            selected={cellSelected}
             disabled={cellDisabled}
             onClick={onClick}
             testid={testid}
@@ -441,7 +571,6 @@ function HeaderCell({
 function BodyCell({
   side,
   text,
-  selected,
   disabled,
   onClick,
   testid,
@@ -450,7 +579,6 @@ function BodyCell({
 }: {
   side: "call" | "put";
   text: string;
-  selected: boolean;
   disabled: boolean;
   onClick: () => void;
   testid?: string;
@@ -462,9 +590,7 @@ function BodyCell({
   }`;
   const state = disabled
     ? "cursor-not-allowed text-zinc-700"
-    : selected
-      ? "bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-500/40"
-      : "text-zinc-200 hover:bg-emerald-500/5 hover:text-emerald-200";
+    : "text-zinc-200 hover:text-emerald-200";
   return (
     <button
       type="button"

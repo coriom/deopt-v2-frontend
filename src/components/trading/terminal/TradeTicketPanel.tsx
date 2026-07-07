@@ -191,18 +191,6 @@ function TradeBody(props: TradeBodyProps) {
         data-testid-alias="trade-body-book"
         className="flex flex-col gap-3 p-3"
       >
-        {resolved.kind === "empty" ? (
-          <div
-            data-testid="ticket-picker-hint"
-            role="note"
-            className="rounded border border-zinc-800 bg-zinc-950/60 p-2 text-[11px] text-zinc-400"
-          >
-            Click a <span className="font-semibold text-emerald-300">Bid</span>{" "}
-            or <span className="font-semibold text-emerald-300">Ask</span> cell
-            in the chain to build an order. Advanced testers can still enter a
-            manual series id below.
-          </div>
-        ) : null}
         <DirectOrderbookForm
           key={prefill ?? "__no_selection__"}
           initialSeriesId={prefill ?? undefined}
@@ -288,16 +276,7 @@ function SelectedLegsStrip({
   onRatioChange,
   onClear,
 }: SelectedLegsStripProps) {
-  if (legs.length === 0) {
-    return (
-      <div
-        data-testid="ticket-legs-empty"
-        className="border-b border-zinc-800 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-zinc-500"
-      >
-        No legs selected
-      </div>
-    );
-  }
+  if (legs.length === 0) return null;
   return (
     <div
       data-testid="ticket-legs-list"

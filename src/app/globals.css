@@ -306,3 +306,22 @@ body {
 .deopt-scroll-dark::-webkit-scrollbar-corner {
   background: #000000;
 }
+
+/*
+ * Chain-grid scrollbar.
+ *
+ * The native browser scrollbar is fully hidden — no gutter, no
+ * band, no reserved space. A custom overlay scrollbar
+ * (`OverlayScrollbar` in `OptionsChainGrid.tsx`) is rendered
+ * absolutely inside the scroll container and toggles visibility
+ * based on the root `.chain-grid-hover-root` group's hover state.
+ * The overlay floats OVER the last strike row and disappears the
+ * moment the mouse leaves the whole chain widget.
+ */
+.chain-scroll-hover {
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox: hide native gutter */
+}
+.chain-scroll-hover::-webkit-scrollbar {
+  display: none; /* WebKit / Chromium / Edge / Safari */
+}

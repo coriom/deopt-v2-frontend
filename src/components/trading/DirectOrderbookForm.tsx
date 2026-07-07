@@ -132,9 +132,14 @@ export function DirectOrderbookForm({
   const [orderType, setOrderType] = useState<OrderType>("limit");
   const [seriesId, setSeriesId] = useState(initialSeriesId ?? "");
   const [account, setAccount] = useState<string>(ZERO_ADDRESS);
-  const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [price1e8, setPrice1e8] = useState("1000000000");
-  const [size1e8, setSize1e8] = useState("100000000");
+  // Side is currently pinned to "buy" — the explicit Buy/Sell tabs
+  // were retired to declutter the form. When the user picks a leg
+  // from the chain (`Bid` for sell, `Ask` for buy), the leg's own
+  // `side` drives the multi-leg store; this default only feeds the
+  // legacy direct-submit wire body when no chain click has fired.
+  const side: "buy" | "sell" = "buy";
+  const [price1e8, setPrice1e8] = useState("");
+  const [size1e8, setSize1e8] = useState("");
   const [tif, setTif] = useState<Tif>("GTC");
   const [postOnly, setPostOnly] = useState(false);
 
@@ -251,13 +256,13 @@ export function DirectOrderbookForm({
       onSubmit={handleSubmit}
       className="flex flex-col gap-3 text-zinc-100"
     >
-      <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-        Order Type
+      <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 text-[11px] text-zinc-300">
+        <span className="text-[11px] font-medium text-zinc-300">Order Type</span>
         <select
           data-testid="options-order-type-select"
           value={orderType}
           onChange={(e) => setOrderType(e.target.value as OrderType)}
-          className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
+          className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
         >
           <option value="limit">Limit</option>
           <option value="stop_limit" data-testid="options-order-type-option-stop-limit">
@@ -310,73 +315,45 @@ export function DirectOrderbookForm({
             setSeriesId={setSeriesId}
           />
 
-          <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-            Account
+          <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 text-[11px]">
+            <span className="text-[11px] font-medium text-zinc-300">
+              Limit Price
+            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={price1e8}
+              onChange={(e) => setPrice1e8(e.target.value)}
+              placeholder="0.0"
+              data-testid="direct-orderbook-price"
+              className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-right font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/60 focus:outline-none"
+            />
+          </label>
+
+          <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 text-[11px]">
+            <span className="text-[11px] font-medium text-zinc-300">Amount</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={size1e8}
+              onChange={(e) => setSize1e8(e.target.value)}
+              placeholder="0.0"
+              data-testid="direct-orderbook-size"
+              className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-right font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/60 focus:outline-none"
+            />
+          </label>
+
+          <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 text-[11px]">
+            <span className="text-[11px] font-medium text-zinc-300">Account</span>
             <input
               type="text"
               value={account}
               onChange={(e) => setAccount(e.target.value)}
               placeholder="0x…"
               data-testid="direct-orderbook-account"
-              className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-[11px] normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
+              className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
             />
           </label>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setSide("buy")}
-              aria-pressed={side === "buy"}
-              data-testid="direct-orderbook-side-buy"
-              data-selected={side === "buy" ? "true" : "false"}
-              className={`flex-1 rounded px-2 py-1.5 text-xs font-medium ${
-                side === "buy"
-                  ? "border border-emerald-500/60 bg-emerald-500 text-black"
-                  : "border border-zinc-800 bg-black/40 text-zinc-200 hover:border-emerald-500/40"
-              }`}
-            >
-              Buy
-            </button>
-            <button
-              type="button"
-              onClick={() => setSide("sell")}
-              aria-pressed={side === "sell"}
-              data-testid="direct-orderbook-side-sell"
-              data-selected={side === "sell" ? "true" : "false"}
-              className={`flex-1 rounded px-2 py-1.5 text-xs font-medium ${
-                side === "sell"
-                  ? "border border-red-500/60 bg-red-950/60 text-red-100"
-                  : "border border-zinc-800 bg-black/40 text-zinc-200 hover:border-red-500/40"
-              }`}
-            >
-              Sell
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-              Limit Price
-              <input
-                type="text"
-                inputMode="numeric"
-                value={price1e8}
-                onChange={(e) => setPrice1e8(e.target.value)}
-                data-testid="direct-orderbook-price"
-                className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 text-right font-mono text-xs normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
-              />
-            </label>
-            <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-              Amount
-              <input
-                type="text"
-                inputMode="numeric"
-                value={size1e8}
-                onChange={(e) => setSize1e8(e.target.value)}
-                data-testid="direct-orderbook-size"
-                className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 text-right font-mono text-xs normal-case tracking-normal focus:border-emerald-500/60 focus:outline-none"
-              />
-            </label>
-          </div>
 
           <div
             data-testid="direct-orderbook-tif-row"
