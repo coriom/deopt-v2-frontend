@@ -650,7 +650,11 @@ function SubaccountsCard() {
         <code className="rounded bg-zinc-900 px-1 py-0.5 text-[11px] text-zinc-300">
           (owner, subaccount_id)
         </code>
-        . Perps subaccount routing is not live yet.
+        . Perps reads (positions, orders, fills, funding, liquidations) are subaccount-scoped as of{" "}
+        <code className="rounded bg-zinc-900 px-1 py-0.5 text-[11px] text-zinc-300">
+          PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1
+        </code>
+        ; public Perps trading is not live and the closed-test allowlist is backend-authoritative.
       </p>
       {address ? (
         <div className="flex items-center gap-3">
@@ -817,7 +821,17 @@ function SubaccountsApiHints() {
           wallet-aggregate.
         </li>
         <li>
-          RFQ and Perps do not accept <code>subaccount_id</code> yet.
+          <code className="text-zinc-300">
+            GET /accounts/:address/perps/{"{positions|orders|fills|funding|liquidations}"}?subaccount_id=N
+          </code>{" "}
+          — reads default to subaccount 1 when the param is omitted; pass{" "}
+          <code>all=true</code> for the aggregate view. Fills are two-sided:
+          the row is returned if either the taker or maker subaccount matches.
+          Public Perps trading remains fail-closed; closed-test allowlist is
+          backend-authoritative.
+        </li>
+        <li>
+          RFQ does not yet accept <code>subaccount_id</code>.
         </li>
       </ul>
     </div>

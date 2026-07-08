@@ -1506,6 +1506,12 @@ export type PerpPositionStatus = "open" | "closed";
 export interface PerpPositionView {
   id: string;
   account: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — position owner subaccount.
+   * Pre-migration rows deserialize as `1` via the backend's
+   * `#[serde(default = "one_subaccount_id")]`.
+   */
+  subaccount_id: number;
   market_id: string;
   side: PerpPositionSide;
   size_1e8: string;
@@ -1533,16 +1539,47 @@ export interface PerpPositionListResponse {
   trading_enabled: false;
 }
 
+/**
+ * PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — read Perps positions for the
+ * given wallet and subaccount. When `subaccountId` is omitted the backend
+ * defaults to subaccount 1 to preserve v1-callers. Pass `all: true` for
+ * the rare aggregate view (currently not exposed in the UI).
+ */
 export function getPerpsAccountPositions(
   address: string,
+  opts: { subaccountId?: number; all?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<PerpPositionListResponse> {
+  const q = buildPerpsAccountReadQuery(opts);
   return rawRequest<PerpPositionListResponse>(
     "GET",
-    `/accounts/${encodeURIComponent(address)}/perps/positions`,
+    `/accounts/${encodeURIComponent(address)}/perps/positions${q}`,
     undefined,
     signal,
   );
+}
+
+/**
+ * PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — shared query builder for all
+ * Perps account-scoped reads. Mirrors the backend `PerpsAccountReadQuery`
+ * shape (`?subaccount_id=` / `?all=`). Returns an empty string when the
+ * caller omits both — the backend then defaults to subaccount 1.
+ */
+export function buildPerpsAccountReadQuery(opts: {
+  subaccountId?: number;
+  all?: boolean;
+}): string {
+  const params = new URLSearchParams();
+  if (opts.all === true) {
+    params.set("all", "true");
+  } else if (
+    typeof opts.subaccountId === "number" &&
+    Number.isFinite(opts.subaccountId)
+  ) {
+    params.set("subaccount_id", String(opts.subaccountId));
+  }
+  const s = params.toString();
+  return s.length > 0 ? `?${s}` : "";
 }
 
 /**
@@ -1555,6 +1592,12 @@ export function getPerpsAccountPositions(
 export interface PerpOrderView {
   order_id: string;
   account: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — subaccount the order was
+   * submitted under. Pre-migration rows arrive as `1` via the backend's
+   * `#[serde(default = "one_subaccount_id")]`.
+   */
+  subaccount_id: number;
   market_id: string;
   side: "buy" | "sell";
   order_type: string;
@@ -1589,11 +1632,13 @@ export interface PerpOrderListResponse {
  */
 export function listPerpOrders(
   address: string,
+  opts: { subaccountId?: number; all?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<PerpOrderListResponse> {
+  const q = buildPerpsAccountReadQuery(opts);
   return rawRequest<PerpOrderListResponse>(
     "GET",
-    `/accounts/${encodeURIComponent(address)}/perps/orders`,
+    `/accounts/${encodeURIComponent(address)}/perps/orders${q}`,
     undefined,
     signal,
   );
@@ -1612,6 +1657,14 @@ export interface PerpFillView {
   maker_order_id: string;
   taker_account: string;
   maker_account: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — two-sided subaccount ids so
+   * a wallet that participated as both taker and maker (or only one
+   * side) can filter without ambiguity. Pre-migration rows deserialize
+   * both fields as `1`.
+   */
+  taker_subaccount_id: number;
+  maker_subaccount_id: number;
   liquidity_role: "taker" | "maker";
   side: "buy" | "sell";
   price_1e8: string;
@@ -1632,11 +1685,13 @@ export interface PerpFillListResponse {
  */
 export function listPerpFills(
   address: string,
+  opts: { subaccountId?: number; all?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<PerpFillListResponse> {
+  const q = buildPerpsAccountReadQuery(opts);
   return rawRequest<PerpFillListResponse>(
     "GET",
-    `/accounts/${encodeURIComponent(address)}/perps/fills`,
+    `/accounts/${encodeURIComponent(address)}/perps/fills${q}`,
     undefined,
     signal,
   );
@@ -1651,6 +1706,11 @@ export function listPerpFills(
 export interface PerpLiquidationEventView {
   liquidation_id: string;
   account: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — subaccount owning the
+   * liquidated position at settlement time.
+   */
+  subaccount_id: number;
   market_id: string;
   position_id: string;
   side: "long" | "short";
@@ -1683,11 +1743,13 @@ export interface PerpLiquidationListResponse {
  */
 export function listPerpLiquidations(
   address: string,
+  opts: { subaccountId?: number; all?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<PerpLiquidationListResponse> {
+  const q = buildPerpsAccountReadQuery(opts);
   return rawRequest<PerpLiquidationListResponse>(
     "GET",
-    `/accounts/${encodeURIComponent(address)}/perps/liquidations`,
+    `/accounts/${encodeURIComponent(address)}/perps/liquidations${q}`,
     undefined,
     signal,
   );
@@ -1702,6 +1764,11 @@ export function listPerpLiquidations(
 export interface PerpFundingEventView {
   funding_event_id: string;
   account: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — subaccount whose margin was
+   * settled by this funding payment.
+   */
+  subaccount_id: number;
   market_id: string;
   position_id: string;
   side: "long" | "short";
@@ -1730,11 +1797,13 @@ export interface PerpFundingListResponse {
  */
 export function listPerpFundingEvents(
   address: string,
+  opts: { subaccountId?: number; all?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<PerpFundingListResponse> {
+  const q = buildPerpsAccountReadQuery(opts);
   return rawRequest<PerpFundingListResponse>(
     "GET",
-    `/accounts/${encodeURIComponent(address)}/perps/funding`,
+    `/accounts/${encodeURIComponent(address)}/perps/funding${q}`,
     undefined,
     signal,
   );
@@ -1758,6 +1827,14 @@ export function listPerpFundingEvents(
 export interface SubmitPerpsOrderRequest {
   market_id: string;
   account: string;
+  /**
+   * PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — subaccount the order runs
+   * under. Omit for the default subaccount 1 (v1-compatible). Public
+   * Perps trading is fail-closed by default; even when the closed-test
+   * allowlist opens for a caller, the backend still expects this field
+   * for non-default subaccounts.
+   */
+  subaccount_id?: number;
   side: "buy" | "sell";
   price_1e8: string;
   size_1e8: string;

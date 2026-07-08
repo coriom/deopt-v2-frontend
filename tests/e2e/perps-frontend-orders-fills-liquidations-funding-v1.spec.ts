@@ -33,7 +33,7 @@ async function stubMarketPriceUnavailable(page: Page) {
 }
 
 async function stubPositions(page: Page, positions: object[] = []) {
-  await page.route("**/accounts/*/perps/positions", (route) =>
+  await page.route("**/accounts/*/perps/positions*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -47,7 +47,7 @@ async function stubPositions(page: Page, positions: object[] = []) {
 }
 
 async function stubOrders(page: Page, orders: object[]) {
-  await page.route("**/accounts/*/perps/orders", (route) =>
+  await page.route("**/accounts/*/perps/orders*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -61,7 +61,7 @@ async function stubOrders(page: Page, orders: object[]) {
 }
 
 async function stubFills(page: Page, fills: object[]) {
-  await page.route("**/accounts/*/perps/fills", (route) =>
+  await page.route("**/accounts/*/perps/fills*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -75,7 +75,7 @@ async function stubFills(page: Page, fills: object[]) {
 }
 
 async function stubLiquidations(page: Page, liquidations: object[]) {
-  await page.route("**/accounts/*/perps/liquidations", (route) =>
+  await page.route("**/accounts/*/perps/liquidations*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -89,7 +89,7 @@ async function stubLiquidations(page: Page, liquidations: object[]) {
 }
 
 async function stubFunding(page: Page, funding_events: object[]) {
-  await page.route("**/accounts/*/perps/funding", (route) =>
+  await page.route("**/accounts/*/perps/funding*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",

@@ -27,17 +27,23 @@ interface Props {
 }
 
 export function PerpsFundingPanel({ address: addressProp }: Props) {
-  const { address: walletAddress } = useWallet();
+  const { address: walletAddress, activeSubaccountId } = useWallet();
   const address = addressProp ?? walletAddress;
   const { status, statusDetail, resyncToken, subscribe } = useLifecycleStream();
   const [rows, setRows] = useState<PerpFundingEventView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — read is subaccount-scoped;
+  // query key includes `(address, activeSubaccountId)`.
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
       if (!address) return;
       try {
-        const resp = await listPerpFundingEvents(address, signal);
+        const resp = await listPerpFundingEvents(
+          address,
+          { subaccountId: activeSubaccountId },
+          signal,
+        );
         const sorted = [...resp.funding_events].sort(
           (a, b) => b.created_at_ms - a.created_at_ms,
         );
@@ -50,7 +56,7 @@ export function PerpsFundingPanel({ address: addressProp }: Props) {
         setError(message);
       }
     },
-    [address],
+    [address, activeSubaccountId],
   );
 
   useEffect(() => {
@@ -59,6 +65,8 @@ export function PerpsFundingPanel({ address: addressProp }: Props) {
       setRows(null);
       return;
     }
+    // Clear on switch so cross-subaccount funding rows don't leak.
+    setRows(null);
     const ctrl = new AbortController();
     void refresh(ctrl.signal);
     const handle = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
@@ -66,7 +74,7 @@ export function PerpsFundingPanel({ address: addressProp }: Props) {
       ctrl.abort();
       window.clearInterval(handle);
     };
-  }, [address, refresh]);
+  }, [address, activeSubaccountId, refresh]);
 
   useEffect(() => {
     if (resyncToken === 0 || !address) return;
@@ -76,13 +84,19 @@ export function PerpsFundingPanel({ address: addressProp }: Props) {
 
   useEffect(() => {
     if (!address) return;
+    // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — safe WS filter.
     const unsubscribe = subscribe("account.perp_funding", (event) => {
-      if (event.payload.type === "perp_funding_payment_created") {
+      if (event.payload.type !== "perp_funding_payment_created") return;
+      const eventSubaccountId = event.payload.subaccount_id;
+      if (
+        eventSubaccountId === undefined ||
+        eventSubaccountId === activeSubaccountId
+      ) {
         void refresh();
       }
     });
     return unsubscribe;
-  }, [address, subscribe, refresh]);
+  }, [address, subscribe, activeSubaccountId, refresh]);
 
   return (
     <section

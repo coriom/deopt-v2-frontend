@@ -22,6 +22,7 @@ import { useState } from "react";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
 import { TifPopover, PostCheckbox, type Tif } from "../TifPopover";
 import { isPerpsTicketEnabled } from "@/lib/perps-flag";
+import { isPerpsClosedTestEnabled } from "@/lib/perps-closed-test-flag";
 import {
   submitPerpsOrder,
   TradingApiError,
@@ -36,6 +37,10 @@ export function PerpsTradeFormWidget() {
   const { market } = usePerpsSymbol();
   const wallet = useWallet();
   const ticketEnabled = isPerpsTicketEnabled();
+  // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — informational-only flag
+  // used to render honest closed-test copy. Never treated as a gate;
+  // even when true the backend's allowlist is authoritative.
+  const closedTestCopyVisible = isPerpsClosedTestEnabled();
   const [side, setSide] = useState<Side>("long");
   const [mode, setMode] = useState<Mode>("market");
   const [qty, setQty] = useState<string>("");
@@ -82,6 +87,11 @@ export function PerpsTradeFormWidget() {
     const req: SubmitPerpsOrderRequest = {
       market_id: marketId,
       account: wallet.address!,
+      // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — thread the active
+      // subaccount so the backend routes the order under the correct
+      // isolated-margin bucket. Submit is still fail-closed unless the
+      // backend allowlist opens for this caller.
+      subaccount_id: wallet.activeSubaccountId,
       side: side === "long" ? "buy" : "sell",
       price_1e8: priceStr,
       size_1e8: size,
@@ -310,6 +320,22 @@ export function PerpsTradeFormWidget() {
           Perps not live
         </button>
       )}
+      {/*
+        * PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — honest not-live copy.
+        * Default: Perps public trading is not live. Base Sepolia testnet
+        * only. No mainnet. Even when the closed-test UI flag is on, the
+        * backend allowlist is authoritative — this copy just tells the
+        * operator the closed test exists.
+        */}
+      <p
+        data-testid="widget-perps-trade-posture-copy"
+        data-posture={closedTestCopyVisible ? "closed_test" : "not_live"}
+        className="text-[10px] leading-snug text-zinc-500"
+      >
+        {closedTestCopyVisible
+          ? "Perps closed test only. Base Sepolia testnet. No real funds. Backend allowlist enforced."
+          : "Perps public trading is not live. Base Sepolia testnet. No real funds."}
+      </p>
       {ticketEnabled && walletBlocker ? (
         <p
           data-testid="widget-perps-trade-wallet-blocker"

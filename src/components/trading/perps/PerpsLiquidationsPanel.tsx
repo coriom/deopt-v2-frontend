@@ -23,17 +23,23 @@ interface Props {
 }
 
 export function PerpsLiquidationsPanel({ address: addressProp }: Props) {
-  const { address: walletAddress } = useWallet();
+  const { address: walletAddress, activeSubaccountId } = useWallet();
   const address = addressProp ?? walletAddress;
   const { status, statusDetail, resyncToken, subscribe } = useLifecycleStream();
   const [rows, setRows] = useState<PerpLiquidationEventView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — read is subaccount-scoped;
+  // query key includes `(address, activeSubaccountId)`.
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
       if (!address) return;
       try {
-        const resp = await listPerpLiquidations(address, signal);
+        const resp = await listPerpLiquidations(
+          address,
+          { subaccountId: activeSubaccountId },
+          signal,
+        );
         const sorted = [...resp.liquidations].sort(
           (a, b) => b.created_at_ms - a.created_at_ms,
         );
@@ -46,7 +52,7 @@ export function PerpsLiquidationsPanel({ address: addressProp }: Props) {
         setError(message);
       }
     },
-    [address],
+    [address, activeSubaccountId],
   );
 
   useEffect(() => {
@@ -55,6 +61,8 @@ export function PerpsLiquidationsPanel({ address: addressProp }: Props) {
       setRows(null);
       return;
     }
+    // Clear on switch so cross-subaccount liquidations don't leak.
+    setRows(null);
     const ctrl = new AbortController();
     void refresh(ctrl.signal);
     const handle = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
@@ -62,7 +70,7 @@ export function PerpsLiquidationsPanel({ address: addressProp }: Props) {
       ctrl.abort();
       window.clearInterval(handle);
     };
-  }, [address, refresh]);
+  }, [address, activeSubaccountId, refresh]);
 
   useEffect(() => {
     if (resyncToken === 0 || !address) return;
@@ -72,13 +80,21 @@ export function PerpsLiquidationsPanel({ address: addressProp }: Props) {
 
   useEffect(() => {
     if (!address) return;
+    // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — safe WS filter, same
+    // semantics as orders (match → refetch, mismatch → ignore,
+    // missing → refetch).
     const unsubscribe = subscribe("account.perp_positions", (event) => {
-      if (event.payload.type === "perp_position_liquidated") {
+      if (event.payload.type !== "perp_position_liquidated") return;
+      const eventSubaccountId = event.payload.subaccount_id;
+      if (
+        eventSubaccountId === undefined ||
+        eventSubaccountId === activeSubaccountId
+      ) {
         void refresh();
       }
     });
     return unsubscribe;
-  }, [address, subscribe, refresh]);
+  }, [address, subscribe, activeSubaccountId, refresh]);
 
   return (
     <section

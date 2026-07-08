@@ -55,11 +55,15 @@ function formatMarginRatioBps(raw: string | null): string {
 }
 
 export function PerpsPositionsPanel({ address: addressProp }: Props) {
-  const { address: walletAddress } = useWallet();
+  const { address: walletAddress, activeSubaccountId } = useWallet();
   const address = addressProp ?? walletAddress;
   const [rows, setRows] = useState<PerpPositionView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — read passes the active
+  // subaccount so the backend filters server-side. Query key includes
+  // `(address, activeSubaccountId)` so switching the switcher clears
+  // and refetches.
   const refresh = useCallback(async () => {
     if (!address) {
       setRows(null);
@@ -67,7 +71,9 @@ export function PerpsPositionsPanel({ address: addressProp }: Props) {
     }
     setError(null);
     try {
-      const resp = await getPerpsAccountPositions(address);
+      const resp = await getPerpsAccountPositions(address, {
+        subaccountId: activeSubaccountId,
+      });
       setRows(resp.positions);
     } catch (err) {
       const message =
@@ -75,10 +81,14 @@ export function PerpsPositionsPanel({ address: addressProp }: Props) {
       setError(message);
       setRows(null);
     }
-  }, [address]);
+  }, [address, activeSubaccountId]);
 
   useEffect(() => {
+    // Clear the previous account's rows immediately on switch so we
+    // never render Account 1's positions while Account 2's fetch is
+    // in flight.
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRows(null);
     void refresh();
     const handle = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
     return () => {

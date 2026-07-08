@@ -162,8 +162,10 @@ function SwitcherMenu(props: {
           data-testid="subaccount-scope-copy"
           className="mt-0.5 text-[10px] leading-snug text-zinc-500"
         >
-          Subaccounts are isolated for Options orderbook activity. RFQ
-          and Perps are not subaccount-scoped yet.
+          Subaccounts are isolated for Options orderbook activity and
+          Perps reads (positions, orders, fills, funding, liquidations).
+          RFQ is not subaccount-scoped yet. Public Perps trading is not
+          live.
         </p>
       </div>
       {subaccountsError ? (

@@ -11,9 +11,11 @@
 // subaccount context. The backend `(owner_address, subaccount_id)`
 // composite is the source of truth; the wallet context caches the
 // subaccount list and remembers which one the operator selected via
-// `localStorage` (see `subaccount-storage.ts`). All Options
-// mutations and reads consume `activeSubaccountId`. RFQ + Perps are
-// NOT subaccount-aware and continue to route wallet-level.
+// `localStorage` (see `subaccount-storage.ts`). Options, RFQ, and
+// (as of PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1) Perps reads and
+// panels all consume `activeSubaccountId`. Perps mutation submit
+// still requires the strict opt-in ticket flag AND the backend
+// allowlist gate — nothing here bypasses them.
 
 import {
   createContext,

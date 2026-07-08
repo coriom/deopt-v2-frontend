@@ -35,17 +35,24 @@ interface Props {
 }
 
 export function PerpsOrdersPanel({ address: addressProp }: Props) {
-  const { address: walletAddress } = useWallet();
+  const { address: walletAddress, activeSubaccountId } = useWallet();
   const address = addressProp ?? walletAddress;
   const { status, statusDetail, resyncToken, subscribe } = useLifecycleStream();
   const [rows, setRows] = useState<PerpOrderView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — read passes the active
+  // subaccount so backend filtering is authoritative. Query key
+  // includes `(address, activeSubaccountId)`.
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
       if (!address) return;
       try {
-        const resp = await listPerpOrders(address, signal);
+        const resp = await listPerpOrders(
+          address,
+          { subaccountId: activeSubaccountId },
+          signal,
+        );
         // Newest-first per the backend contract; sort defensively.
         const sorted = [...resp.orders].sort(
           (a, b) => b.updated_at_ms - a.updated_at_ms,
@@ -59,7 +66,7 @@ export function PerpsOrdersPanel({ address: addressProp }: Props) {
         setError(message);
       }
     },
-    [address],
+    [address, activeSubaccountId],
   );
 
   useEffect(() => {
@@ -68,6 +75,8 @@ export function PerpsOrdersPanel({ address: addressProp }: Props) {
       setRows(null);
       return;
     }
+    // Clear on switch so Account 1's rows don't leak into Account 2.
+    setRows(null);
     const ctrl = new AbortController();
     void refresh(ctrl.signal);
     const handle = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
@@ -75,7 +84,7 @@ export function PerpsOrdersPanel({ address: addressProp }: Props) {
       ctrl.abort();
       window.clearInterval(handle);
     };
-  }, [address, refresh]);
+  }, [address, activeSubaccountId, refresh]);
 
   useEffect(() => {
     if (resyncToken === 0 || !address) return;
@@ -85,18 +94,27 @@ export function PerpsOrdersPanel({ address: addressProp }: Props) {
 
   useEffect(() => {
     if (!address) return;
+    // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — safe WS filter:
+    //   * `subaccount_id === activeSubaccountId` → refetch scoped view.
+    //   * `subaccount_id !== activeSubaccountId` → ignore.
+    //   * `subaccount_id === undefined` → refetch (older payload).
     const unsubscribe = subscribe("account.perp_orders", (event) => {
-      // Refresh on either `perp_order_updated` or `perp_order_rejected`
-      // — both signal orders-table state change.
       if (
-        event.payload.type === "perp_order_updated" ||
-        event.payload.type === "perp_order_rejected"
+        event.payload.type !== "perp_order_updated" &&
+        event.payload.type !== "perp_order_rejected"
+      ) {
+        return;
+      }
+      const eventSubaccountId = event.payload.subaccount_id;
+      if (
+        eventSubaccountId === undefined ||
+        eventSubaccountId === activeSubaccountId
       ) {
         void refresh();
       }
     });
     return unsubscribe;
-  }, [address, subscribe, refresh]);
+  }, [address, subscribe, activeSubaccountId, refresh]);
 
   return (
     <section

@@ -23,17 +23,25 @@ interface Props {
 }
 
 export function PerpsFillsPanel({ address: addressProp }: Props) {
-  const { address: walletAddress } = useWallet();
+  const { address: walletAddress, activeSubaccountId } = useWallet();
   const address = addressProp ?? walletAddress;
   const { status, statusDetail, resyncToken, subscribe } = useLifecycleStream();
   const [rows, setRows] = useState<PerpFillView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — read passes the active
+  // subaccount. Backend fills endpoint filters rows where either the
+  // taker or maker matches (two-sided). Query key includes
+  // `(address, activeSubaccountId)`.
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
       if (!address) return;
       try {
-        const resp = await listPerpFills(address, signal);
+        const resp = await listPerpFills(
+          address,
+          { subaccountId: activeSubaccountId },
+          signal,
+        );
         const sorted = [...resp.fills].sort(
           (a, b) => b.created_at_ms - a.created_at_ms,
         );
@@ -46,7 +54,7 @@ export function PerpsFillsPanel({ address: addressProp }: Props) {
         setError(message);
       }
     },
-    [address],
+    [address, activeSubaccountId],
   );
 
   useEffect(() => {
@@ -55,6 +63,8 @@ export function PerpsFillsPanel({ address: addressProp }: Props) {
       setRows(null);
       return;
     }
+    // Clear on switch so Account 1's fills don't leak into Account 2.
+    setRows(null);
     const ctrl = new AbortController();
     void refresh(ctrl.signal);
     const handle = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
@@ -62,7 +72,7 @@ export function PerpsFillsPanel({ address: addressProp }: Props) {
       ctrl.abort();
       window.clearInterval(handle);
     };
-  }, [address, refresh]);
+  }, [address, activeSubaccountId, refresh]);
 
   useEffect(() => {
     if (resyncToken === 0 || !address) return;
@@ -72,13 +82,26 @@ export function PerpsFillsPanel({ address: addressProp }: Props) {
 
   useEffect(() => {
     if (!address) return;
+    // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — two-sided fill filter:
+    // refetch when either side matches the active subaccount, ignore
+    // when neither side matches, refetch when both fields are missing.
     const unsubscribe = subscribe("account.perp_fills", (event) => {
-      if (event.payload.type === "perp_fill_created") {
+      if (event.payload.type !== "perp_fill_created") return;
+      const takerSubaccountId = event.payload.taker_subaccount_id;
+      const makerSubaccountId = event.payload.maker_subaccount_id;
+      if (takerSubaccountId === undefined && makerSubaccountId === undefined) {
+        void refresh();
+        return;
+      }
+      if (
+        takerSubaccountId === activeSubaccountId ||
+        makerSubaccountId === activeSubaccountId
+      ) {
         void refresh();
       }
     });
     return unsubscribe;
-  }, [address, subscribe, refresh]);
+  }, [address, subscribe, activeSubaccountId, refresh]);
 
   return (
     <section

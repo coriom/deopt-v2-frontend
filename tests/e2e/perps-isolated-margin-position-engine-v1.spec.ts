@@ -21,7 +21,7 @@ import {
 } from "./wallet-fixture";
 
 async function stubPositions(page: Page, positions: object[], stale = true) {
-  await page.route("**/accounts/*/perps/positions", (route) =>
+  await page.route("**/accounts/*/perps/positions*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",

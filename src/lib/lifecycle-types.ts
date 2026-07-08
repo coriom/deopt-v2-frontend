@@ -149,6 +149,14 @@ export interface PerpOrderUpdated {
   type: "perp_order_updated";
   order_id: string;
   market_id: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — subaccount that owns the
+   * order. Backend emits `1` for pre-migration rows via
+   * `#[serde(default = "one_subaccount_id")]`. Optional so an older
+   * enveloped payload without the field still parses; consumers treat
+   * `undefined` as "unknown → refetch to be safe".
+   */
+  subaccount_id?: number;
   side: "buy" | "sell";
   status: string;
   price_1e8: string;
@@ -170,6 +178,16 @@ export interface PerpFillCreated {
   market_id: string;
   order_id: string;
   counterparty_order_id: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — two-sided subaccount ids so
+   * a wallet that owned both taker + maker legs can filter side-aware.
+   * The receiver reads `taker_subaccount_id` when they were the taker
+   * and `maker_subaccount_id` when they were the maker. Optional so
+   * older payloads without the fields still parse; consumers treat
+   * `undefined` as "unknown → refetch to be safe".
+   */
+  taker_subaccount_id?: number;
+  maker_subaccount_id?: number;
   liquidity_role: "taker" | "maker";
   side: "buy" | "sell";
   price_1e8: string;
@@ -182,6 +200,12 @@ export interface PerpPositionUpdated {
   type: "perp_position_updated";
   position_id: string;
   market_id: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — subaccount owning the
+   * position. Optional so older payloads without the field still parse;
+   * consumers treat `undefined` as "unknown → refetch to be safe".
+   */
+  subaccount_id?: number;
   side: "long" | "short";
   size_1e8: string;
   entry_price_1e8: string;
@@ -195,6 +219,11 @@ export interface PerpPositionUpdated {
 export interface PerpOrderRejected {
   type: "perp_order_rejected";
   market_id: string | null;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — subaccount the rejected
+   * attempt targeted. Optional so older payloads still parse.
+   */
+  subaccount_id?: number;
   side: "buy" | "sell" | null;
   price_1e8: string | null;
   size_1e8: string | null;
@@ -217,6 +246,11 @@ export interface PerpPositionLiquidated {
   type: "perp_position_liquidated";
   liquidation_id: string;
   market_id: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — subaccount whose position
+   * was liquidated. Optional so older payloads still parse.
+   */
+  subaccount_id?: number;
   position_id: string;
   side: "long" | "short";
   size_1e8: string;
@@ -241,6 +275,11 @@ export interface PerpFundingPaymentCreated {
   type: "perp_funding_payment_created";
   funding_event_id: string;
   market_id: string;
+  /**
+   * PERPS-SUBACCOUNTS-ENGINE-ROUTING-V1 — subaccount whose margin was
+   * settled by the payment. Optional so older payloads still parse.
+   */
+  subaccount_id?: number;
   position_id: string;
   side: "long" | "short";
   position_size_1e8: string;
