@@ -55,6 +55,17 @@ async function seedLegs(
   page: import("@playwright/test").Page,
   legs: SyntheticLeg[],
 ) {
+  // The React effect that installs `__DEOPT_TICKET_TEST_API__` runs
+  // after the workspace provider mounts. Wait for the hook to become
+  // available before seeding — otherwise `page.evaluate` races the
+  // provider on cold navigation and throws "test hook missing".
+  await page.waitForFunction(
+    () =>
+      typeof (window as unknown as { __DEOPT_TICKET_TEST_API__?: unknown })
+        .__DEOPT_TICKET_TEST_API__ !== "undefined",
+    undefined,
+    { timeout: 10_000 },
+  );
   await page.evaluate((seed) => {
     const api = (
       window as unknown as {

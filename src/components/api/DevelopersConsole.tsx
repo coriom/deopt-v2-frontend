@@ -646,11 +646,11 @@ function SubaccountsCard() {
     <Card testid="developers-console-subaccounts">
       <CardHeader title="Subaccounts" />
       <p className="text-[12px] leading-snug text-zinc-500">
-        Subaccounts isolate Options orderbook activity per{" "}
+        Subaccounts isolate Options orderbook and RFQ activity per{" "}
         <code className="rounded bg-zinc-900 px-1 py-0.5 text-[11px] text-zinc-300">
           (owner, subaccount_id)
         </code>
-        . RFQ and Perps subaccount routing are not live yet.
+        . Perps subaccount routing is not live yet.
       </p>
       {address ? (
         <div className="flex items-center gap-3">
