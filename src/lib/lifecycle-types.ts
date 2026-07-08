@@ -41,6 +41,14 @@ export interface OrderUpdated {
   type: "order_updated";
   order_id: string;
   option_series_id: string;
+  /**
+   * SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1 — subaccount that owns the
+   * order. Backend emits `1` for pre-migration rows via
+   * `#[serde(default = "one_subaccount_id")]`. Optional so an older
+   * enveloped payload without the field still parses; consumers
+   * treat `undefined` as "unknown → refetch to be safe".
+   */
+  subaccount_id?: number;
   status: string;
   remaining_size_1e8: string;
   size_1e8: string;
@@ -55,12 +63,26 @@ export interface FillCreated {
   price_1e8: string;
   size_1e8: string;
   created_at_ms: number;
+  /**
+   * SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1 — per-side subaccounts so a
+   * wallet that owned both legs can filter side-aware. The receiver
+   * reads `buyer_subaccount_id` when they were the buyer and
+   * `seller_subaccount_id` when they were the seller.
+   */
+  buyer_subaccount_id?: number;
+  seller_subaccount_id?: number;
 }
 
 export interface ConditionalOrderUpdated {
   type: "conditional_order_updated";
   conditional_order_id: string;
   option_series_id: string;
+  /**
+   * SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1 — subaccount the conditional
+   * order belongs to. Attached TP/SL legs inherit their parent
+   * order's value at materialisation time.
+   */
+  subaccount_id?: number;
   status: string;
   child_order_id: string | null;
   oco_group_id: string | null;
@@ -103,6 +125,12 @@ export interface AttachmentPlanUpdated {
   plan_id: string;
   parent_order_id: string;
   option_series_id: string;
+  /**
+   * SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1 — inherited from the parent
+   * Options order at emit time. See the backend note in
+   * `emit_attachment_plan_lifecycle`.
+   */
+  subaccount_id?: number;
   status: string;
   materialized_size_1e8: string | null;
   tp_conditional_order_id: string | null;

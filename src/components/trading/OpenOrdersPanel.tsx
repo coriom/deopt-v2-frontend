@@ -86,11 +86,28 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
   }, [resyncToken, address, refresh]);
 
   // Apply `account.orders` deltas: merge into local state by order_id.
+  // SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1 — check the delta's
+  // `subaccount_id` against the active subaccount:
+  //   * match     → merge as before.
+  //   * mismatch  → ignore (delta belongs to a different subaccount).
+  //   * missing   → REFETCH (older backend; can't attribute safely).
+  // The existing merge is already safe when the local cache is
+  // subaccount-scoped (we only refetched rows for `activeSubaccountId`
+  // so unknown ids stay ignored), but the explicit gate closes the
+  // window where a stale delta for a switched-away subaccount could
+  // still overwrite a row.
   useEffect(() => {
     if (!address) return;
     const unsubscribe = subscribe("account.orders", (event: LifecycleEvent) => {
       if (event.payload.type !== "order_updated") return;
       const delta = event.payload;
+      if (delta.subaccount_id === undefined) {
+        void refresh();
+        return;
+      }
+      if (delta.subaccount_id !== activeSubaccountId) {
+        return;
+      }
       setOrders((prev) => {
         if (prev === null) return prev;
         const idx = prev.findIndex((o) => o.order_id === delta.order_id);
@@ -111,7 +128,7 @@ export function OpenOrdersPanel({ address }: OpenOrdersPanelProps) {
       });
     });
     return unsubscribe;
-  }, [address, subscribe]);
+  }, [address, subscribe, activeSubaccountId, refresh]);
 
   const handleCancel = async (
     orderId: string,

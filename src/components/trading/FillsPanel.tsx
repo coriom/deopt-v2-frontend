@@ -82,20 +82,48 @@ export function FillsPanel({ address }: FillsPanelProps) {
     void refresh();
   }, [resyncToken, address, refresh]);
 
-  // Apply `account.fills` deltas. SUBACCOUNTS-FRONTEND-SWITCHER-V1:
-  // WS payloads don't yet carry `subaccount_id`, so a wallet-level
-  // event is ambiguous under the subaccount-scoped filter. We refetch
-  // instead of poisoning the cache with a possibly cross-subaccount
-  // synthesised row. The REST fetch is subaccount-scoped and remains
-  // the source of truth.
+  // Apply `account.fills` deltas.
+  //
+  // SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1: fills now carry per-side
+  // subaccount ids. We use them to skip refetches for fills that
+  // belong to a different subaccount:
+  //   * Both sides missing → ambiguous (older backend); refetch.
+  //   * Delta's side (buyer or seller) matches active subaccount and
+  //     the current wallet address matches that side on the fill →
+  //     refetch (row belongs in the view).
+  //   * Otherwise → ignore; the delta belongs to a different
+  //     subaccount and the REST feed correctly excludes it.
+  //
+  // We still refetch rather than merge because the WS delta doesn't
+  // carry `buyer`/`seller` addresses, so we can't build the full row
+  // client-side. The refetch is subaccount-scoped by the REST filter,
+  // so the resulting rows are correct.
   useEffect(() => {
     if (!address) return;
     const unsubscribe = subscribe("account.fills", (event: LifecycleEvent) => {
       if (event.payload.type !== "fill_created") return;
+      const delta = event.payload;
+      const { buyer_subaccount_id, seller_subaccount_id, side } = delta;
+      if (
+        buyer_subaccount_id === undefined &&
+        seller_subaccount_id === undefined
+      ) {
+        void refresh();
+        return;
+      }
+      // The delta is emitted per-account; the current session's wallet
+      // is on the side named by `side`. Match that side's subaccount.
+      const mySideSubaccount =
+        side === "buy" ? buyer_subaccount_id : seller_subaccount_id;
+      if (mySideSubaccount === undefined) {
+        void refresh();
+        return;
+      }
+      if (mySideSubaccount !== activeSubaccountId) return;
       void refresh();
     });
     return unsubscribe;
-  }, [address, subscribe, refresh]);
+  }, [address, subscribe, refresh, activeSubaccountId]);
 
   return (
     <section

@@ -102,13 +102,35 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
   }, [resyncToken, address, refresh]);
 
   // Apply `account.conditional_orders` deltas: merge by id.
+  // SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1 — same posture as
+  // `OpenOrdersPanel`: subaccount match → merge; missing → refetch;
+  // mismatch → ignore. Also handles the sibling `attachment_plan_
+  // updated` event on the same channel with an unconditional refetch,
+  // since attachment plans don't yet have a subaccount-scoped fetch
+  // path (they refresh the parent conditional list).
   useEffect(() => {
     if (!address) return;
     const unsubscribe = subscribe(
       "account.conditional_orders",
       (event: LifecycleEvent) => {
+        if (event.payload.type === "attachment_plan_updated") {
+          if (
+            event.payload.subaccount_id === undefined ||
+            event.payload.subaccount_id === activeSubaccountId
+          ) {
+            void refresh();
+          }
+          return;
+        }
         if (event.payload.type !== "conditional_order_updated") return;
         const delta = event.payload;
+        if (delta.subaccount_id === undefined) {
+          void refresh();
+          return;
+        }
+        if (delta.subaccount_id !== activeSubaccountId) {
+          return;
+        }
         setRows((prev) => {
           if (prev === null) return prev;
           const idx = prev.findIndex((r) => r.id === delta.conditional_order_id);
@@ -132,7 +154,7 @@ export function ConditionalOrdersPanel({ address }: ConditionalOrdersPanelProps)
       },
     );
     return unsubscribe;
-  }, [address, subscribe]);
+  }, [address, subscribe, activeSubaccountId, refresh]);
 
   const handleCancel = async (id: string, rowSubaccountId: number | undefined) => {
     if (!address) return;

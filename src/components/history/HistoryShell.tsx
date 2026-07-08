@@ -41,6 +41,7 @@ import {
   type ReasonSeverity,
 } from "@/lib/history-reasons";
 import { useLifecycleStream } from "@/hooks/useLifecycleStream";
+import type { LifecycleEvent } from "@/lib/lifecycle-types";
 import { LifecycleStatusBadge } from "@/components/trading/LifecycleStatusBadge";
 
 // Local superset of the backend HistoryTab. The `"conditional"` tab is
@@ -485,16 +486,41 @@ export function HistoryShell() {
   // the user choose when to fold in the new state.
   useEffect(() => {
     if (!address) return;
-    const flag = () => setBannerVisible(true);
+    // SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1 — only show "new activity"
+    // when the delta belongs to the active subaccount OR the delta
+    // lacks subaccount metadata (older backend — refetch is the safe
+    // default). This prevents banner spam when another subaccount
+    // trades under the same wallet.
+    const flagIfActive = (event: LifecycleEvent) => {
+      const payload = event.payload;
+      let subaccountId: number | undefined;
+      if (payload.type === "order_updated") {
+        subaccountId = payload.subaccount_id;
+      } else if (payload.type === "fill_created") {
+        // Wallet is on `side` here — read that side's subaccount id.
+        subaccountId =
+          payload.side === "buy"
+            ? payload.buyer_subaccount_id
+            : payload.seller_subaccount_id;
+      } else if (
+        payload.type === "conditional_order_updated" ||
+        payload.type === "attachment_plan_updated"
+      ) {
+        subaccountId = payload.subaccount_id;
+      }
+      if (subaccountId === undefined || subaccountId === activeSubaccountId) {
+        setBannerVisible(true);
+      }
+    };
     const unsubs = [
-      lifecycleSubscribe("account.orders", flag),
-      lifecycleSubscribe("account.fills", flag),
-      lifecycleSubscribe("account.conditional_orders", flag),
+      lifecycleSubscribe("account.orders", flagIfActive),
+      lifecycleSubscribe("account.fills", flagIfActive),
+      lifecycleSubscribe("account.conditional_orders", flagIfActive),
     ];
     return () => {
       for (const u of unsubs) u();
     };
-  }, [address, lifecycleSubscribe]);
+  }, [address, lifecycleSubscribe, activeSubaccountId]);
 
   // HISTORY-LIFECYCLE-V2 — on WS reconnect (resync), silently refresh
   // the current view so we don't show stale data after a missed event.
