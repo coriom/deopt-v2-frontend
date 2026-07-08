@@ -29,6 +29,7 @@ import {
   type SubmitPerpsOrderRequest,
 } from "@/lib/trading-api";
 import { useWallet } from "@/lib/wallet";
+import { buildAuthorization, canonicalV2 } from "@/lib/write-auth";
 
 type Side = "long" | "short";
 type Mode = "market" | "limit";
@@ -84,29 +85,53 @@ export function PerpsTradeFormWidget() {
     const marketId = market.symbol; // e.g. "ETH-PERP"
     const priceStr =
       mode === "limit" ? limitPrice.trim() : "0"; // V1: market orders send `0` and let the router reject
-    const req: SubmitPerpsOrderRequest = {
-      market_id: marketId,
-      account: wallet.address!,
-      // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — thread the active
-      // subaccount so the backend routes the order under the correct
-      // isolated-margin bucket. Submit is still fail-closed unless the
-      // backend allowlist opens for this caller.
-      subaccount_id: wallet.activeSubaccountId,
-      side: side === "long" ? "buy" : "sell",
-      price_1e8: priceStr,
-      size_1e8: size,
-      time_in_force: tif.toLowerCase() as "gtc" | "ioc" | "fok",
-      post_only: postOnly,
-      reduce_only: false,
-      // V1: leverage → isolated margin. `notional / leverage` in 1e8.
-      // Callers wire real risk math when the enabled surface goes
-      // beyond closed testing. For V1 we ship a straightforward
-      // computation that the backend will re-validate anyway.
-      isolated_margin_1e8: computeIsolatedMargin1e8(size, priceStr, leverage),
-      client_order_id: `ticket-${Date.now()}`,
-    };
+    const account = wallet.address!;
+    const subaccountId = wallet.activeSubaccountId;
+    const sideStr: "buy" | "sell" = side === "long" ? "buy" : "sell";
+    const tifStr = tif.toLowerCase() as "gtc" | "ioc" | "fok";
+    const isolatedMargin1e8 = computeIsolatedMargin1e8(size, priceStr, leverage);
+    const clientOrderId = `ticket-${Date.now()}`;
     setSubmitting(true);
     try {
+      // PERPS-V2-WRITE-AUTH-ENFORCEMENT-V1 — build v2 canonical bytes,
+      // sign, and thread the envelope into the submit body. The backend
+      // rebuilds these bytes from the body fields and rejects any
+      // divergence at the challenge verifier. Perps mutations require
+      // v2 by policy — there is no v1 fallback.
+      const canonicalBytes = canonicalV2.perpOrderSubmit({
+        account,
+        subaccountId,
+        marketId,
+        side: sideStr,
+        price1e8: priceStr,
+        size1e8: size,
+        timeInForce: tifStr,
+        postOnly,
+        reduceOnly: false,
+        isolatedMargin1e8,
+        clientOrderId,
+      });
+      const authorization = await buildAuthorization({
+        account,
+        action: "PERP_ORDER_SUBMIT",
+        canonical: canonicalBytes,
+        signTypedData: wallet.signTypedData,
+        version: 2,
+      });
+      const req: SubmitPerpsOrderRequest = {
+        market_id: marketId,
+        account,
+        subaccount_id: subaccountId,
+        side: sideStr,
+        price_1e8: priceStr,
+        size_1e8: size,
+        time_in_force: tifStr,
+        post_only: postOnly,
+        reduce_only: false,
+        isolated_margin_1e8: isolatedMargin1e8,
+        client_order_id: clientOrderId,
+        authorization,
+      };
       const response = await submitPerpsOrder(req);
       setLastAcceptedOrderId(response.order.order_id);
     } catch (err) {

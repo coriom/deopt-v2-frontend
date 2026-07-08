@@ -1829,10 +1829,10 @@ export interface SubmitPerpsOrderRequest {
   account: string;
   /**
    * PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — subaccount the order runs
-   * under. Omit for the default subaccount 1 (v1-compatible). Public
-   * Perps trading is fail-closed by default; even when the closed-test
-   * allowlist opens for a caller, the backend still expects this field
-   * for non-default subaccounts.
+   * under. Optional on the wire so the default fail-closed handler
+   * path can 503 without the field. REQUIRED under the closed-test /
+   * public paths and must match the value embedded in
+   * `authorization`'s v2 canonical bytes.
    */
   subaccount_id?: number;
   side: "buy" | "sell";
@@ -1843,6 +1843,27 @@ export interface SubmitPerpsOrderRequest {
   reduce_only: boolean;
   isolated_margin_1e8: string;
   client_order_id?: string | null;
+  /**
+   * PERPS-V2-WRITE-AUTH-ENFORCEMENT-V1 — v2 authorization envelope.
+   *
+   * REQUIRED when the backend gate opens (closed-test allowlist or
+   * public trading). Perps never shipped a v1 wire; every accepted
+   * envelope must declare `version=2`. The default fail-closed handler
+   * path (both Perps flags off) still 503s without consulting this
+   * field — hence it's optional in the wire type.
+   */
+  authorization?: import("./write-auth").AuthorizationEnvelope;
+}
+
+/**
+ * PERPS-V2-WRITE-AUTH-ENFORCEMENT-V1 — request body for
+ * `DELETE /perps/orders/:id`. Carries the v2 envelope + subaccount id.
+ * The caller wallet is still passed as `?account=` for the query
+ * extractor.
+ */
+export interface CancelPerpsOrderRequest {
+  authorization: import("./write-auth").AuthorizationEnvelope;
+  subaccount_id: number;
 }
 
 export interface SubmitPerpsOrderResponse {
@@ -1885,19 +1906,21 @@ export function submitPerpsOrder(
 
 /**
  * Cancel an owned Perps order. `caller` must match the account that
- * submitted the order; otherwise the backend rejects with
- * `PerpInvalidOrderState`.
+ * submitted the order and the `authorization` envelope must be a v2
+ * envelope carrying the caller's subaccount id. Otherwise the backend
+ * rejects with `PerpInvalidOrderState` or `WriteAuth*`.
  */
 export function cancelPerpsOrder(
   orderId: string,
   caller: string,
+  body: CancelPerpsOrderRequest,
   signal?: AbortSignal,
 ): Promise<CancelPerpsOrderResponse> {
   const q = new URLSearchParams({ account: caller }).toString();
   return rawRequest<CancelPerpsOrderResponse>(
     "DELETE",
     `/perps/orders/${encodeURIComponent(orderId)}?${q}`,
-    undefined,
+    body,
     signal,
   );
 }

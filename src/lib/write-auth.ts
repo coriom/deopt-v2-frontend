@@ -75,7 +75,11 @@ export type WriteAuthAction =
   | "OPTION_TWAP_CREATE"
   | "OPTION_TWAP_CANCEL"
   | "SUBACCOUNT_CREATE"
-  | "SUBACCOUNT_RENAME";
+  | "SUBACCOUNT_RENAME"
+  // PERPS-V2-WRITE-AUTH-ENFORCEMENT-V1 — Perps mutations under closed-
+  // test conditions require a v2 envelope with these action strings.
+  | "PERP_ORDER_SUBMIT"
+  | "PERP_ORDER_CANCEL";
 
 // ---------------------------------------------------------------------
 // Canonical payload encoding
@@ -890,6 +894,60 @@ export const canonicalV2 = {
       ["taker", cv.addr(args.taker)],
       ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
       ["option_rfq_id", cv.str(args.optionRfqId)],
+    ]);
+  },
+
+  // -------------------------------------------------------------------
+  // PERPS-V2-WRITE-AUTH-ENFORCEMENT-V1 — v2 canonical builders for
+  // Perps submit + cancel.
+  //
+  // Byte-frozen against the backend at
+  // `src/api/routes.rs::canonical_perp_order_submit_v2` +
+  // `canonical_perp_order_cancel_v2`. Perps never shipped a v1 wire,
+  // so there is no v1 counterpart — every Perps closed-test / public-
+  // trading call MUST use these.
+  // -------------------------------------------------------------------
+
+  perpOrderSubmit(args: {
+    account: Address;
+    subaccountId: number;
+    marketId: string;
+    side: "buy" | "sell";
+    price1e8: string;
+    size1e8: string;
+    timeInForce: "gtc" | "ioc" | "fok";
+    postOnly: boolean;
+    reduceOnly: boolean;
+    isolatedMargin1e8: string;
+    clientOrderId?: string | null;
+  }): Uint8Array {
+    return canonicalPayload("PERP_ORDER_SUBMIT", [
+      ["account", cv.addr(args.account)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["market_id", cv.str(args.marketId)],
+      ["side", cv.str(args.side)],
+      ["price_1e8", cv.str(args.price1e8)],
+      ["size_1e8", cv.str(args.size1e8)],
+      ["time_in_force", cv.str(args.timeInForce)],
+      ["post_only", cv.bool(args.postOnly)],
+      ["reduce_only", cv.bool(args.reduceOnly)],
+      ["isolated_margin_1e8", cv.str(args.isolatedMargin1e8)],
+      [
+        "client_order_id",
+        args.clientOrderId == null ? cv.null() : cv.str(args.clientOrderId),
+      ],
+    ]);
+  },
+
+  perpOrderCancel(args: {
+    account: Address;
+    subaccountId: number;
+    orderId: string;
+  }): Uint8Array {
+    return canonicalPayload("PERP_ORDER_CANCEL", [
+      ["account", cv.addr(args.account)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["order_id", cv.str(args.orderId)],
     ]);
   },
 };
