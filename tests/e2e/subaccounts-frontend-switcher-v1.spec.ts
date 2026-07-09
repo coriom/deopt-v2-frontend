@@ -151,17 +151,19 @@ test("switcher exposes the honest RFQ / Perps scope copy", async ({ page }) => {
   await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
     /Options orderbook activity/i,
   );
-  // PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1 — Perps reads are now
-  // subaccount-scoped, but public Perps trading remains fail-closed;
-  // RFQ still is not subaccount-scoped. Copy must reflect both.
+  // SUBACCOUNTS-FRONTEND-COPY-TRUTH-PASS-V1 — RFQ single-leg flows
+  // are now subaccount-scoped (SUBACCOUNTS-RFQ-INTEGRATION-V1);
+  // Perps reads are subaccount-scoped (PERPS-SUBACCOUNTS-FRONTEND-
+  // ROUTING-V1); multi-leg RFQs and public Perps trading are still
+  // not live. Copy must reflect all four.
   await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /Perps reads/i,
+    /single-leg\s+RFQ/i,
   );
   await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /RFQ is not subaccount-scoped yet/i,
+    /Perps read panels/i,
   );
   await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /Public Perps trading is not live/i,
+    /Multi-leg RFQs and public Perps trading are not live/i,
   );
 });
 

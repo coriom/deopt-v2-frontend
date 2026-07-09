@@ -831,7 +831,9 @@ function SubaccountsApiHints() {
           backend-authoritative.
         </li>
         <li>
-          RFQ does not yet accept <code>subaccount_id</code>.
+          Single-leg RFQ flows accept <code>subaccount_id</code> on
+          create / quote / accept / cancel; multi-leg atomic RFQs
+          remain deferred.
         </li>
       </ul>
     </div>
