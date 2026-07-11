@@ -1148,6 +1148,274 @@ export function acceptOptionsRfqQuote(
 // / taker / mm_account addresses. Returns the same
 // `OptionRfqFillResponse` shape that the accept endpoint returns
 // inline. Response carries NO signatures / authorization / secrets.
+
+// ---------------------------------------------------------------------
+// RFQ-MULTI-LEG-FRONTEND-V1 — multi-leg atomic Options RFQ client
+// methods. Wire contract mirrors
+// `deopt-v2-backend/src/api/routes.rs::/options/multi-leg-rfqs*`.
+//
+// All 7 routes are backend-flag-gated on `OPTION_RFQ_MULTI_LEG_ENABLED`.
+// When the backend flag is off, the routes fail closed with
+// `503 OptionMultiLegRfqNotLive`; the caller should surface that
+// message honestly and not retry.
+//
+// The frontend gate `NEXT_PUBLIC_RFQ_MULTI_LEG_ENABLED` protects the
+// caller from ever hitting these routes when the operator has not
+// opted in — see `src/lib/rfq-multi-leg-flag.ts`.
+// ---------------------------------------------------------------------
+
+/** Backend error code emitted by every multi-leg route when
+ *  `OPTION_RFQ_MULTI_LEG_ENABLED=false`. Callers should render an
+ *  honest disabled message rather than "internal error." */
+export const OPTION_MULTI_LEG_RFQ_NOT_LIVE_CODE =
+  "OPTION_MULTI_LEG_RFQ_NOT_LIVE" as const;
+
+export type OptionMultiLegRfqSide = "buy" | "sell";
+
+export interface OptionMultiLegRfqLegRequest {
+  leg_index: number;
+  option_series_id: string;
+  side: OptionMultiLegRfqSide;
+  /** 1e8 fixed-point contract size as a decimal string. */
+  size_1e8: string;
+  ratio_num: number;
+  ratio_den: number;
+}
+
+export interface CreateOptionMultiLegRfqRequest {
+  taker: string;
+  /** Active subaccount id. Backend defaults to 1 if omitted; the
+   *  frontend always passes the connected wallet's active subaccount. */
+  subaccount_id?: number;
+  legs: OptionMultiLegRfqLegRequest[];
+  ttl_ms?: number | null;
+  authorization: import("./write-auth").AuthorizationEnvelope;
+}
+
+export interface OptionMultiLegRfqLegResponse {
+  leg_index: number;
+  option_series_id: string;
+  side: OptionMultiLegRfqSide;
+  size_1e8: string;
+  ratio_num: number;
+  ratio_den: number;
+}
+
+export interface OptionMultiLegRfqResponse {
+  option_rfq_id: string;
+  taker: string;
+  taker_subaccount_id: number;
+  /** Mirrors single-leg status vocabulary. */
+  status: OptionRfqStatus;
+  created_at_ms: number;
+  expires_at_ms: number;
+  accepted_quote_id: string | null;
+  accepted_fill_id: string | null;
+  legs_count: number;
+  legs: OptionMultiLegRfqLegResponse[];
+}
+
+export interface OptionMultiLegRfqQuoteLegResponse {
+  leg_index: number;
+  price_1e8: string;
+}
+
+export interface OptionMultiLegRfqQuoteResponse {
+  quote_id: string;
+  option_rfq_id: string;
+  mm_account: string;
+  maker_subaccount_id: number;
+  session_id: string | null;
+  client_quote_id: string | null;
+  /** Signed net package price as a decimal-string 1e8 integer. */
+  package_price_1e8: string;
+  size_1e8: string;
+  status: OptionRfqQuoteStatus;
+  created_at_ms: number;
+  expires_at_ms: number;
+  signature: string | null;
+  quote_nonce: string | null;
+  legs: OptionMultiLegRfqQuoteLegResponse[];
+}
+
+export interface SubmitOptionMultiLegRfqQuoteLegRequest {
+  leg_index: number;
+  price_1e8: string;
+}
+
+export interface SubmitOptionMultiLegRfqQuoteRequest {
+  mm_account: string;
+  subaccount_id?: number;
+  session_id?: string | null;
+  client_quote_id?: string | null;
+  package_price_1e8: string;
+  size_1e8: string;
+  legs: SubmitOptionMultiLegRfqQuoteLegRequest[];
+  quote_nonce?: number | null;
+  quote_ttl_ms?: number | null;
+  signature?: string | null;
+  authorization: import("./write-auth").AuthorizationEnvelope;
+}
+
+export interface OptionMultiLegRfqFillLegResponse {
+  leg_index: number;
+  option_series_id: string;
+  side: OptionMultiLegRfqSide;
+  size_1e8: string;
+  price_1e8: string;
+}
+
+export interface AcceptOptionMultiLegRfqQuoteRequest {
+  subaccount_id?: number;
+  /** Byte-exact match of `quote.package_price_1e8`. */
+  expected_package_price_1e8: string;
+  /** Byte-exact match of the quote's leg count. */
+  expected_legs_count: number;
+  /** Byte-exact match of the quote's ordered per-leg prices. */
+  expected_leg_prices_1e8: string[];
+  authorization: import("./write-auth").AuthorizationEnvelope;
+}
+
+export interface AcceptOptionMultiLegRfqQuoteResponse {
+  option_rfq_id: string;
+  quote_id: string;
+  fill_id: string;
+  taker: string;
+  taker_subaccount_id: number;
+  mm_account: string;
+  maker_subaccount_id: number;
+  package_price_1e8: string;
+  size_1e8: string;
+  rfq_status: OptionRfqStatus;
+  quote_status: OptionRfqQuoteStatus;
+  legs_count: number;
+  fill_legs: OptionMultiLegRfqFillLegResponse[];
+  created_at_ms: number;
+}
+
+export interface CancelOptionMultiLegRfqRequest {
+  subaccount_id?: number;
+  authorization: import("./write-auth").AuthorizationEnvelope;
+}
+
+export interface CancelOptionMultiLegRfqResponse {
+  option_rfq_id: string;
+  taker: string;
+  taker_subaccount_id: number;
+  status: OptionRfqStatus;
+  cancelled_quotes: number;
+  cancelled_at_ms: number;
+}
+
+export function createOptionsMultiLegRfq(
+  body: CreateOptionMultiLegRfqRequest,
+  signal?: AbortSignal,
+): Promise<OptionMultiLegRfqResponse> {
+  return rawRequest<OptionMultiLegRfqResponse>(
+    "POST",
+    `/options/multi-leg-rfqs`,
+    body,
+    signal,
+  );
+}
+
+export function listOptionsMultiLegRfqs(
+  opts: {
+    taker: string;
+    subaccountId?: number;
+    signal?: AbortSignal;
+  },
+): Promise<OptionMultiLegRfqResponse[]> {
+  const qs = new URLSearchParams();
+  qs.set("taker", opts.taker.toLowerCase());
+  if (opts.subaccountId !== undefined) {
+    qs.set("subaccount_id", String(opts.subaccountId));
+  }
+  return rawRequest<OptionMultiLegRfqResponse[]>(
+    "GET",
+    `/options/multi-leg-rfqs?${qs.toString()}`,
+    undefined,
+    opts.signal,
+  );
+}
+
+export function getOptionsMultiLegRfq(
+  optionRfqId: string,
+  signal?: AbortSignal,
+): Promise<OptionMultiLegRfqResponse> {
+  return rawRequest<OptionMultiLegRfqResponse>(
+    "GET",
+    `/options/multi-leg-rfqs/${optionRfqId}`,
+    undefined,
+    signal,
+  );
+}
+
+export function submitOptionsMultiLegRfqQuote(
+  optionRfqId: string,
+  body: SubmitOptionMultiLegRfqQuoteRequest,
+  signal?: AbortSignal,
+): Promise<OptionMultiLegRfqQuoteResponse> {
+  return rawRequest<OptionMultiLegRfqQuoteResponse>(
+    "POST",
+    `/options/multi-leg-rfqs/${optionRfqId}/quotes`,
+    body,
+    signal,
+  );
+}
+
+export function listOptionsMultiLegRfqQuotes(
+  optionRfqId: string,
+  signal?: AbortSignal,
+): Promise<OptionMultiLegRfqQuoteResponse[]> {
+  return rawRequest<OptionMultiLegRfqQuoteResponse[]>(
+    "GET",
+    `/options/multi-leg-rfqs/${optionRfqId}/quotes`,
+    undefined,
+    signal,
+  );
+}
+
+export function getOptionsMultiLegRfqQuote(
+  optionRfqId: string,
+  quoteId: string,
+  signal?: AbortSignal,
+): Promise<OptionMultiLegRfqQuoteResponse> {
+  return rawRequest<OptionMultiLegRfqQuoteResponse>(
+    "GET",
+    `/options/multi-leg-rfqs/${optionRfqId}/quotes/${quoteId}`,
+    undefined,
+    signal,
+  );
+}
+
+export function acceptOptionsMultiLegRfqQuote(
+  optionRfqId: string,
+  quoteId: string,
+  body: AcceptOptionMultiLegRfqQuoteRequest,
+  signal?: AbortSignal,
+): Promise<AcceptOptionMultiLegRfqQuoteResponse> {
+  return rawRequest<AcceptOptionMultiLegRfqQuoteResponse>(
+    "POST",
+    `/options/multi-leg-rfqs/${optionRfqId}/quotes/${quoteId}/accept`,
+    body,
+    signal,
+  );
+}
+
+export function cancelOptionsMultiLegRfq(
+  optionRfqId: string,
+  body: CancelOptionMultiLegRfqRequest,
+  signal?: AbortSignal,
+): Promise<CancelOptionMultiLegRfqResponse> {
+  return rawRequest<CancelOptionMultiLegRfqResponse>(
+    "POST",
+    `/options/multi-leg-rfqs/${optionRfqId}/cancel`,
+    body,
+    signal,
+  );
+}
+
 // OPTIONS-TWAP-ORDERS-V1 — TWAP parent/child client methods.
 
 export type OptionTwapStatus =

@@ -24,15 +24,24 @@ import {
   isOptionsRfqEnabled,
   OPTIONS_RFQ_ENABLED_ENV,
 } from "@/lib/options-rfq-flag";
+import {
+  isRfqMultiLegEnabled,
+  RFQ_MULTI_LEG_ENABLED_ENV,
+} from "@/lib/rfq-multi-leg-flag";
 import { useWallet } from "@/lib/wallet";
 import { useLifecycleStream } from "@/hooks/useLifecycleStream";
 import type { LifecycleEvent } from "@/lib/lifecycle-types";
 import {
+  cancelOptionsMultiLegRfq,
   cancelOptionsRfq,
+  createOptionsMultiLegRfq,
   createOptionsRfq,
+  listOptionsMultiLegRfqs,
   listOptionsRfqs,
   listOptionsSeries,
   TradingApiError,
+  type OptionMultiLegRfqLegRequest,
+  type OptionMultiLegRfqResponse,
   type OptionRfqQuoteResponse,
   type OptionRfqResponse,
   type OptionSeriesResponse,
@@ -60,7 +69,7 @@ type SubmitPhase =
   | { kind: "requesting_challenge" }
   | { kind: "awaiting_signature" }
   | { kind: "submitting" }
-  | { kind: "success"; rfqId: string }
+  | { kind: "success"; rfqId: string; multiLeg?: boolean }
   | { kind: "error"; message: string };
 
 const ONE_E6 = BigInt("1000000");
@@ -108,6 +117,14 @@ function primaryLeg(state: StrategyState): StrategyLeg | null {
   return isSingleLeg(state) ? state.legs[0] : null;
 }
 
+/**
+ * RFQ-MULTI-LEG-FRONTEND-V1 — bounds enforced by
+ * `MIN/MAX_LEGS_PER_MULTI_LEG_RFQ` on the backend
+ * (`src/options/multi_leg.rs`). Matches the backend range 2..=8.
+ */
+const MIN_MULTI_LEG_LEGS = 2;
+const MAX_MULTI_LEG_LEGS = 8;
+
 export function RfqStrategyWorkspace() {
   const [state, setState] = useState<StrategyState>(() => initialStrategyState("BTC"));
   const [tab, setTab] = useState<Tab>("payoff");
@@ -121,6 +138,15 @@ export function RfqStrategyWorkspace() {
     useState<OptionRfqQuoteResponse | null>(null);
   const [quoteRefreshNonce, setQuoteRefreshNonce] = useState(0);
   /**
+   * RFQ-MULTI-LEG-FRONTEND-V1 — multi-leg RFQs held separately from
+   * the single-leg list because they use a different backend route
+   * and DTO shape. The list is scoped to the active subaccount via
+   * the backend `?subaccount_id=` filter.
+   */
+  const [multiLegRfqs, setMultiLegRfqs] = useState<OptionMultiLegRfqResponse[]>(
+    [],
+  );
+  /**
    * OPTIONS-RFQ-TRADES-FEED-V1 — bumped whenever the Trades feed
    * needs to refetch from `GET /options/rfq-fills` (post-accept,
    * post-maker-submit, or user Refresh). The previous milestone's
@@ -130,9 +156,23 @@ export function RfqStrategyWorkspace() {
   const [tradesRefreshNonce, setTradesRefreshNonce] = useState(0);
 
   const rfqEnabled = isOptionsRfqEnabled();
+  const multiLegEnabled = isRfqMultiLegEnabled();
   const wallet = useWallet();
   const summary = useMemo(() => summariseStrategy(state), [state]);
-  const canSubmit = rfqEnabled && isSingleLeg(state) && state.amount > 0;
+  /**
+   * A multi-leg-shaped submission is allowed only when the multi-leg
+   * frontend flag is on AND the leg count fits the backend
+   * `2..=MAX_MULTI_LEG_LEGS` window. Everything else routes through
+   * the existing single-leg path or blocks safely.
+   */
+  const isMultiLegSubmission =
+    multiLegEnabled &&
+    state.legs.length >= MIN_MULTI_LEG_LEGS &&
+    state.legs.length <= MAX_MULTI_LEG_LEGS;
+  const canSubmit =
+    rfqEnabled &&
+    (isSingleLeg(state) || isMultiLegSubmission) &&
+    state.amount > 0;
 
   // Wallet gating (only meaningful when flag is on).
   const walletBlockers = useMemo(() => {
@@ -158,11 +198,21 @@ export function RfqStrategyWorkspace() {
     if (!rfqEnabled) return null;
     if (state.legs.length === 0) return "Add at least one leg to request a quote.";
     if (state.legs.length > 1) {
-      return "Backend RFQ is single-leg per RFQ — multi-leg atomic RFQs will be added in a follow-up milestone.";
+      if (!multiLegEnabled) {
+        // Honest disabled copy — matches the historic message so the
+        // pre-existing docs/tests stay valid. Backend routes exist
+        // but the frontend gate is off by default.
+        return "Multi-leg atomic RFQ is not enabled by default. Backend routes exist behind the OPTION_RFQ_MULTI_LEG_ENABLED flag; frontend UI is gated by NEXT_PUBLIC_RFQ_MULTI_LEG_ENABLED and stays honest until the operator flips both.";
+      }
+      if (state.legs.length > MAX_MULTI_LEG_LEGS) {
+        return `Multi-leg RFQ supports at most ${MAX_MULTI_LEG_LEGS} legs.`;
+      }
+      // Multi-leg is enabled and leg count is in range → falls through
+      // to the amount check.
     }
     if (state.amount <= 0) return "Amount must be greater than zero.";
     return null;
-  }, [rfqEnabled, state.legs.length, state.amount]);
+  }, [rfqEnabled, multiLegEnabled, state.legs.length, state.amount]);
 
   const onPreset = useCallback(
     (id: StrategyPresetId) => setState((s) => applyPreset(s, id)),
@@ -222,6 +272,37 @@ export function RfqStrategyWorkspace() {
     }
   }, [rfqEnabled, wallet.address, wallet.activeSubaccountId]);
 
+  const refreshMultiLegRfqs = useCallback(async () => {
+    if (!rfqEnabled || !multiLegEnabled) {
+      setMultiLegRfqs([]);
+      return;
+    }
+    if (!wallet.address) {
+      setMultiLegRfqs([]);
+      return;
+    }
+    try {
+      // Backend list route is subaccount-filtered; switching the
+      // active subaccount narrows the list without any client-side
+      // work.
+      const rows = await listOptionsMultiLegRfqs({
+        taker: wallet.address,
+        subaccountId: wallet.activeSubaccountId,
+      });
+      setMultiLegRfqs(rows);
+    } catch (e) {
+      // Backend 503 (`OPTION_MULTI_LEG_RFQ_NOT_LIVE`) is expected
+      // when the frontend flag is on but the backend flag is off.
+      // Surface it silently through the error-free-empty-list to
+      // preserve the honest disabled copy on the CTA side.
+      if (e instanceof TradingApiError && e.status === 503) {
+        setMultiLegRfqs([]);
+        return;
+      }
+      setMultiLegRfqs([]);
+    }
+  }, [rfqEnabled, multiLegEnabled, wallet.address, wallet.activeSubaccountId]);
+
   // Auto-refresh RFQ list on wallet change + on mount.
   const hasRunInitialRefresh = useRef(false);
   useEffect(() => {
@@ -234,7 +315,8 @@ export function RfqStrategyWorkspace() {
       hasRunInitialRefresh.current = true;
     }
     void refreshRfqs();
-  }, [rfqEnabled, wallet.address, refreshRfqs]);
+    void refreshMultiLegRfqs();
+  }, [rfqEnabled, wallet.address, refreshRfqs, refreshMultiLegRfqs]);
 
   // OPTIONS-RFQ-LIFECYCLE-WS-V1 — subscribe to `account.rfqs`
   // lifecycle deltas so create / quote-submitted / accepted /
@@ -294,11 +376,120 @@ export function RfqStrategyWorkspace() {
   const onRequestQuote = useCallback(async () => {
     if (!canSubmit || walletBlockers || strategyBlocker) return;
     if (!wallet.address) return;
-    const leg = primaryLeg(state);
-    if (!leg) return;
 
     setPhase({ kind: "resolving_series" });
     try {
+      // Multi-leg dispatch: when the strategy has more than one leg
+      // and the frontend flag is on, route through
+      // `POST /options/multi-leg-rfqs`. Otherwise fall through to the
+      // existing single-leg path.
+      if (isMultiLegSubmission) {
+        const size1e8Package = amountTo1e8(state.amount, 1);
+        if (size1e8Package === "0") {
+          setPhase({
+            kind: "error",
+            message: "Amount resolves to zero contracts.",
+          });
+          return;
+        }
+
+        // Resolve each leg's series in the order the user built it.
+        // The backend enforces contiguous `leg_index` from 0 so the
+        // frontend emits `leg_index = i` on the ordered list — the
+        // user-facing arrangement (which the payoff chart already
+        // uses) becomes the signed order.
+        const legRequests: OptionMultiLegRfqLegRequest[] = [];
+        for (let i = 0; i < state.legs.length; i++) {
+          const l = state.legs[i];
+          const series = await listOptionsSeries({
+            is_call: l.optionType === "call",
+          });
+          const matched = matchSeries(series, {
+            underlyingSymbol: state.underlying,
+            expiryMs: state.expiryMs,
+            isCall: l.optionType === "call",
+            strike: l.strike,
+          });
+          if (!matched) {
+            setPhase({
+              kind: "error",
+              message: `No listed ${state.underlying} ${l.optionType} series matches strike $${l.strike.toLocaleString("en-US")} + expiry ${new Date(state.expiryMs).toISOString().slice(0, 10)} (leg ${i}).`,
+            });
+            return;
+          }
+          const legSize = amountTo1e8(state.amount, l.ratio);
+          if (legSize === "0") {
+            setPhase({
+              kind: "error",
+              message: `Leg ${i} size resolves to zero contracts.`,
+            });
+            return;
+          }
+          legRequests.push({
+            leg_index: i,
+            option_series_id: matched.option_series_id,
+            side: l.side,
+            size_1e8: legSize,
+            // `ratio_num` / `ratio_den` are already reflected in the
+            // per-leg `size_1e8` above; on the wire the RFQ carries
+            // both. Send `ratio_num=1, ratio_den=1` since the
+            // client-computed `size_1e8` is authoritative and the
+            // backend just persists ratios for audit.
+            ratio_num: 1,
+            ratio_den: 1,
+          });
+        }
+
+        // Multi-leg is v2-only from birth — no v1 fallback exists on
+        // the backend.
+        const canonicalBytes = canonicalV2.optionMultiLegRfqCreate({
+          taker: wallet.address,
+          subaccountId: wallet.activeSubaccountId,
+          legs: legRequests.map((l) => ({
+            legIndex: l.leg_index,
+            optionSeriesId: l.option_series_id,
+            side: l.side,
+            size1e8: l.size_1e8,
+            ratioNum: l.ratio_num,
+            ratioDen: l.ratio_den,
+          })),
+          ttlMs: null,
+        });
+
+        setPhase({ kind: "requesting_challenge" });
+        const signTypedMulti: SignTypedDataFn = async (args) => {
+          setPhase({ kind: "awaiting_signature" });
+          return wallet.signTypedData(args);
+        };
+        const authorizationMulti = await buildAuthorization({
+          account: wallet.address,
+          action: "OPTION_MULTI_LEG_RFQ_CREATE",
+          canonical: canonicalBytes,
+          signTypedData: signTypedMulti,
+          version: 2,
+        });
+
+        setPhase({ kind: "submitting" });
+        const created = await createOptionsMultiLegRfq({
+          taker: wallet.address,
+          subaccount_id: wallet.activeSubaccountId,
+          legs: legRequests,
+          ttl_ms: null,
+          authorization: authorizationMulti,
+        });
+        setPhase({
+          kind: "success",
+          rfqId: created.option_rfq_id,
+          multiLeg: true,
+        });
+        await refreshMultiLegRfqs();
+        setTab("book");
+        return;
+      }
+
+      // Single-leg path — preserved byte-identical.
+      const leg = primaryLeg(state);
+      if (!leg) return;
       const series = await listOptionsSeries({
         is_call: leg.optionType === "call",
       });
@@ -392,7 +583,9 @@ export function RfqStrategyWorkspace() {
     strategyBlocker,
     wallet,
     state,
+    isMultiLegSubmission,
     refreshRfqs,
+    refreshMultiLegRfqs,
   ]);
 
   const selectedRfq = useMemo(
@@ -489,6 +682,49 @@ export function RfqStrategyWorkspace() {
     ],
   );
 
+  const onCancelMultiLegRfq = useCallback(
+    async (rfqId: string) => {
+      if (!rfqEnabled || !multiLegEnabled || !wallet.address) return;
+      try {
+        const rfqRow = multiLegRfqs.find((r) => r.option_rfq_id === rfqId);
+        const effectiveSubaccountId =
+          rfqRow?.taker_subaccount_id ?? wallet.activeSubaccountId;
+        const canonicalBytes = canonicalV2.optionMultiLegRfqCancel({
+          taker: wallet.address,
+          subaccountId: effectiveSubaccountId,
+          optionRfqId: rfqId,
+        });
+        const authorization = await buildAuthorization({
+          account: wallet.address,
+          action: "OPTION_MULTI_LEG_RFQ_CANCEL",
+          canonical: canonicalBytes,
+          signTypedData: wallet.signTypedData,
+          version: 2,
+        });
+        await cancelOptionsMultiLegRfq(rfqId, {
+          authorization,
+          subaccount_id: effectiveSubaccountId,
+        });
+        await refreshMultiLegRfqs();
+      } catch (e) {
+        setRfqsError(
+          e instanceof TradingApiError
+            ? e.message
+            : (e as Error).message || "Multi-leg cancel failed.",
+        );
+      }
+    },
+    [
+      rfqEnabled,
+      multiLegEnabled,
+      wallet.address,
+      wallet.signTypedData,
+      wallet.activeSubaccountId,
+      multiLegRfqs,
+      refreshMultiLegRfqs,
+    ],
+  );
+
   const ctaDisabled =
     !rfqEnabled ||
     !canSubmit ||
@@ -533,6 +769,24 @@ export function RfqStrategyWorkspace() {
             {rfqEnabled
               ? "single-leg RFQ create — live"
               : "builder foundation — Request Quote not live yet"}
+          </span>
+          <span
+            data-testid="rfq-strategy-multi-leg-pill"
+            data-multi-leg-enabled={multiLegEnabled ? "true" : "false"}
+            className={
+              multiLegEnabled
+                ? "rounded border border-emerald-500/40 bg-emerald-500/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-emerald-300"
+                : "rounded border border-zinc-700 bg-black/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-zinc-500"
+            }
+            title={
+              multiLegEnabled
+                ? "Multi-leg RFQ frontend flag on. Backend flag remains authoritative."
+                : "Multi-leg RFQ is feature-flagged. Not enabled by default."
+            }
+          >
+            {multiLegEnabled
+              ? "multi-leg RFQ — flagged on"
+              : "multi-leg RFQ — flagged off"}
           </span>
           {rfqEnabled && wallet.address && (
             <span
@@ -698,6 +952,20 @@ export function RfqStrategyWorkspace() {
                 per environment.
               </p>
             )}
+            {rfqEnabled && (
+              <p
+                data-testid="rfq-strategy-multi-leg-note"
+                className="text-[10px] text-zinc-500"
+              >
+                Single-leg RFQ is live/supported. Multi-leg atomic RFQ is
+                feature-flagged
+                (<code className="mx-1 rounded bg-zinc-900 px-1 text-emerald-300">
+                  {RFQ_MULTI_LEG_ENABLED_ENV}
+                </code>
+                ) and not enabled by default. Backend flag and wallet
+                authorization remain authoritative.
+              </p>
+            )}
           </div>
 
           {rfqEnabled && (
@@ -710,6 +978,60 @@ export function RfqStrategyWorkspace() {
               onCancel={onCancelRfq}
               onRefresh={refreshRfqs}
             />
+          )}
+          {rfqEnabled && multiLegEnabled && (
+            <div
+              data-testid="rfq-strategy-multi-leg-panel"
+              data-multi-leg-count={multiLegRfqs.length}
+              className="rounded border border-zinc-800 bg-black/40 p-2"
+            >
+              <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                <span>Multi-leg RFQs (this subaccount)</span>
+                <button
+                  type="button"
+                  data-testid="rfq-strategy-multi-leg-refresh"
+                  onClick={() => void refreshMultiLegRfqs()}
+                  className="rounded border border-zinc-700 px-1.5 py-0.5 text-[9px] hover:border-emerald-500/40 hover:text-emerald-300"
+                >
+                  Refresh
+                </button>
+              </div>
+              {multiLegRfqs.length === 0 ? (
+                <p className="px-1 py-1 text-[10px] text-zinc-500">
+                  No multi-leg RFQs yet on this subaccount.
+                </p>
+              ) : (
+                <ul className="max-h-40 overflow-y-auto text-[11px]">
+                  {multiLegRfqs.map((r) => (
+                    <li
+                      key={r.option_rfq_id}
+                      data-testid={`rfq-strategy-multi-leg-row-${r.option_rfq_id}`}
+                      className="flex items-center justify-between gap-2 border-b border-zinc-900 py-1 last:border-b-0"
+                    >
+                      <span className="truncate font-mono text-zinc-300">
+                        {r.option_rfq_id.slice(0, 8)}…
+                      </span>
+                      <span className="text-zinc-500">
+                        {r.legs_count} legs · {String(r.status)}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid={`rfq-strategy-multi-leg-cancel-${r.option_rfq_id}`}
+                        disabled={String(r.status) !== "Open" && String(r.status) !== "open"}
+                        onClick={() => void onCancelMultiLegRfq(r.option_rfq_id)}
+                        className={
+                          String(r.status) !== "Open" && String(r.status) !== "open"
+                            ? "cursor-not-allowed rounded border border-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-600"
+                            : "rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:border-red-500/40 hover:text-red-300"
+                        }
+                      >
+                        Cancel
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </section>
 

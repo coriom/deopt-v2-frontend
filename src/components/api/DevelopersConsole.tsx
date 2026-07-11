@@ -832,8 +832,14 @@ function SubaccountsApiHints() {
         </li>
         <li>
           Single-leg RFQ flows accept <code>subaccount_id</code> on
-          create / quote / accept / cancel; multi-leg atomic RFQs
-          remain deferred.
+          create / quote / accept / cancel and remain live/supported.
+          Multi-leg atomic RFQ backend routes
+          (<code>/options/multi-leg-rfqs*</code>) are wired behind
+          <code> OPTION_RFQ_MULTI_LEG_ENABLED</code>; the frontend UI
+          is feature-gated behind
+          <code> NEXT_PUBLIC_RFQ_MULTI_LEG_ENABLED</code> and stays
+          honest until the operator flips both. MM Gateway package
+          quotes are supported. Backend flag is authoritative.
         </li>
       </ul>
     </div>

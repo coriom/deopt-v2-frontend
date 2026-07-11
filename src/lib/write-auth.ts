@@ -71,6 +71,12 @@ export type WriteAuthAction =
   | "OPTION_RFQ_QUOTE_SUBMIT"
   | "OPTION_RFQ_ACCEPT"
   | "OPTION_RFQ_CANCEL"
+  // RFQ-MULTI-LEG-FRONTEND-V1 — multi-leg atomic RFQ actions. All
+  // v2-only (backend refuses envelopes with version != 2).
+  | "OPTION_MULTI_LEG_RFQ_CREATE"
+  | "OPTION_MULTI_LEG_RFQ_QUOTE_SUBMIT"
+  | "OPTION_MULTI_LEG_RFQ_ACCEPT"
+  | "OPTION_MULTI_LEG_RFQ_CANCEL"
   | "OPTION_EXECUTION_INTENT_SIGNATURE_SUBMIT"
   | "OPTION_TWAP_CREATE"
   | "OPTION_TWAP_CANCEL"
@@ -891,6 +897,162 @@ export const canonicalV2 = {
     optionRfqId: string;
   }): Uint8Array {
     return canonicalPayload("OPTION_RFQ_CANCEL", [
+      ["taker", cv.addr(args.taker)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["option_rfq_id", cv.str(args.optionRfqId)],
+    ]);
+  },
+
+  // -------------------------------------------------------------------
+  // RFQ-MULTI-LEG-FRONTEND-V1 — v2 canonical builders for the multi-
+  // leg atomic RFQ subsystem. Backend refuses envelopes with version
+  // != 2 for every one of these actions, so there is no v1 helper.
+  //
+  // Field ordering is byte-frozen against backend
+  // `src/api/routes.rs::canonical_option_multi_leg_rfq_*_v2`. The
+  // guiding rules:
+  //
+  //   * `subaccount_id` is emitted immediately after the party
+  //     identifier (`taker` or `mm_account`).
+  //   * `legs_count` is emitted as an explicit anti-injection guard
+  //     before any per-leg fields — a client cannot slip an extra leg
+  //     past the signature without also bumping the count.
+  //   * Per-leg fields use the numeric `leg_{i}_{field}` convention
+  //     and are emitted in ascending `leg_index` order.
+  // -------------------------------------------------------------------
+
+  /**
+   * Byte-identical to backend `canonical_option_multi_leg_rfq_create_v2`.
+   * Field order:
+   * taker | subaccount_id | legs_count |
+   * (leg_{i}_option_series_id | leg_{i}_side | leg_{i}_size_1e8 |
+   *  leg_{i}_ratio_num | leg_{i}_ratio_den)... |
+   * ttl_ms.
+   */
+  optionMultiLegRfqCreate(args: {
+    taker: Address;
+    subaccountId: number;
+    legs: ReadonlyArray<{
+      legIndex: number;
+      optionSeriesId: string;
+      side: "buy" | "sell";
+      size1e8: string;
+      ratioNum: number;
+      ratioDen: number;
+    }>;
+    ttlMs?: number | bigint | null;
+  }): Uint8Array {
+    const fields: Array<readonly [string, CanonicalValue]> = [
+      ["taker", cv.addr(args.taker)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["legs_count", cv.u64(BigInt(args.legs.length))],
+    ];
+    for (const leg of args.legs) {
+      const prefix = `leg_${leg.legIndex}_`;
+      fields.push([`${prefix}option_series_id`, cv.str(leg.optionSeriesId)]);
+      fields.push([`${prefix}side`, cv.str(leg.side)]);
+      fields.push([`${prefix}size_1e8`, cv.str(leg.size1e8)]);
+      fields.push([`${prefix}ratio_num`, cv.u64(BigInt(leg.ratioNum))]);
+      fields.push([`${prefix}ratio_den`, cv.u64(BigInt(leg.ratioDen))]);
+    }
+    fields.push([
+      "ttl_ms",
+      args.ttlMs == null ? cv.null() : cv.u64(BigInt(args.ttlMs)),
+    ]);
+    return canonicalPayload("OPTION_MULTI_LEG_RFQ_CREATE", fields);
+  },
+
+  /**
+   * Byte-identical to backend
+   * `canonical_option_multi_leg_rfq_quote_submit_v2`. Field order:
+   * option_rfq_id | mm_account | subaccount_id | package_price_1e8 |
+   * size_1e8 | legs_count | (leg_{i}_price_1e8)... |
+   * client_quote_id | quote_nonce | quote_ttl_ms.
+   */
+  optionMultiLegRfqQuoteSubmit(args: {
+    optionRfqId: string;
+    mmAccount: Address;
+    subaccountId: number;
+    packagePrice1e8: string;
+    size1e8: string;
+    legs: ReadonlyArray<{ legIndex: number; price1e8: string }>;
+    clientQuoteId?: string | null;
+    quoteNonce?: number | bigint | null;
+    quoteTtlMs?: number | bigint | null;
+  }): Uint8Array {
+    const fields: Array<readonly [string, CanonicalValue]> = [
+      ["option_rfq_id", cv.str(args.optionRfqId)],
+      ["mm_account", cv.addr(args.mmAccount)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["package_price_1e8", cv.str(args.packagePrice1e8)],
+      ["size_1e8", cv.str(args.size1e8)],
+      ["legs_count", cv.u64(BigInt(args.legs.length))],
+    ];
+    for (const leg of args.legs) {
+      fields.push([`leg_${leg.legIndex}_price_1e8`, cv.str(leg.price1e8)]);
+    }
+    fields.push([
+      "client_quote_id",
+      args.clientQuoteId == null ? cv.null() : cv.str(args.clientQuoteId),
+    ]);
+    fields.push([
+      "quote_nonce",
+      args.quoteNonce == null ? cv.null() : cv.u64(BigInt(args.quoteNonce)),
+    ]);
+    fields.push([
+      "quote_ttl_ms",
+      args.quoteTtlMs == null ? cv.null() : cv.u64(BigInt(args.quoteTtlMs)),
+    ]);
+    return canonicalPayload("OPTION_MULTI_LEG_RFQ_QUOTE_SUBMIT", fields);
+  },
+
+  /**
+   * Byte-identical to backend
+   * `canonical_option_multi_leg_rfq_accept_v2`. Field order:
+   * taker | subaccount_id | option_rfq_id | quote_id |
+   * expected_package_price_1e8 | legs_count |
+   * (leg_{i}_price_1e8)... — where the per-leg keys use the
+   * bare index literal (`leg_0_price_1e8`) rather than the leg's
+   * `leg_index`, matching the backend loop `for (i, price) in
+   * expected_leg_prices_1e8.iter().enumerate()`.
+   */
+  optionMultiLegRfqAccept(args: {
+    taker: Address;
+    subaccountId: number;
+    optionRfqId: string;
+    quoteId: string;
+    expectedPackagePrice1e8: string;
+    expectedLegsCount: number;
+    expectedLegPrices1e8: ReadonlyArray<string>;
+  }): Uint8Array {
+    const fields: Array<readonly [string, CanonicalValue]> = [
+      ["taker", cv.addr(args.taker)],
+      ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
+      ["option_rfq_id", cv.str(args.optionRfqId)],
+      ["quote_id", cv.str(args.quoteId)],
+      [
+        "expected_package_price_1e8",
+        cv.str(args.expectedPackagePrice1e8),
+      ],
+      ["legs_count", cv.u64(BigInt(args.expectedLegsCount))],
+    ];
+    args.expectedLegPrices1e8.forEach((price, i) => {
+      fields.push([`leg_${i}_price_1e8`, cv.str(price)]);
+    });
+    return canonicalPayload("OPTION_MULTI_LEG_RFQ_ACCEPT", fields);
+  },
+
+  /**
+   * Byte-identical to backend
+   * `canonical_option_multi_leg_rfq_cancel_v2`. Field order:
+   * taker | subaccount_id | option_rfq_id.
+   */
+  optionMultiLegRfqCancel(args: {
+    taker: Address;
+    subaccountId: number;
+    optionRfqId: string;
+  }): Uint8Array {
+    return canonicalPayload("OPTION_MULTI_LEG_RFQ_CANCEL", [
       ["taker", cv.addr(args.taker)],
       ["subaccount_id", cv.u64(BigInt(args.subaccountId))],
       ["option_rfq_id", cv.str(args.optionRfqId)],
