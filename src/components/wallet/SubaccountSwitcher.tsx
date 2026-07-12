@@ -164,8 +164,9 @@ function SwitcherMenu(props: {
         >
           Subaccounts isolate Options orderbook activity, single-leg
           RFQ flows, and Perps read panels (positions, orders, fills,
-          funding, liquidations). Multi-leg RFQs and public Perps
-          trading are not live.
+          funding, liquidations). Multi-leg RFQ is feature-flagged
+          (backend flag authoritative). Public Perps trading is not
+          live.
         </p>
       </div>
       {subaccountsError ? (

@@ -151,11 +151,14 @@ test("switcher exposes the honest RFQ / Perps scope copy", async ({ page }) => {
   await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
     /Options orderbook activity/i,
   );
-  // SUBACCOUNTS-FRONTEND-COPY-TRUTH-PASS-V1 — RFQ single-leg flows
-  // are now subaccount-scoped (SUBACCOUNTS-RFQ-INTEGRATION-V1);
-  // Perps reads are subaccount-scoped (PERPS-SUBACCOUNTS-FRONTEND-
-  // ROUTING-V1); multi-leg RFQs and public Perps trading are still
-  // not live. Copy must reflect all four.
+  // FRONTEND-MANUAL-REVIEW-PASS-V1 — RFQ single-leg flows are
+  // subaccount-scoped (SUBACCOUNTS-RFQ-INTEGRATION-V1); Perps reads
+  // are subaccount-scoped (PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1);
+  // multi-leg RFQ is feature-flagged (RFQ-MULTI-LEG-FRONTEND-V1);
+  // public Perps trading is not live. Copy must reflect all four
+  // and separate the flag-gated multi-leg posture from the
+  // still-not-live public Perps posture with grammatically distinct
+  // sentences.
   await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
     /single-leg\s+RFQ/i,
   );
@@ -163,7 +166,10 @@ test("switcher exposes the honest RFQ / Perps scope copy", async ({ page }) => {
     /Perps read panels/i,
   );
   await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /Multi-leg RFQs and public Perps trading are not live/i,
+    /Multi-leg RFQ is feature-flagged/i,
+  );
+  await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
+    /Public Perps trading is not live/i,
   );
 });
 
