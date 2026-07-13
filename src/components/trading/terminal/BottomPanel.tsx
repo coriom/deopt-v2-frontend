@@ -10,8 +10,7 @@ type Tab =
   | "positions"
   | "orders"
   | "trades"
-  | "greeks"
-  | "events";
+  | "greeks";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "balances", label: "Balances" },
@@ -19,7 +18,6 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "orders", label: "Orders" },
   { id: "trades", label: "Trades" },
   { id: "greeks", label: "Greeks" },
-  { id: "events", label: "Events" },
 ];
 
 function PlaceholderCard({
@@ -93,13 +91,6 @@ export function BottomPanel() {
             id="greeks"
             title="Greeks — coming later in the testnet beta"
             body="Delta / Gamma / Vega / Theta are not exposed by the current backend. The chain and detail panel already render honest dashes for greeks; this dock will surface portfolio-level greeks once the backend pricing service ships."
-          />
-        )}
-        {tab === "events" && (
-          <PlaceholderCard
-            id="events"
-            title="Events stream — coming soon"
-            body="The backend indexer reconciles on-chain events into a public status view; the per-wallet event feed (deposits, trades, settlements, exercise) lands in a follow-up milestone. Use /transactions/<intent_id> to inspect a specific trade lifecycle."
           />
         )}
       </div>

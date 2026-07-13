@@ -102,7 +102,11 @@ async function gotoConditionalTab(page: import("@playwright/test").Page) {
   await expect(page.getByTestId("attached-plans-panel")).toBeVisible();
 }
 
-test.describe("Attached TP/SL plans panel", () => {
+// Skipped: the AccountLifecyclePanel tab strip (Open orders / Fills /
+// TP-SL) was removed from the options trade widget. The AttachedPlansPanel
+// still exists and hits the backend, but it is no longer reachable from
+// the UI. Re-enable when the panel is remounted on another route.
+test.describe.skip("Attached TP/SL plans panel", () => {
   test("empty state renders when the account has no plans", async ({
     page,
   }) => {

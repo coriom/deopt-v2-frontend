@@ -73,7 +73,12 @@ async function mockHistoryV2Empty(page: Page) {
   );
 }
 
-test.describe("ACCOUNT-LIFECYCLE-REALTIME-GAPS-V2", () => {
+// Skipped: the AccountLifecyclePanel tab strip (Open orders / Fills /
+// TP-SL) was removed from the options trade widget. Backend contract
+// (`order_rejected` / `attachment_plan_updated` WS variants) is
+// unchanged; UI reach-through is gone. Re-enable when the lifecycle
+// panels are remounted on another route.
+test.describe.skip("ACCOUNT-LIFECYCLE-REALTIME-GAPS-V2", () => {
   test("`order_rejected` delta lights up the /history refresh banner", async ({
     page,
   }) => {

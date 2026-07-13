@@ -32,8 +32,6 @@ import {
   useSelectedLegs,
   useSelectedOption,
 } from "@/lib/workspace-selected-option";
-import { useWallet } from "@/lib/wallet";
-import { AccountLifecyclePanel } from "@/components/trading/AccountLifecyclePanel";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
@@ -85,7 +83,6 @@ export function TradeTicketPanel() {
   const { legs, removeLegAt, updateLegRatio, clearLegs } = useSelectedLegs();
   const leg = selected?.leg ?? null;
   const row = selected?.row ?? null;
-  const { address } = useWallet();
 
   const primaryTitle = useMemo(
     () => strategyTitle(legs) ?? deriveInstrumentTitle(leg, row),
@@ -134,7 +131,6 @@ export function TradeTicketPanel() {
         <TradeBody
           resolved={resolved}
           leg={leg}
-          address={address}
           side={side}
           setSide={setSide}
           instrumentTitle={primaryTitle}
@@ -158,7 +154,6 @@ export function TradeTicketPanel() {
 interface TradeBodyProps {
   resolved: ReturnType<typeof resolveExecutionMode>;
   leg: OptionLeg | null;
-  address: string | null;
   side: Side;
   setSide: (s: Side) => void;
   instrumentTitle: string;
@@ -170,7 +165,6 @@ function TradeBody(props: TradeBodyProps) {
   const {
     resolved,
     leg,
-    address,
     side,
     setSide,
     instrumentTitle,
@@ -195,7 +189,6 @@ function TradeBody(props: TradeBodyProps) {
           key={prefill ?? "__no_selection__"}
           initialSeriesId={prefill ?? undefined}
         />
-        <AccountLifecyclePanel address={address} />
       </div>
     );
   }
