@@ -185,8 +185,8 @@ test.describe("OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — Order Type dropdown", () 
   });
 });
 
-test.describe("OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — Attached TP/SL human prices", () => {
-  test("labels never contain '(1e8)' when TP/SL are enabled", async ({
+test.describe("OPTIONS-TRADE-WIDGET-TP-SL-UX-V1 — Attached TP/SL simplified inputs", () => {
+  test("labels expose a single per-side price ('Take Profit Price' / 'Stop Loss Price') and never contain '(1e8)'", async ({
     page,
   }) => {
     await installMockWallet(page);
@@ -197,13 +197,29 @@ test.describe("OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — Attached TP/SL human pric
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
     const section = page.getByTestId("direct-orderbook-attached-section");
     await expect(section).not.toContainText(/\(1e8\)/i);
-    await expect(section).toContainText(/TP Trigger Price/);
-    await expect(section).toContainText(/TP Limit Price/);
-    await expect(section).toContainText(/SL Trigger Price/);
-    await expect(section).toContainText(/SL Limit Price/);
+    await expect(section).toContainText(/Take Profit Price/);
+    await expect(section).toContainText(/Stop Loss Price/);
+    // Legacy 4-field labels must NOT appear.
+    await expect(section).not.toContainText(/TP Trigger Price/);
+    await expect(section).not.toContainText(/TP Limit Price/);
+    await expect(section).not.toContainText(/SL Trigger Price/);
+    await expect(section).not.toContainText(/SL Limit Price/);
+    // The old trigger/limit inputs must be gone.
+    await expect(
+      page.getByTestId("direct-orderbook-attach-tp-trigger"),
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("direct-orderbook-attach-tp-limit"),
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("direct-orderbook-attach-sl-trigger"),
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("direct-orderbook-attach-sl-limit"),
+    ).toHaveCount(0);
   });
 
-  test("human prices convert to 1e8 on wire; TP-only submit sends the canonical 1e8 body", async ({
+  test("human price converts to 1e8 on wire; TP-only submit sends equal trigger/limit", async ({
     page,
   }) => {
     const captured = { body: null as WireBody | null };
@@ -211,10 +227,7 @@ test.describe("OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — Attached TP/SL human pric
     await gotoTicketConnected(page);
     await fillBase(page);
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
-    await page
-      .getByTestId("direct-orderbook-attach-tp-trigger")
-      .fill("189.1");
-    await page.getByTestId("direct-orderbook-attach-tp-limit").fill("250");
+    await page.getByTestId("direct-orderbook-attach-tp-price").fill("189.1");
     await page.getByTestId("direct-orderbook-submit").click();
     await expect(
       page.getByTestId("direct-orderbook-result-status"),
@@ -222,83 +235,96 @@ test.describe("OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — Attached TP/SL human pric
     expect(captured.body?.attached_tp_sl).toEqual({
       take_profit: {
         trigger_price_1e8: "18910000000",
-        limit_price_1e8: "25000000000",
+        limit_price_1e8: "18910000000",
       },
     });
   });
 
-  test("missing TP trigger surfaces human-readable validation copy", async ({
+  test("SL visible price maps to SL trigger and SL limit (equal on the wire)", async ({
     page,
   }) => {
-    await installMockWallet(page);
-    await page.goto("/options");
-    await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-tp-limit").fill("15");
-    const err = page.getByTestId("direct-orderbook-attach-tp-trigger-error");
-    await expect(err).toContainText(/TP trigger price is required/);
-    await expect(err).not.toContainText(/1e8/i);
-  });
-
-  test("missing TP limit surfaces human-readable validation copy", async ({
-    page,
-  }) => {
-    await installMockWallet(page);
-    await page.goto("/options");
-    await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-tp-trigger").fill("15");
-    const err = page.getByTestId("direct-orderbook-attach-tp-limit-error");
-    await expect(err).toContainText(/TP limit price is required/);
-    await expect(err).not.toContainText(/1e8/i);
-  });
-
-  test("missing SL trigger surfaces human-readable validation copy", async ({
-    page,
-  }) => {
-    await installMockWallet(page);
-    await page.goto("/options");
+    const captured = { body: null as WireBody | null };
+    await mockOrdersRoute(page, captured);
+    await gotoTicketConnected(page);
+    await fillBase(page);
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-sl-limit").fill("5");
-    const err = page.getByTestId("direct-orderbook-attach-sl-trigger-error");
-    await expect(err).toContainText(/SL trigger price is required/);
-    await expect(err).not.toContainText(/1e8/i);
-  });
-
-  test("missing SL limit surfaces human-readable validation copy", async ({
-    page,
-  }) => {
-    await installMockWallet(page);
-    await page.goto("/options");
-    await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-sl-trigger").fill("5");
-    const err = page.getByTestId("direct-orderbook-attach-sl-limit-error");
-    await expect(err).toContainText(/SL limit price is required/);
-    await expect(err).not.toContainText(/1e8/i);
-  });
-
-  test("zero-price trigger surfaces the 'greater than 0' copy", async ({
-    page,
-  }) => {
-    await installMockWallet(page);
-    await page.goto("/options");
-    await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-tp-trigger").fill("0");
-    await page.getByTestId("direct-orderbook-attach-tp-limit").fill("15");
+    await page.getByTestId("direct-orderbook-attach-sl-price").fill("5");
+    await page.getByTestId("direct-orderbook-submit").click();
     await expect(
-      page.getByTestId("direct-orderbook-attach-tp-trigger-error"),
+      page.getByTestId("direct-orderbook-result-status"),
+    ).toBeVisible();
+    expect(captured.body?.attached_tp_sl).toEqual({
+      stop_loss: {
+        trigger_price_1e8: "500000000",
+        limit_price_1e8: "500000000",
+      },
+    });
+  });
+
+  test("missing Take Profit price surfaces human-readable validation copy", async ({
+    page,
+  }) => {
+    await installMockWallet(page);
+    await page.goto("/options");
+    await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
+    const err = page.getByTestId("direct-orderbook-attach-tp-error");
+    await expect(err).toContainText(/Take Profit price is required/);
+    await expect(err).not.toContainText(/1e8/i);
+  });
+
+  test("missing Stop Loss price surfaces human-readable validation copy", async ({
+    page,
+  }) => {
+    await installMockWallet(page);
+    await page.goto("/options");
+    await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
+    const err = page.getByTestId("direct-orderbook-attach-sl-error");
+    await expect(err).toContainText(/Stop Loss price is required/);
+    await expect(err).not.toContainText(/1e8/i);
+  });
+
+  test("zero Take Profit price surfaces the 'greater than 0' copy", async ({
+    page,
+  }) => {
+    await installMockWallet(page);
+    await page.goto("/options");
+    await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
+    await page.getByTestId("direct-orderbook-attach-tp-price").fill("0");
+    await expect(
+      page.getByTestId("direct-orderbook-attach-tp-error"),
     ).toContainText(/must be greater than 0/);
   });
 
-  test("non-decimal input surfaces the 'valid price' copy", async ({
+  test("non-decimal Stop Loss price surfaces the 'valid price' copy", async ({
     page,
   }) => {
     await installMockWallet(page);
     await page.goto("/options");
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-sl-trigger").fill("abc");
-    await page.getByTestId("direct-orderbook-attach-sl-limit").fill("5");
+    await page.getByTestId("direct-orderbook-attach-sl-price").fill("abc");
     await expect(
-      page.getByTestId("direct-orderbook-attach-sl-trigger-error"),
+      page.getByTestId("direct-orderbook-attach-sl-error"),
     ).toContainText(/must be a valid price/);
+  });
+
+  test("TP+SL enabled renders plain-English OCO copy explaining automatic linkage", async ({
+    page,
+  }) => {
+    await installMockWallet(page);
+    await page.goto("/options");
+    await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
+    await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
+    await page.getByTestId("direct-orderbook-attach-tp-price").fill("15");
+    await page.getByTestId("direct-orderbook-attach-sl-price").fill("5");
+    await expect(
+      page.getByTestId("direct-orderbook-attach-oco-copy"),
+    ).toContainText(
+      /Take Profit and Stop Loss are linked automatically\. When one fills, the other is cancelled\./,
+    );
+    // The bare acronym "OCO on" must NOT appear.
+    await expect(
+      page.getByTestId("direct-orderbook-attach-oco-copy"),
+    ).not.toHaveText(/^OCO on\.?$/);
   });
 });
 

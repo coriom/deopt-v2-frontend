@@ -58,17 +58,13 @@ function tifWire(tif: Tif): OptionOrderTif {
 interface HumanPriceState {
   tpEnabled: boolean;
   slEnabled: boolean;
-  tpTriggerHuman: string;
-  tpLimitHuman: string;
-  slTriggerHuman: string;
-  slLimitHuman: string;
+  tpPriceHuman: string;
+  slPriceHuman: string;
 }
 
 interface HumanPriceValidation {
-  tpTriggerError: string | null;
-  tpLimitError: string | null;
-  slTriggerError: string | null;
-  slLimitError: string | null;
+  tpError: string | null;
+  slError: string | null;
   ok: boolean;
 }
 
@@ -78,14 +74,14 @@ function validatePricePart(
 ): { scaled: string | null; error: string | null } {
   const trimmed = human.trim();
   if (trimmed.length === 0) {
-    return { scaled: null, error: `${label} price is required` };
+    return { scaled: null, error: `${label} price is required.` };
   }
   const scaled = humanToScaled1e8(trimmed);
   if (scaled === null) {
-    return { scaled: null, error: `${label} price must be a valid price` };
+    return { scaled: null, error: `${label} price must be a valid price.` };
   }
   if (scaled === "0") {
-    return { scaled: null, error: `${label} price must be greater than 0` };
+    return { scaled: null, error: `${label} price must be greater than 0.` };
   }
   return { scaled, error: null };
 }
@@ -93,28 +89,14 @@ function validatePricePart(
 function validateHumanAttachedTpSl(
   state: HumanPriceState,
 ): HumanPriceValidation {
-  const tp = state.tpEnabled
-    ? {
-        trigger: validatePricePart(state.tpTriggerHuman, "TP trigger"),
-        limit: validatePricePart(state.tpLimitHuman, "TP limit"),
-      }
+  const tpError = state.tpEnabled
+    ? validatePricePart(state.tpPriceHuman, "Take Profit").error
     : null;
-  const sl = state.slEnabled
-    ? {
-        trigger: validatePricePart(state.slTriggerHuman, "SL trigger"),
-        limit: validatePricePart(state.slLimitHuman, "SL limit"),
-      }
+  const slError = state.slEnabled
+    ? validatePricePart(state.slPriceHuman, "Stop Loss").error
     : null;
-  const tpTriggerError = tp?.trigger.error ?? null;
-  const tpLimitError = tp?.limit.error ?? null;
-  const slTriggerError = sl?.trigger.error ?? null;
-  const slLimitError = sl?.limit.error ?? null;
-  const ok =
-    tpTriggerError === null &&
-    tpLimitError === null &&
-    slTriggerError === null &&
-    slLimitError === null;
-  return { tpTriggerError, tpLimitError, slTriggerError, slLimitError, ok };
+  const ok = tpError === null && slError === null;
+  return { tpError, slError, ok };
 }
 
 export interface DirectOrderbookFormProps {
@@ -150,10 +132,8 @@ export function DirectOrderbookForm({
 
   const [tpEnabled, setTpEnabled] = useState(false);
   const [slEnabled, setSlEnabled] = useState(false);
-  const [tpTriggerHuman, setTpTriggerHuman] = useState("");
-  const [tpLimitHuman, setTpLimitHuman] = useState("");
-  const [slTriggerHuman, setSlTriggerHuman] = useState("");
-  const [slLimitHuman, setSlLimitHuman] = useState("");
+  const [tpPriceHuman, setTpPriceHuman] = useState("");
+  const [slPriceHuman, setSlPriceHuman] = useState("");
 
   const [phase, setPhase] = useState<"idle" | "submitting" | "ok" | "err">(
     "idle",
@@ -169,15 +149,13 @@ export function DirectOrderbookForm({
   const humanState: HumanPriceState = {
     tpEnabled,
     slEnabled,
-    tpTriggerHuman,
-    tpLimitHuman,
-    slTriggerHuman,
-    slLimitHuman,
+    tpPriceHuman,
+    slPriceHuman,
   };
   const validation = useMemo(
     () => validateHumanAttachedTpSl(humanState),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tpEnabled, slEnabled, tpTriggerHuman, tpLimitHuman, slTriggerHuman, slLimitHuman],
+    [tpEnabled, slEnabled, tpPriceHuman, slPriceHuman],
   );
 
   const canSubmit =
@@ -238,10 +216,8 @@ export function DirectOrderbookForm({
       const scaledState = {
         tpEnabled,
         slEnabled,
-        tpTrigger1e8: tpEnabled ? (humanToScaled1e8(tpTriggerHuman) ?? "") : "",
-        tpLimit1e8: tpEnabled ? (humanToScaled1e8(tpLimitHuman) ?? "") : "",
-        slTrigger1e8: slEnabled ? (humanToScaled1e8(slTriggerHuman) ?? "") : "",
-        slLimit1e8: slEnabled ? (humanToScaled1e8(slLimitHuman) ?? "") : "",
+        tpPrice1e8: tpEnabled ? (humanToScaled1e8(tpPriceHuman) ?? "") : "",
+        slPrice1e8: slEnabled ? (humanToScaled1e8(slPriceHuman) ?? "") : "",
       };
       const attached = buildAttachedTpSlPayload(scaledState);
       const body: SubmitOptionOrderRequest = {
@@ -399,12 +375,6 @@ export function DirectOrderbookForm({
               <h3 className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
                 Attach TP / SL
               </h3>
-              <span
-                data-testid="direct-orderbook-attached-help"
-                className="text-[10px] text-zinc-500"
-              >
-                Activates after fill. OCO on when both are enabled.
-              </span>
             </header>
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-1 text-xs text-zinc-300">
@@ -429,103 +399,57 @@ export function DirectOrderbookForm({
               </label>
             </div>
             {tpEnabled ? (
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-zinc-300">
-                  TP Trigger Price
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={tpTriggerHuman}
-                    onChange={(e) => setTpTriggerHuman(e.target.value)}
-                    data-testid="direct-orderbook-attach-tp-trigger"
-                    aria-invalid={validation.tpTriggerError !== null}
-                    placeholder="$15.00"
-                    className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
-                  />
-                  {validation.tpTriggerError ? (
-                    <span
-                      data-testid="direct-orderbook-attach-tp-trigger-error"
-                      className="block text-[10px] text-red-300"
-                    >
-                      {validation.tpTriggerError}
-                    </span>
-                  ) : null}
-                </label>
-                <label className="text-[11px] text-zinc-300">
-                  TP Limit Price
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={tpLimitHuman}
-                    onChange={(e) => setTpLimitHuman(e.target.value)}
-                    data-testid="direct-orderbook-attach-tp-limit"
-                    aria-invalid={validation.tpLimitError !== null}
-                    placeholder="$15.00"
-                    className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
-                  />
-                  {validation.tpLimitError ? (
-                    <span
-                      data-testid="direct-orderbook-attach-tp-limit-error"
-                      className="block text-[10px] text-red-300"
-                    >
-                      {validation.tpLimitError}
-                    </span>
-                  ) : null}
-                </label>
-              </div>
+              <label className="text-[11px] text-zinc-300">
+                Take Profit Price
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={tpPriceHuman}
+                  onChange={(e) => setTpPriceHuman(e.target.value)}
+                  data-testid="direct-orderbook-attach-tp-price"
+                  aria-invalid={validation.tpError !== null}
+                  placeholder="$15.00"
+                  className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
+                />
+                {validation.tpError ? (
+                  <span
+                    data-testid="direct-orderbook-attach-tp-error"
+                    className="block text-[10px] text-red-300"
+                  >
+                    {validation.tpError}
+                  </span>
+                ) : null}
+              </label>
             ) : null}
             {slEnabled ? (
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-zinc-300">
-                  SL Trigger Price
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={slTriggerHuman}
-                    onChange={(e) => setSlTriggerHuman(e.target.value)}
-                    data-testid="direct-orderbook-attach-sl-trigger"
-                    aria-invalid={validation.slTriggerError !== null}
-                    placeholder="$5.00"
-                    className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-red-500/60 focus:outline-none"
-                  />
-                  {validation.slTriggerError ? (
-                    <span
-                      data-testid="direct-orderbook-attach-sl-trigger-error"
-                      className="block text-[10px] text-red-300"
-                    >
-                      {validation.slTriggerError}
-                    </span>
-                  ) : null}
-                </label>
-                <label className="text-[11px] text-zinc-300">
-                  SL Limit Price
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={slLimitHuman}
-                    onChange={(e) => setSlLimitHuman(e.target.value)}
-                    data-testid="direct-orderbook-attach-sl-limit"
-                    aria-invalid={validation.slLimitError !== null}
-                    placeholder="$5.00"
-                    className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-red-500/60 focus:outline-none"
-                  />
-                  {validation.slLimitError ? (
-                    <span
-                      data-testid="direct-orderbook-attach-sl-limit-error"
-                      className="block text-[10px] text-red-300"
-                    >
-                      {validation.slLimitError}
-                    </span>
-                  ) : null}
-                </label>
-              </div>
+              <label className="text-[11px] text-zinc-300">
+                Stop Loss Price
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={slPriceHuman}
+                  onChange={(e) => setSlPriceHuman(e.target.value)}
+                  data-testid="direct-orderbook-attach-sl-price"
+                  aria-invalid={validation.slError !== null}
+                  placeholder="$5.00"
+                  className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-red-500/60 focus:outline-none"
+                />
+                {validation.slError ? (
+                  <span
+                    data-testid="direct-orderbook-attach-sl-error"
+                    className="block text-[10px] text-red-300"
+                  >
+                    {validation.slError}
+                  </span>
+                ) : null}
+              </label>
             ) : null}
             {tpEnabled && slEnabled ? (
               <p
                 data-testid="direct-orderbook-attach-oco-copy"
                 className="text-[10px] text-zinc-500"
               >
-                OCO on.
+                Take Profit and Stop Loss are linked automatically. When one fills, the other is cancelled.
               </p>
             ) : null}
           </section>

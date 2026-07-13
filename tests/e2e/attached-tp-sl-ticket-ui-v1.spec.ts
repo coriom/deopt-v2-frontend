@@ -6,16 +6,17 @@
 //   * the spec asserts the exact submit body the form constructs
 //     under each ticket configuration (TP-only / SL-only / TP+SL
 //     OCO / no-attached);
-//   * UI-level checks pin the success/error copy + per-field
+//   * UI-level checks pin the success/error copy + per-side
 //     validation states.
 //
-// OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 update: the attached TP/SL
-// inputs now accept human-readable dollar prices (`"15"` for $15,
-// `"5"` for $5). The wire body still contains the 1e8-scaled
-// `trigger_price_1e8` / `limit_price_1e8` strings — the form
-// converts on submit via `humanToScaled1e8`. Validation copy is
-// also human-friendly: `"TP trigger price is required"` /
-// `"must be greater than 0"` / `"must be a valid price"`.
+// OPTIONS-TRADE-WIDGET-TP-SL-UX-V1 update: the attached section now
+// exposes a single per-side price (`Take Profit Price` /
+// `Stop Loss Price`). The wire body still carries the two
+// backend-required fields (`trigger_price_1e8` and `limit_price_1e8`)
+// with equal values — the backend has no constraint that trigger
+// and limit must differ, so V1 collapses them to reduce ticket
+// clutter. Validation copy is human-friendly:
+// `"Take Profit price is required."` / `"must be greater than 0."`.
 
 import { test, expect, type Route } from "@playwright/test";
 import {
@@ -146,10 +147,10 @@ test.describe("/options ticket — attached TP/SL", () => {
     ).not.toBeChecked();
     // No inputs visible until a leg is enabled.
     await expect(
-      page.getByTestId("direct-orderbook-attach-tp-trigger"),
+      page.getByTestId("direct-orderbook-attach-tp-price"),
     ).toHaveCount(0);
     await expect(
-      page.getByTestId("direct-orderbook-attach-sl-trigger"),
+      page.getByTestId("direct-orderbook-attach-sl-price"),
     ).toHaveCount(0);
 
     await fillBaseTicket(page);
@@ -172,12 +173,7 @@ test.describe("/options ticket — attached TP/SL", () => {
     await fillBaseTicket(page);
 
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
-    await page
-      .getByTestId("direct-orderbook-attach-tp-trigger")
-      .fill("15");
-    await page
-      .getByTestId("direct-orderbook-attach-tp-limit")
-      .fill("15");
+    await page.getByTestId("direct-orderbook-attach-tp-price").fill("15");
 
     await page.getByTestId("direct-orderbook-submit").click();
     await expect(
@@ -203,12 +199,7 @@ test.describe("/options ticket — attached TP/SL", () => {
     await fillBaseTicket(page);
 
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
-    await page
-      .getByTestId("direct-orderbook-attach-sl-trigger")
-      .fill("5");
-    await page
-      .getByTestId("direct-orderbook-attach-sl-limit")
-      .fill("5");
+    await page.getByTestId("direct-orderbook-attach-sl-price").fill("5");
 
     await page.getByTestId("direct-orderbook-submit").click();
     await expect(
@@ -223,7 +214,7 @@ test.describe("/options ticket — attached TP/SL", () => {
     expect(captured.request?.attached_tp_sl?.link_as_oco).toBeUndefined();
   });
 
-  test("TP+SL forces link_as_oco=true and shows the OCO copy", async ({
+  test("TP+SL forces link_as_oco=true and shows the plain-English OCO copy", async ({
     page,
   }) => {
     const captured: Captured = { request: null };
@@ -233,33 +224,31 @@ test.describe("/options ticket — attached TP/SL", () => {
 
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
-    await page
-      .getByTestId("direct-orderbook-attach-tp-trigger")
-      .fill("15");
-    await page
-      .getByTestId("direct-orderbook-attach-tp-limit")
-      .fill("15");
-    await page
-      .getByTestId("direct-orderbook-attach-sl-trigger")
-      .fill("5");
-    await page
-      .getByTestId("direct-orderbook-attach-sl-limit")
-      .fill("5");
+    await page.getByTestId("direct-orderbook-attach-tp-price").fill("15");
+    await page.getByTestId("direct-orderbook-attach-sl-price").fill("5");
 
     await expect(
       page.getByTestId("direct-orderbook-attach-oco-copy"),
-    ).toBeVisible();
+    ).toContainText(
+      /Take Profit and Stop Loss are linked automatically\. When one fills, the other is cancelled\./,
+    );
 
     await page.getByTestId("direct-orderbook-submit").click();
     await expect(
       page.getByTestId("direct-orderbook-result-status"),
     ).toBeVisible();
     expect(captured.request?.attached_tp_sl?.link_as_oco).toBe(true);
-    expect(captured.request?.attached_tp_sl?.take_profit).toBeTruthy();
-    expect(captured.request?.attached_tp_sl?.stop_loss).toBeTruthy();
+    expect(captured.request?.attached_tp_sl?.take_profit).toEqual({
+      trigger_price_1e8: "1500000000",
+      limit_price_1e8: "1500000000",
+    });
+    expect(captured.request?.attached_tp_sl?.stop_loss).toEqual({
+      trigger_price_1e8: "500000000",
+      limit_price_1e8: "500000000",
+    });
   });
 
-  test("invalid TP trigger price disables submit + shows inline error", async ({
+  test("invalid Take Profit price disables submit + shows inline per-side error", async ({
     page,
   }) => {
     const captured: Captured = { request: null };
@@ -268,17 +257,16 @@ test.describe("/options ticket — attached TP/SL", () => {
     await fillBaseTicket(page);
 
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-tp-trigger").fill("0");
-    await page.getByTestId("direct-orderbook-attach-tp-limit").fill("15");
+    await page.getByTestId("direct-orderbook-attach-tp-price").fill("0");
 
     await expect(
-      page.getByTestId("direct-orderbook-attach-tp-trigger-error"),
+      page.getByTestId("direct-orderbook-attach-tp-error"),
     ).toContainText(/greater than 0/);
     await expect(page.getByTestId("direct-orderbook-submit")).toBeDisabled();
     expect(captured.request).toBeNull();
   });
 
-  test("invalid SL limit (non-decimal) disables submit + shows inline error", async ({
+  test("invalid Stop Loss price (non-decimal) disables submit + shows inline per-side error", async ({
     page,
   }) => {
     const captured: Captured = { request: null };
@@ -287,11 +275,10 @@ test.describe("/options ticket — attached TP/SL", () => {
     await fillBaseTicket(page);
 
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-sl-trigger").fill("5");
-    await page.getByTestId("direct-orderbook-attach-sl-limit").fill("abc");
+    await page.getByTestId("direct-orderbook-attach-sl-price").fill("abc");
 
     await expect(
-      page.getByTestId("direct-orderbook-attach-sl-limit-error"),
+      page.getByTestId("direct-orderbook-attach-sl-error"),
     ).toContainText(/valid price/);
     await expect(page.getByTestId("direct-orderbook-submit")).toBeDisabled();
     expect(captured.request).toBeNull();
@@ -311,12 +298,7 @@ test.describe("/options ticket — attached TP/SL", () => {
     await fillBaseTicket(page);
 
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
-    await page
-      .getByTestId("direct-orderbook-attach-tp-trigger")
-      .fill("15");
-    await page
-      .getByTestId("direct-orderbook-attach-tp-limit")
-      .fill("15");
+    await page.getByTestId("direct-orderbook-attach-tp-price").fill("15");
 
     await page.getByTestId("direct-orderbook-submit").click();
     await expect(

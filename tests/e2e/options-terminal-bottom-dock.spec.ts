@@ -155,7 +155,7 @@ test("Greeks is NOT a default separate widget on /options (still a trade-widget 
   await expect(page.getByTestId("widget-greeks")).toHaveCount(0);
 });
 
-test("/options bottom-dock widget renders the 6 account tabs", async ({
+test("/options bottom-dock widget renders the 5 primary account tabs (no Coming Soon Events tab)", async ({
   page,
 }) => {
   await setupChain(page);
@@ -169,10 +169,12 @@ test("/options bottom-dock widget renders the 6 account tabs", async ({
     "orders",
     "trades",
     "greeks",
-    "events",
   ]) {
     await expect(dock.getByTestId(`bottom-tab-${id}`)).toBeVisible();
   }
+  // OPTIONS-TRADE-WIDGET-TP-SL-UX-V1 — the Events placeholder tab
+  // was retired from the primary widget; assert it's gone.
+  await expect(dock.getByTestId("bottom-tab-events")).toHaveCount(0);
 });
 
 test("/options terminal-header renders (underlying + expiry only, no redundant chain copy)", async ({

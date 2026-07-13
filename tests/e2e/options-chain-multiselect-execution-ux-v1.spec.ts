@@ -372,7 +372,7 @@ test.describe("OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — synthetic leg routi
 });
 
 test.describe("OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — regression posture", () => {
-  test("attached TP/SL section stays under Book with human-readable labels", async ({
+  test("attached TP/SL section stays under Book with the simplified single-price label", async ({
     page,
   }) => {
     await installMockWallet(page);
@@ -380,7 +380,8 @@ test.describe("OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — regression posture"
     await seedLegs(page, [CALL_LEG_A]);
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
     const section = page.getByTestId("direct-orderbook-attached-section");
-    await expect(section).toContainText(/TP Trigger Price/);
+    await expect(section).toContainText(/Take Profit Price/);
+    await expect(section).not.toContainText(/TP Trigger Price/);
     await expect(section).not.toContainText(/\(1e8\)/i);
   });
 
