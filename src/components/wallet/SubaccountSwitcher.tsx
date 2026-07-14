@@ -154,21 +154,6 @@ function SwitcherMenu(props: {
       data-testid="subaccount-switcher-menu"
       className="absolute right-0 z-30 mt-1 w-72 rounded border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
     >
-      <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-          Subaccount
-        </p>
-        <p
-          data-testid="subaccount-scope-copy"
-          className="mt-0.5 text-[10px] leading-snug text-zinc-500"
-        >
-          Subaccounts isolate Options orderbook activity, single-leg
-          RFQ flows, and Perps read panels (positions, orders, fills,
-          funding, liquidations). Multi-leg RFQ is feature-flagged
-          (backend flag authoritative). Public Perps trading is not
-          live.
-        </p>
-      </div>
       {subaccountsError ? (
         <div
           data-testid="subaccount-switcher-error"

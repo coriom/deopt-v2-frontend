@@ -143,34 +143,17 @@ test("switcher appears after wallet connect and defaults to Account 1", async ({
   );
 });
 
-test("switcher exposes the honest RFQ / Perps scope copy", async ({ page }) => {
+test("switcher menu drops the scope-copy header (retired)", async ({ page }) => {
   await goToOptions(page);
   await mountBackend(page);
   await connectWallet(page);
   await page.getByTestId("subaccount-switcher-trigger").click();
-  await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /Options orderbook activity/i,
-  );
-  // FRONTEND-MANUAL-REVIEW-PASS-V1 — RFQ single-leg flows are
-  // subaccount-scoped (SUBACCOUNTS-RFQ-INTEGRATION-V1); Perps reads
-  // are subaccount-scoped (PERPS-SUBACCOUNTS-FRONTEND-ROUTING-V1);
-  // multi-leg RFQ is feature-flagged (RFQ-MULTI-LEG-FRONTEND-V1);
-  // public Perps trading is not live. Copy must reflect all four
-  // and separate the flag-gated multi-leg posture from the
-  // still-not-live public Perps posture with grammatically distinct
-  // sentences.
-  await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /single-leg\s+RFQ/i,
-  );
-  await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /Perps read panels/i,
-  );
-  await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /Multi-leg RFQ is feature-flagged/i,
-  );
-  await expect(page.getByTestId("subaccount-scope-copy")).toContainText(
-    /Public Perps trading is not live/i,
-  );
+  await expect(page.getByTestId("subaccount-switcher-menu")).toBeVisible();
+  // The header block with the "Subaccount" title and the long RFQ/Perps
+  // scope paragraph was removed to declutter the switcher. Backend
+  // subaccount isolation posture is unchanged — the docs (and the
+  // Developers console at /api) remain the honest source of truth.
+  await expect(page.getByTestId("subaccount-scope-copy")).toHaveCount(0);
 });
 
 test("create subaccount produces Account 2 and selects it", async ({ page }) => {

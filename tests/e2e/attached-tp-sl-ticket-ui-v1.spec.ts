@@ -118,11 +118,9 @@ async function fillBaseTicket(page: import("@playwright/test").Page) {
   // behind the Advanced tester affordance; open it first.
   await page.getByTestId("direct-orderbook-advanced-summary").click();
   await page.getByTestId("direct-orderbook-series-id").fill(SERIES_ID);
-  await page
-    .getByTestId("direct-orderbook-account")
-    .fill("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-  // Limit Price + Amount default to empty placeholder `0.0` — fill
-  // them so `canSubmit` is satisfied.
+  // Account is auto-populated from the connected wallet — the manual
+  // Account field was removed. Limit Price + Amount default to empty
+  // placeholder `0.0` — fill them so `canSubmit` is satisfied.
   await page.getByTestId("direct-orderbook-price").fill("1000000000");
   await page.getByTestId("direct-orderbook-size").fill("100000000");
 }

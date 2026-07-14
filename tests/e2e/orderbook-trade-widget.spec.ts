@@ -123,13 +123,9 @@ async function fillOrderbookForm(
   // it before filling; chain-click is the normal user flow.
   await page.getByTestId("direct-orderbook-advanced-summary").click();
   await page.getByTestId("direct-orderbook-series-id").fill(SERIES_ID);
-  // Production form requires the account input to match the connected
-  // wallet address (write-auth submitter check).
-  await page
-    .getByTestId("direct-orderbook-account")
-    .fill("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-  // Limit Price defaults to empty placeholder `0.0` — fill it so
-  // `canSubmit` is satisfied before we click Submit.
+  // Account is auto-populated from the connected wallet — the manual
+  // Account field was removed. Limit Price defaults to empty placeholder
+  // `0.0` — fill it so `canSubmit` is satisfied before we click Submit.
   await page.getByTestId("direct-orderbook-price").fill("1000000000");
   if (opts.size) {
     await page.getByTestId("direct-orderbook-size").fill(opts.size);

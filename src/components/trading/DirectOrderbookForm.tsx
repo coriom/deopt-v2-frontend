@@ -47,8 +47,6 @@ import { buildAuthorization, canonical, canonicalV2 } from "@/lib/write-auth";
 import { OptionsTwapForm } from "./OptionsTwapForm";
 import { TifPopover, PostCheckbox, type Tif } from "./TifPopover";
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000001" as const;
-
 type OrderType = "limit" | "stop_limit" | "twap";
 
 function tifWire(tif: Tif): OptionOrderTif {
@@ -118,7 +116,6 @@ export function DirectOrderbookForm({
   } = useWallet();
   const [orderType, setOrderType] = useState<OrderType>("limit");
   const [seriesId, setSeriesId] = useState(initialSeriesId ?? "");
-  const [account, setAccount] = useState<string>(ZERO_ADDRESS);
   // Side is currently pinned to "buy" — the explicit Buy/Sell tabs
   // were retired to declutter the form. When the user picks a leg
   // from the chain (`Bid` for sell, `Ask` for buy), the leg's own
@@ -161,7 +158,7 @@ export function DirectOrderbookForm({
   const canSubmit =
     orderType === "limit" &&
     seriesId.length > 0 &&
-    account.length > 0 &&
+    walletAddress !== null &&
     price1e8.length > 0 &&
     size1e8.length > 0 &&
     validation.ok &&
@@ -179,11 +176,6 @@ export function DirectOrderbookForm({
       }
       if (!isExpectedChain) {
         throw new Error("Switch to Base Sepolia to sign the write authorization.");
-      }
-      if (walletAddress.toLowerCase() !== account.toLowerCase()) {
-        throw new Error(
-          "Account field must match the connected wallet address.",
-        );
       }
       const useV2 = activeSubaccountId > 1;
       const canonicalBytes = useV2
@@ -336,18 +328,6 @@ export function DirectOrderbookForm({
               placeholder="0.0"
               data-testid="direct-orderbook-size"
               className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-right font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/60 focus:outline-none"
-            />
-          </label>
-
-          <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 text-[11px]">
-            <span className="text-[11px] font-medium text-zinc-300">Account</span>
-            <input
-              type="text"
-              value={account}
-              onChange={(e) => setAccount(e.target.value)}
-              placeholder="0x…"
-              data-testid="direct-orderbook-account"
-              className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
             />
           </label>
 

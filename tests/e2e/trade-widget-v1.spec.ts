@@ -63,7 +63,9 @@ test("Book (Auto) mode renders the shared DirectOrderbookForm with TIF + Post co
   // the input which existing coverage still needs.
   await page.getByTestId("direct-orderbook-advanced-summary").click();
   await expect(page.getByTestId("direct-orderbook-series-id")).toBeVisible();
-  await expect(page.getByTestId("direct-orderbook-account")).toBeVisible();
+  // Account field was removed — it is auto-populated from the connected
+  // wallet (`useWallet().address`). Regression pin.
+  await expect(page.getByTestId("direct-orderbook-account")).toHaveCount(0);
   await expect(page.getByTestId("direct-orderbook-price")).toBeVisible();
   await expect(page.getByTestId("direct-orderbook-size")).toBeVisible();
   // TIF popover + Post checkbox reused from the shared component.
