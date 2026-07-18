@@ -15,8 +15,9 @@
 //     parseable to a positive BigInt (the project's 1e8 fixed-point
 //     convention).
 //   * When both legs are enabled, `link_as_oco` is forced to `true`
-//     by the ticket UI; standalone TP/SL remains available for the
-//     non-OCO case via the existing TpSlManager panel.
+//     by the ticket UI. Standalone TP/SL creation from a dedicated
+//     manager UI is not currently exposed; the ticket's attached
+//     TP/SL flow is the sole surface.
 //   * When neither leg is enabled, the payload is `undefined` — the
 //     ticket MUST omit the `attached_tp_sl` field entirely (the
 //     backend rejects `{}` with `at least one of …`).

@@ -575,9 +575,8 @@ export const canonical = {
   },
 
   // -------------------------------------------------------------------
-  // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — v1 conditional order create
-  // (previously constructed inline in `TpSlManager`). Extracted to
-  // give v1 and v2 a shared field-list helper.
+  // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — v1 conditional order create.
+  // Shared field-list helper used by v1 and v2.
   // -------------------------------------------------------------------
 
   conditionalOrderCreate(args: {

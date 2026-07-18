@@ -1,8 +1,8 @@
 // SUBACCOUNTS-OPTIONS-WS-PAYLOAD-V1 — private WS payload wire contract.
 //
 // Freezes the safe merge/refetch predicates shared with the frontend
-// consumers (`OpenOrdersPanel`, `ConditionalOrdersPanel`, `FillsPanel`,
-// `HistoryShell`):
+// consumers (`HistoryShell` today; historically also the removed
+// `OpenOrdersPanel` / `ConditionalOrdersPanel` / `FillsPanel`):
 //
 //   * subaccount_id matches active   → merge / show banner.
 //   * subaccount_id mismatches       → ignore.
@@ -18,9 +18,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 // ---------------------------------------------------------------------
-// Predicates mirroring the app-side logic in
-// OpenOrdersPanel / ConditionalOrdersPanel / FillsPanel /
-// HistoryShell.
+// Predicates mirroring the app-side logic in HistoryShell (and the
+// historical OpenOrdersPanel / ConditionalOrdersPanel / FillsPanel
+// components, since removed).
 // ---------------------------------------------------------------------
 
 /** True when the order/conditional-order delta should be merged into
