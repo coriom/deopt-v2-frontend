@@ -156,6 +156,33 @@ test("switcher menu drops the scope-copy header (retired)", async ({ page }) => 
   await expect(page.getByTestId("subaccount-scope-copy")).toHaveCount(0);
 });
 
+test("create subaccount modal explains the wallet signature and no-gas posture", async ({
+  page,
+}) => {
+  await goToOptions(page);
+  await mountBackend(page);
+  await connectWallet(page);
+  await page.getByTestId("subaccount-switcher-trigger").click();
+  await page.getByTestId("subaccount-create").click();
+  await expect(page.getByTestId("subaccount-create-modal")).toBeVisible();
+  // SUBACCOUNTS-CREATE-UX-COPY-V1 — copy is visible BEFORE the user
+  // clicks Create, so they understand the signature prompt that
+  // follows.
+  const note = page.getByTestId("subaccount-create-signature-note");
+  await expect(note).toBeVisible();
+  await expect(note).toContainText(
+    /sign a message to prove you own this wallet/i,
+  );
+  await expect(note).toContainText(/no gas required/i);
+  // Copy must NOT overclaim a session-key UX we haven't shipped, and
+  // must NOT confuse a message signature with a transaction.
+  await expect(note).not.toContainText(/one-time/i);
+  await expect(note).not.toContainText(/session/i);
+  await expect(note).not.toContainText(/trusted device/i);
+  await expect(note).not.toContainText(/derive/i);
+  await expect(note).not.toContainText(/gasless transaction/i);
+});
+
 test("create subaccount produces Account 2 and selects it", async ({ page }) => {
   await goToOptions(page);
   await mountBackend(page);

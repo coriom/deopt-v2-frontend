@@ -312,6 +312,13 @@ function CreateSubaccountModal(props: {
             {error}
           </p>
         ) : null}
+        <p
+          data-testid="subaccount-create-signature-note"
+          className="text-[11px] text-zinc-500"
+        >
+          You&rsquo;ll be asked to sign a message to prove you own this wallet.
+          No gas required.
+        </p>
         <div className="mt-2 flex items-center justify-end gap-2">
           <button
             type="button"
