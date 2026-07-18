@@ -200,29 +200,13 @@ test("create subaccount produces Account 2 and selects it", async ({ page }) => 
   );
 });
 
-test("options orders request includes subaccount_id=2 after switch", async ({
-  page,
-}) => {
-  await goToOptions(page);
-  await mountBackend(page);
-  const ordersRequests: string[] = [];
-  await page.route("**/options/orders?**", async (route: Route) => {
-    ordersRequests.push(route.request().url());
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: "[]",
-    });
-  });
-  await connectWallet(page);
-  await page.getByTestId("subaccount-switcher-trigger").click();
-  await page.getByTestId("subaccount-create").click();
-  await page.getByTestId("subaccount-create-submit").click();
-  // Wait for the OpenOrdersPanel refetch after the switch.
-  await page.waitForTimeout(500);
-  const withSub2 = ordersRequests.filter((u) => u.includes("subaccount_id=2"));
-  expect(withSub2.length).toBeGreaterThan(0);
-});
+// Retired: this test asserted that switching subaccounts on /options
+// triggered an OpenOrdersPanel refetch carrying `?subaccount_id=2`.
+// OpenOrdersPanel was unmounted from /options by the account-lifecycle
+// panel cleanup, so no orders refetch fires on this route. Wire-level
+// subaccount propagation for orders is still exercised via the perps
+// routing spec (perps-subaccounts-frontend-routing-v1) and the node
+// contract tests (subaccounts-options-ws-payload.contract.mjs).
 
 test("history v2 request includes subaccount_id=2 after switch", async ({
   page,
