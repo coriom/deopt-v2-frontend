@@ -12,7 +12,6 @@
 import type {
   BalancesData,
   ConditionalOrderResponse,
-  CreateConditionalOrderRequest,
   Envelope,
   ErrorEnvelope,
   ExecutionIntentStatus,
@@ -22,7 +21,6 @@ import type {
   ClosePreviewRequest,
   HistoryData,
   NotReadyData,
-  OptionOrderAttachmentPlan,
   PortfolioData,
   PositionsData,
   ProductDetailData,
@@ -650,22 +648,12 @@ export function fetchExecutorTransaction(
  *
  * The conditional-orders worker evaluates `armed` rows against the
  * underlying oracle and atomically claims + executes a child IOC
- * limit order capped to the live reducible position. These calls
- * just manage the row; they do not trigger anything client-side.
+ * limit order capped to the live reducible position. `listConditional
+ * Orders` is the only frontend client entrypoint into that surface —
+ * it feeds the History `Conditional` tab. Create/cancel wrappers
+ * were removed with `TRADING-API-DEAD-EXPORTS-V1`; the backend
+ * routes remain and can be re-wrapped when a future UI needs them.
  */
-export function createConditionalOrders(
-  address: string,
-  body: CreateConditionalOrderRequest,
-  signal?: AbortSignal,
-): Promise<ConditionalOrderResponse[]> {
-  return rawRequest<ConditionalOrderResponse[]>(
-    "POST",
-    `/accounts/${address}/conditional-orders`,
-    body,
-    signal,
-  );
-}
-
 export function listConditionalOrders(
   address: string,
   optsOrSignal?:
@@ -683,74 +671,6 @@ export function listConditionalOrders(
     `/accounts/${address}/conditional-orders${suffix}`,
     undefined,
     opts.signal,
-  );
-}
-
-export function cancelConditionalOrder(
-  address: string,
-  id: string,
-  body: {
-    authorization: import("./write-auth").AuthorizationEnvelope;
-    subaccount_id?: number;
-  },
-  signal?: AbortSignal,
-): Promise<ConditionalOrderResponse> {
-  return rawRequest<ConditionalOrderResponse>(
-    "DELETE",
-    `/accounts/${address}/conditional-orders/${id}`,
-    body,
-    signal,
-  );
-}
-
-/**
- * ATTACHED-TP-SL-PLAN-OBSERVABILITY-V1 — list the trader's
- * attached TP/SL plans (the spec the ticket sent, plus its
- * pending/active/cancelled/failed status). Materialised
- * conditional rows are still listed via `listConditionalOrders`;
- * this endpoint is the only window onto pending/failed plans.
- *
- * Returns the raw `OptionOrderAttachmentPlan[]` newest first.
- */
-export function listOptionOrderAttachmentPlans(
-  address: string,
-  opts: { sinceMs?: number; signal?: AbortSignal } = {},
-): Promise<OptionOrderAttachmentPlan[]> {
-  const params = new URLSearchParams();
-  if (opts.sinceMs !== undefined) params.set("since_ms", String(opts.sinceMs));
-  const suffix = params.toString().length > 0 ? `?${params.toString()}` : "";
-  return rawRequest<{ plans: OptionOrderAttachmentPlan[] }>(
-    "GET",
-    `/accounts/${address}/option-order-attachment-plans${suffix}`,
-    undefined,
-    opts.signal,
-  ).then((r) =>
-    r.plans.map((p) => {
-      const tpTrigger = p.take_profit_trigger_price_1e8;
-      const tpLimit = p.take_profit_limit_price_1e8;
-      const slTrigger = p.stop_loss_trigger_price_1e8;
-      const slLimit = p.stop_loss_limit_price_1e8;
-      const out: OptionOrderAttachmentPlan = { ...p };
-      if (tpTrigger !== undefined && tpLimit !== undefined) {
-        out.take_profit = {
-          trigger_price_1e8: tpTrigger,
-          limit_price_1e8: tpLimit,
-        };
-      }
-      if (slTrigger !== undefined && slLimit !== undefined) {
-        out.stop_loss = {
-          trigger_price_1e8: slTrigger,
-          limit_price_1e8: slLimit,
-        };
-      }
-      if (p.take_profit_conditional_order_id !== undefined) {
-        out.tp_conditional_order_id = p.take_profit_conditional_order_id;
-      }
-      if (p.stop_loss_conditional_order_id !== undefined) {
-        out.sl_conditional_order_id = p.stop_loss_conditional_order_id;
-      }
-      return out;
-    }),
   );
 }
 
@@ -779,90 +699,9 @@ export function submitOptionOrder(
   );
 }
 
-// ORDER-LIFECYCLE-OBSERVABILITY-V1 — account-scoped lifecycle reads.
-// The backend filters by `account` query param (case-insensitive on
-// the address). These return the same DB rows the `account.*` private
-// WS channels surface; the UI uses them both for initial render and as
-// the canonical recovery path after a missed WS event / reconnect.
-
-export interface OptionOrderRow {
-  order_id: string;
-  option_series_id: string;
-  account: string;
-  side: "buy" | "sell";
-  price_1e8: string;
-  size_1e8: string;
-  remaining_size_1e8: string;
-  time_in_force: string;
-  post_only: boolean;
-  client_order_id?: string | null;
-  status: string;
-  created_at_ms: number;
-  updated_at_ms: number;
-  /**
-   * SUBACCOUNTS-OPTIONS-ORDERS-HISTORY-V1 — subaccount that owns the
-   * order. Backend emits `1` for pre-migration rows. May be absent on
-   * older enveloped responses; treat as `1` in that case.
-   */
-  subaccount_id?: number;
-}
-
-export interface OptionFillRow {
-  fill_id: string;
-  option_series_id: string;
-  buy_order_id: string;
-  sell_order_id: string;
-  buyer: string;
-  seller: string;
-  taker_side: "buy" | "sell";
-  price_1e8: string;
-  size_1e8: string;
-  created_at_ms: number;
-  /**
-   * SUBACCOUNTS-OPTIONS-ORDERS-HISTORY-V1 — per-side subaccount ids
-   * so a wallet that owned both sides can still filter by book.
-   */
-  buyer_subaccount_id?: number;
-  seller_subaccount_id?: number;
-}
-
-export function listAccountOptionOrders(
-  account: string,
-  optsOrSignal?:
-    | AbortSignal
-    | { subaccountId?: number; all?: boolean; signal?: AbortSignal },
-): Promise<OptionOrderRow[]> {
-  const opts = normalizeListOpts(optsOrSignal);
-  const qs = new URLSearchParams({ account: account.toLowerCase() });
-  if (opts.all) qs.set("all", "true");
-  else if (opts.subaccountId !== undefined)
-    qs.set("subaccount_id", String(opts.subaccountId));
-  return rawRequest<OptionOrderRow[]>(
-    "GET",
-    `/options/orders?${qs.toString()}`,
-    undefined,
-    opts.signal,
-  );
-}
-
-export function listAccountOptionFills(
-  account: string,
-  optsOrSignal?:
-    | AbortSignal
-    | { subaccountId?: number; all?: boolean; signal?: AbortSignal },
-): Promise<OptionFillRow[]> {
-  const opts = normalizeListOpts(optsOrSignal);
-  const qs = new URLSearchParams({ account: account.toLowerCase() });
-  if (opts.all) qs.set("all", "true");
-  else if (opts.subaccountId !== undefined)
-    qs.set("subaccount_id", String(opts.subaccountId));
-  return rawRequest<OptionFillRow[]>(
-    "GET",
-    `/options/fills?${qs.toString()}`,
-    undefined,
-    opts.signal,
-  );
-}
+// ORDER-LIFECYCLE-OBSERVABILITY-V1 — helper for the surviving
+// list-style reads. Accepts either a bare AbortSignal (legacy call
+// sites) or an options bag with `subaccountId` / `all` / `signal`.
 
 function normalizeListOpts(
   arg?:
@@ -874,22 +713,6 @@ function normalizeListOpts(
     return { signal: arg as AbortSignal };
   }
   return arg as { subaccountId?: number; all?: boolean; signal?: AbortSignal };
-}
-
-export function cancelOptionOrder(
-  orderId: string,
-  body: {
-    authorization: import("./write-auth").AuthorizationEnvelope;
-    subaccount_id?: number;
-  },
-  signal?: AbortSignal,
-): Promise<OptionOrderRow> {
-  return rawRequest<OptionOrderRow>(
-    "POST",
-    `/options/orders/${orderId}/cancel`,
-    body,
-    signal,
-  );
 }
 
 // ---------------------------------------------------------------------
