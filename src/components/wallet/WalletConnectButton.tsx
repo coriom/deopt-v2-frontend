@@ -7,7 +7,8 @@ function shortenAddress(addr: string): string {
 }
 
 export function WalletConnectButton() {
-  const { address, isConnecting, hasProvider, connect, disconnect } = useWallet();
+  const { address, isConnecting, hasProvider, connectError, connect, disconnect } =
+    useWallet();
 
   if (!hasProvider) {
     return (
@@ -26,16 +27,31 @@ export function WalletConnectButton() {
 
   if (!address) {
     return (
-      <button
-        type="button"
-        disabled={isConnecting}
-        onClick={() => void connect()}
-        data-testid="wallet-connect-button"
-        data-wallet-state="disconnected"
-        className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      >
-        {isConnecting ? "Approving…" : "Connect wallet"}
-      </button>
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button"
+          disabled={isConnecting}
+          onClick={() => void connect()}
+          data-testid="wallet-connect-button"
+          data-wallet-state={connectError ? "error" : "disconnected"}
+          className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+        >
+          {isConnecting
+            ? "Approving…"
+            : connectError
+              ? "Retry connect"
+              : "Connect wallet"}
+        </button>
+        {connectError ? (
+          <p
+            data-testid="wallet-connect-error"
+            role="alert"
+            className="max-w-[220px] text-right text-[10px] text-red-500"
+          >
+            {connectError}
+          </p>
+        ) : null}
+      </div>
     );
   }
 

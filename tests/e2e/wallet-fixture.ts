@@ -37,6 +37,14 @@ export interface MockWalletConfig {
   account?: `0x${string}`;
   chainId?: number;
   signatureRejected?: boolean;
+  /**
+   * FRONTEND-WALLET-CONNECT-RUNTIME-DEBUG-V1 — when true, the mock
+   * provider rejects `eth_requestAccounts` with EIP-1193 code 4001
+   * ("User rejected the request") the same way MetaMask does when
+   * the user dismisses the connect popup. Used by the connect-error
+   * surfacing spec.
+   */
+  connectRejected?: boolean;
 }
 
 // Anvil[0] — well-known, public, dev-only deterministic key. Used by
@@ -79,6 +87,7 @@ export async function installMockWallet(
   const account = cfg.account ?? DEFAULT_TEST_ACCOUNT;
   const chainId = cfg.chainId ?? ANVIL_CHAIN_ID;
   const signatureRejected = !!cfg.signatureRejected;
+  const connectRejected = !!cfg.connectRejected;
 
   // Node-side EIP-191 signer. The browser will call this via
   // `page.exposeFunction` whenever the WalletProvider issues a
@@ -98,6 +107,7 @@ export async function installMockWallet(
       account,
       chainId,
       signatureRejected,
+      connectRejected,
       MOCK_TYPED_SIGNATURE,
       MOCK_TX_HASH,
     }) => {
@@ -108,6 +118,7 @@ export async function installMockWallet(
         account: account as `0x${string}` | null,
         chainId: chainId as number,
         signatureRejected,
+        connectRejected,
       };
 
       const emit = (event: string, payload: unknown) => {
@@ -126,7 +137,16 @@ export async function installMockWallet(
       const provider = {
         async request(args: { method: string; params?: unknown[] }) {
           switch (args.method) {
-            case "eth_requestAccounts":
+            case "eth_requestAccounts": {
+              if (state.connectRejected) {
+                const err: Error & { code?: number } = new Error(
+                  "User rejected the request.",
+                );
+                err.code = 4001;
+                throw err;
+              }
+              return state.account ? [state.account] : [];
+            }
             case "eth_accounts":
               return state.account ? [state.account] : [];
             case "eth_chainId":
@@ -232,7 +252,14 @@ export async function installMockWallet(
           },
         };
     },
-    { account, chainId, signatureRejected, MOCK_TYPED_SIGNATURE, MOCK_TX_HASH },
+    {
+      account,
+      chainId,
+      signatureRejected,
+      connectRejected,
+      MOCK_TYPED_SIGNATURE,
+      MOCK_TX_HASH,
+    },
   );
 }
 

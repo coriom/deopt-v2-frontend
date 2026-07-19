@@ -84,6 +84,7 @@ export interface WalletState {
   chainId: number | null;
   isConnecting: boolean;
   hasProvider: boolean;
+  connectError: string | null;
   isMainnet: boolean;
   isExpectedChain: boolean;
   walletClient: WalletClient | null;
@@ -128,6 +129,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [hasProvider, setHasProvider] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
 
   const [subaccounts, setSubaccounts] = useState<Subaccount[]>([]);
@@ -185,16 +187,43 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     if (typeof window === "undefined") return;
+    // Guard against double-firing on rapid clicks: the button already
+    // sets `disabled` while `isConnecting`, but React state updates
+    // can lag one paint on slow machines.
+    if (isConnecting) return;
     const eth = window.ethereum;
     if (!eth) {
       setHasProvider(false);
+      setConnectError(
+        "No wallet extension detected. Install or enable MetaMask/Rabby, then try again.",
+      );
       return;
     }
+    setConnectError(null);
     setIsConnecting(true);
     try {
-      const accounts = (await eth.request({
+      // Race the wallet request against a 60 s timeout. Some
+      // injected providers can hang indefinitely on
+      // `eth_requestAccounts` when the extension popup is
+      // dismissed or blocked; without the race the button spins
+      // forever.
+      const requestAccounts = eth.request({
         method: "eth_requestAccounts",
-      })) as string[];
+      }) as Promise<string[]>;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          const err = new Error("wallet_connect_timeout");
+          (err as Error & { code: string }).code = "TIMEOUT";
+          reject(err);
+        }, 60_000);
+      });
+      let accounts: string[];
+      try {
+        accounts = await Promise.race([requestAccounts, timeout]);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
       const acct = accounts[0];
       const chainHex = (await eth.request({
         method: "eth_chainId",
@@ -206,11 +235,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWalletClient(buildClient(eth, chain));
       }
     } catch (e) {
-      console.warn("wallet connect failed", e);
+      const code = (e as { code?: number | string }).code;
+      if (code === 4001) {
+        setConnectError("Wallet connection was rejected.");
+      } else if (code === "TIMEOUT") {
+        setConnectError(
+          "Wallet connection timed out. Open your wallet extension and try again.",
+        );
+      } else {
+        const msg = (e as { message?: string }).message ?? "wallet connect failed";
+        setConnectError(msg);
+      }
     } finally {
       setIsConnecting(false);
     }
-  }, [buildClient]);
+  }, [buildClient, isConnecting]);
 
   const disconnect = useCallback(() => {
     setAddress(null);
@@ -219,6 +258,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setSubaccounts([]);
     setActiveSubaccountIdState(DEFAULT_SUBACCOUNT_ID);
     setSubaccountsError(null);
+    setConnectError(null);
     urlSubaccountAppliedRef.current = null;
   }, []);
 
@@ -425,6 +465,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         chainId,
         isConnecting,
         hasProvider,
+        connectError,
         isMainnet,
         isExpectedChain,
         walletClient,

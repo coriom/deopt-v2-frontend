@@ -38,7 +38,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${sans.variable} ${nav.variable} ${mono.variable}`}>
+    <html
+      lang="en"
+      className={`${sans.variable} ${nav.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="antialiased">{children}</body>
     </html>
   );
