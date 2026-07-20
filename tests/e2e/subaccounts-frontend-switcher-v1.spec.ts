@@ -241,6 +241,47 @@ test("rename subaccount modal explains the wallet signature and no-gas posture",
   await expect(note).not.toContainText(/gasless transaction/i);
 });
 
+test("created subaccount persists across page reload and wallet reconnect", async ({
+  page,
+}) => {
+  await goToOptions(page);
+  // `state` is closed over by the mock's route handlers and survives
+  // page.reload() — the Page object (and therefore the route table)
+  // stays alive, so this stands in for a live backend that has kept
+  // its rows across a frontend reload / browser tab restart.
+  await mountBackend(page);
+  await connectWallet(page);
+  // Create Account 2 named "Persistence Test".
+  await page.getByTestId("subaccount-switcher-trigger").click();
+  await page.getByTestId("subaccount-create").click();
+  await page.getByTestId("subaccount-create-name").fill("Persistence Test");
+  await page.getByTestId("subaccount-create-submit").click();
+  await expect(page.getByTestId("active-subaccount-label")).toContainText(
+    /Account 2/,
+  );
+  // Reload the tab. The wallet auto-disconnects (WalletProvider does
+  // not auto-connect on mount by design), so the switcher is hidden
+  // until the user clicks Connect.
+  await page.reload();
+  await expect(page.getByTestId("subaccount-switcher")).toHaveCount(0);
+  await connectWallet(page);
+  // Post-reload: the switcher must refetch and show Account 2 with
+  // the persisted name — the row survived because the mock's `state`
+  // (standing in for the backend DB) kept it. The persisted
+  // `deopt.subaccount.<addr>` in localStorage restores active id 2.
+  await expect(page.getByTestId("subaccount-switcher-trigger")).toHaveAttribute(
+    "data-active-subaccount-id",
+    "2",
+  );
+  await expect(page.getByTestId("active-subaccount-label")).toContainText(
+    /Persistence Test/,
+  );
+  // Confirm the dropdown lists both Account 1 and Account 2.
+  await page.getByTestId("subaccount-switcher-trigger").click();
+  await expect(page.getByTestId("subaccount-option-1")).toBeVisible();
+  await expect(page.getByTestId("subaccount-option-2")).toBeVisible();
+});
+
 test("rename subaccount submit succeeds and closes the modal without a runtime crash", async ({
   page,
 }) => {
