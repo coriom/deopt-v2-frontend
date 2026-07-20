@@ -41,7 +41,7 @@ interface SubaccountsState {
 }
 
 /**
- * Mount base routes: subaccount list/create/get + write-auth
+ * Mount base routes: subaccount list/create/rename + write-auth
  * challenge issuance + Options read stubs. Returns a shared state
  * object callers can mutate to drive the spec.
  */
@@ -88,6 +88,37 @@ async function mountBackend(page: Page): Promise<SubaccountsState> {
       }),
     });
   });
+
+  // SUBACCOUNTS-RENAME-RUNTIME-CRASH-V1 — PATCH rename handler. Mirror
+  // the backend PATCH /accounts/{addr}/subaccounts/{id} shape: accept
+  // { name, authorization } and echo back the subaccount row with
+  // the new name field populated.
+  await page.route(
+    "**/accounts/*/subaccounts/*",
+    async (route: Route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() ?? "{}");
+      const url = new URL(route.request().url());
+      const parts = url.pathname.split("/");
+      const id = Number(parts[parts.length - 1]);
+      const updated = subaccountDto({
+        subaccount_id: id,
+        display_name: `Account ${id}`,
+        name: body.name ?? null,
+      });
+      state.list = state.list.map((r) =>
+        r.subaccount_id === id ? updated : r,
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(updated),
+      });
+    },
+  );
 
   await page.route("**/auth/write-challenges", async (route: Route) => {
     await route.fulfill({
@@ -208,6 +239,64 @@ test("rename subaccount modal explains the wallet signature and no-gas posture",
   await expect(note).not.toContainText(/trusted device/i);
   await expect(note).not.toContainText(/derive/i);
   await expect(note).not.toContainText(/gasless transaction/i);
+});
+
+test("rename subaccount submit succeeds and closes the modal without a runtime crash", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (e) => pageErrors.push(e.message));
+  await goToOptions(page);
+  await mountBackend(page);
+  await connectWallet(page);
+  await page.getByTestId("subaccount-switcher-trigger").click();
+  await page.getByTestId("subaccount-rename").click();
+  await expect(page.getByTestId("subaccount-rename-modal")).toBeVisible();
+  await page.getByTestId("subaccount-rename-name").fill("Alpha book");
+  await page.getByTestId("subaccount-rename-submit").click();
+  // Modal must close cleanly on success.
+  await expect(page.getByTestId("subaccount-rename-modal")).toHaveCount(0, {
+    timeout: 5_000,
+  });
+  // Label reflects the new name (Account 1 · Alpha book).
+  await expect(page.getByTestId("active-subaccount-label")).toContainText(
+    /Alpha book/,
+  );
+  // Zero pageerror is the hard assertion — the historical crash was
+  // a `setState`-after-unmount surfaced as a runtime error in the
+  // Next.js dev overlay.
+  expect(pageErrors).toEqual([]);
+});
+
+test("rename subaccount handles wallet signature rejection without a crash", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (e) => pageErrors.push(e.message));
+  await installMockWallet(page, {
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    signatureRejected: true,
+  });
+  await page.goto("/options");
+  await mountBackend(page);
+  await connectWallet(page);
+  await page.getByTestId("subaccount-switcher-trigger").click();
+  await page.getByTestId("subaccount-rename").click();
+  await expect(page.getByTestId("subaccount-rename-modal")).toBeVisible();
+  await page.getByTestId("subaccount-rename-name").fill("Rejected name");
+  await page.getByTestId("subaccount-rename-submit").click();
+  // Modal stays open with a bounded error banner; button must
+  // re-enable so the user can retry after granting the signature.
+  await expect(page.getByTestId("subaccount-rename-modal")).toBeVisible();
+  await expect(page.getByTestId("subaccount-rename-error")).toBeVisible();
+  await expect(page.getByTestId("subaccount-rename-error")).toContainText(
+    /rejected/i,
+  );
+  await expect(page.getByTestId("subaccount-rename-submit")).toBeEnabled();
+  await expect(page.getByTestId("subaccount-rename-submit")).toContainText(
+    /^Rename$/,
+  );
+  expect(pageErrors).toEqual([]);
 });
 
 test("create subaccount produces Account 2 and selects it", async ({ page }) => {

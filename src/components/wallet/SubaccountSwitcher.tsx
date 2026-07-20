@@ -16,6 +16,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWallet, type Subaccount } from "@/lib/wallet";
 import { TradingApiError } from "@/lib/trading-api";
 
+/**
+ * SUBACCOUNTS-RENAME-RUNTIME-CRASH-V1 — small hook that returns a
+ * ref which flips to `false` when the component unmounts. Modals use
+ * it to skip `setState` calls that would otherwise fire after the
+ * parent closes the modal, which surfaces in React dev mode as
+ * "Can't perform a React state update on an unmounted component"
+ * and reads to users as a runtime crash in the dev overlay.
+ */
+function useIsMountedRef() {
+  const ref = useRef(true);
+  useEffect(() => {
+    ref.current = true;
+    return () => {
+      ref.current = false;
+    };
+  }, []);
+  return ref;
+}
+
 function labelFor(sub: Subaccount): string {
   if (sub.name && sub.name.trim().length > 0) {
     return `${sub.display_name} · ${sub.name}`;
@@ -118,9 +137,15 @@ export function SubaccountSwitcher() {
       ) : null}
       {renameOpen && activeSubaccount ? (
         <RenameSubaccountModal
+          key={`rename-${activeSubaccount.subaccount_id}`}
           active={activeSubaccount}
           onClose={() => setRenameOpen(false)}
-          onRename={(name) => renameSubaccount(activeSubaccount.subaccount_id, name)}
+          // Capture the id here — the arrow captures the immediate
+          // reference so a rerender that briefly nulls
+          // `activeSubaccount` cannot throw `Cannot read properties of
+          // null` when the user's submit click resolves.
+          onRename={(subaccountId => (name: string) =>
+            renameSubaccount(subaccountId, name))(activeSubaccount.subaccount_id)}
         />
       ) : null}
     </div>
@@ -250,6 +275,7 @@ function CreateSubaccountModal(props: {
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useIsMountedRef();
 
   const trimmed = useMemo(() => name.trim(), [name]);
   const nameTooLong = trimmed.length > MAX_SUBACCOUNT_NAME_LEN;
@@ -262,18 +288,25 @@ function CreateSubaccountModal(props: {
       setError(null);
       try {
         await onCreate(trimmed.length > 0 ? trimmed : null);
+        // Order matters: settle the loading state BEFORE onClose(),
+        // otherwise React unmounts the modal and the finally block
+        // fires setState-after-unmount (surfaces in dev as a runtime
+        // crash in the error overlay).
+        if (mountedRef.current) setSubmitting(false);
         onClose();
+        return;
       } catch (err) {
         const message =
           err instanceof TradingApiError
             ? err.message
             : (err as Error).message || "Failed to create subaccount";
-        setError(message);
-      } finally {
-        setSubmitting(false);
+        if (mountedRef.current) {
+          setError(message);
+          setSubmitting(false);
+        }
       }
     },
-    [nameTooLong, onClose, onCreate, submitting, trimmed],
+    [mountedRef, nameTooLong, onClose, onCreate, submitting, trimmed],
   );
 
   return (
@@ -351,6 +384,7 @@ function RenameSubaccountModal(props: {
   const [name, setName] = useState(active.name ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useIsMountedRef();
 
   const trimmed = useMemo(() => name.trim(), [name]);
   const nameEmpty = trimmed.length === 0;
@@ -364,18 +398,25 @@ function RenameSubaccountModal(props: {
       setError(null);
       try {
         await onRename(trimmed);
+        // Order matters: settle the loading state BEFORE onClose(),
+        // otherwise React unmounts the modal and the finally block
+        // fires setState-after-unmount (surfaces in dev as a runtime
+        // crash in the error overlay).
+        if (mountedRef.current) setSubmitting(false);
         onClose();
+        return;
       } catch (err) {
         const message =
           err instanceof TradingApiError
             ? err.message
             : (err as Error).message || "Failed to rename subaccount";
-        setError(message);
-      } finally {
-        setSubmitting(false);
+        if (mountedRef.current) {
+          setError(message);
+          setSubmitting(false);
+        }
       }
     },
-    [nameEmpty, nameTooLong, onClose, onRename, submitting, trimmed],
+    [mountedRef, nameEmpty, nameTooLong, onClose, onRename, submitting, trimmed],
   );
 
   return (
