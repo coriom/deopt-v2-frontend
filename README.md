@@ -5,16 +5,23 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+./scripts/local-frontend.sh
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The launcher checks whether ports **3000** (default) and **3001**
+(fallback) are already in use before starting Next.js. For each
+occupied port it prints the PID, process name, cmdline, and cwd
+(when readable) so you can see what to stop. It never auto-kills a
+process it does not recognise, and it refuses to jump to port
+**3010** (that port belongs to another project). If both 3000 and
+3001 are taken, the launcher exits with an error rather than
+silently picking a third port.
+
+You can still run `npm run dev` directly if you want to bypass the
+preflight; the launcher is just `PORT=<free_port> npm run dev`
+with the port-conflict report in front of it.
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. If the launcher fell back to 3001, open [http://localhost:3001](http://localhost:3001) instead.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
