@@ -44,19 +44,28 @@ test("/perps symbol selector switches between BTC-PERP and ETH-PERP", async ({
   page,
 }) => {
   await gotoPerps(page);
-  const btc = page.getByTestId("widget-perps-symbol-BTC-PERP");
+  // The symbol selector is now a dropdown: only the current symbol
+  // renders in the bandeau (as the trigger); alternates appear when
+  // the menu is opened.
+  const trigger = page.getByTestId("widget-perps-symbol-current");
+  const container = page.getByTestId("widget-perps-stats-symbol");
   const eth = page.getByTestId("widget-perps-symbol-ETH-PERP");
-  await expect(btc).toBeVisible();
+
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toContainText("BTC-PERP");
+  await expect(container).toHaveAttribute("data-open", "false");
+  // ETH option is not in the DOM until the menu opens.
+  await expect(eth).toHaveCount(0);
+
+  await trigger.click();
+  await expect(container).toHaveAttribute("data-open", "true");
   await expect(eth).toBeVisible();
-  await expect(btc).toHaveAttribute("data-active", "true");
   await eth.click();
-  await expect(eth).toHaveAttribute("data-active", "true");
-  // The stats and orderbook symbol labels reflect the new symbol.
-  // The chart-symbol testid was retired when stats merged into the
-  // chart widget; the stats-symbol element carries the same signal.
-  await expect(page.getByTestId("widget-perps-stats-symbol")).toContainText(
-    "ETH-PERP",
-  );
+
+  // Menu closes on selection; the trigger reflects the new symbol.
+  await expect(container).toHaveAttribute("data-open", "false");
+  await expect(trigger).toContainText("ETH-PERP");
+  await expect(container).toContainText("ETH-PERP");
   await expect(
     page.getByTestId("widget-perps-orderbook-symbol"),
   ).toContainText("ETH-PERP");

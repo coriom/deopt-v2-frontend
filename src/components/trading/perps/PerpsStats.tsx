@@ -20,7 +20,7 @@
 // Funding, Next, OI). Funding and OI land with `PERPS-FUNDING-V1` /
 // `PERPS-ISOLATED-MARGIN-POSITION-ENGINE-V1`.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
 import {
   getPerpsMarketPrice,
@@ -126,35 +126,15 @@ export function PerpsStatsWidget() {
       data-perps-price-state={stateTag}
       className="flex h-full min-h-0 w-full items-stretch overflow-x-auto"
     >
-      {/* Symbol tabs */}
-      <div
-        role="tablist"
-        aria-label="Perp market"
-        data-testid="widget-perps-stats-symbol"
-        className="flex shrink-0 items-center gap-1 border-r border-zinc-900 px-2"
-      >
-        {markets.map((m) => {
-          const active = m.symbol === market.symbol;
-          return (
-            <button
-              key={m.symbol}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setMarket(m.symbol)}
-              data-testid={`widget-perps-symbol-${m.symbol}`}
-              data-active={active ? "true" : "false"}
-              className={
-                active
-                  ? "rounded px-2 py-0 text-[11px] font-semibold text-emerald-200"
-                  : "rounded px-2 py-0 text-[11px] font-semibold text-zinc-400 hover:text-emerald-200"
-              }
-            >
-              {m.symbol}
-            </button>
-          );
-        })}
-      </div>
+      {/* Symbol selector — current symbol as a trigger button; click
+          opens a small dropdown with the other markets. Replaces the
+          horizontal tab strip so only the active market shows in the
+          bandeau. */}
+      <PerpsSymbolMenu
+        current={market.symbol}
+        markets={markets}
+        onSelect={setMarket}
+      />
       {/* Stat cells */}
       {CELLS.map((c) => {
         const value = c.value(priceState);
@@ -181,6 +161,104 @@ export function PerpsStatsWidget() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+interface PerpsSymbolMenuProps {
+  current: string;
+  markets: { symbol: string }[];
+  onSelect: (symbol: string) => void;
+}
+
+function PerpsSymbolMenu({ current, markets, onSelect }: PerpsSymbolMenuProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocPointer(ev: MouseEvent | TouchEvent) {
+      const el = containerRef.current;
+      if (!el) return;
+      if (ev.target instanceof Node && el.contains(ev.target)) return;
+      setOpen(false);
+    }
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocPointer);
+    document.addEventListener("touchstart", onDocPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocPointer);
+      document.removeEventListener("touchstart", onDocPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div
+      ref={containerRef}
+      data-testid="widget-perps-stats-symbol"
+      data-open={open ? "true" : "false"}
+      className="relative flex shrink-0 items-center border-r border-zinc-900 px-2"
+    >
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        data-testid="widget-perps-symbol-current"
+        className="flex items-center gap-1 rounded px-2 py-0 text-[11px] font-semibold text-emerald-200 hover:text-emerald-100"
+      >
+        <span>{current}</span>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 8 5"
+          width="8"
+          height="5"
+          className={
+            open
+              ? "rotate-180 fill-current text-emerald-200 transition-transform"
+              : "fill-current text-emerald-200 transition-transform"
+          }
+        >
+          <path d="M0 0h8L4 5z" />
+        </svg>
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label="Select perp market"
+          data-testid="widget-perps-symbol-menu"
+          className="absolute left-1 top-full z-20 mt-1 flex flex-col gap-0.5 rounded border border-zinc-800 bg-zinc-950 py-1 shadow-lg"
+        >
+          {markets.map((m) => {
+            const active = m.symbol === current;
+            return (
+              <button
+                key={m.symbol}
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                onClick={() => {
+                  onSelect(m.symbol);
+                  setOpen(false);
+                }}
+                data-testid={`widget-perps-symbol-${m.symbol}`}
+                data-active={active ? "true" : "false"}
+                className={
+                  active
+                    ? "px-3 py-1 text-left text-[11px] font-semibold text-emerald-200"
+                    : "px-3 py-1 text-left text-[11px] font-semibold text-zinc-400 hover:bg-zinc-900 hover:text-emerald-200"
+                }
+              >
+                {m.symbol}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
