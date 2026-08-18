@@ -5,7 +5,7 @@ export default function PerpsPage() {
   return (
     <div
       data-testid="perps-terminal-shell"
-      className="flex h-full min-h-0 flex-col overflow-y-auto"
+      className="flex h-full min-h-0 flex-col"
     >
       {/*
        * Both the page-level "Perps · not live" banner and the V1
@@ -25,22 +25,18 @@ export default function PerpsPage() {
        * The corresponding backend read endpoints remain live for
        * operators; when Perps trading is authorized they can be
        * remounted from git history.
+       *
+       * Layout matches the /options page: Workspace fills the entire
+       * viewport-height container instead of the prior fixed 560px
+       * (which left a black band below after the account-activity
+       * strip removal).
        */}
       <PerpsSymbolProvider>
-        {/*
-         * The Workspace measures its own container via
-         * `getBoundingClientRect` and shows a "canvas needs at least
-         * 320×240 px" fallback when squeezed. Give it a minimum
-         * height so it always renders; the whole page scrolls when
-         * content overflows.
-         */}
-        <div className="h-[560px] flex-shrink-0">
-          <Workspace
-            workspaceId="perps"
-            title="Perps workspace"
-            subtitle="modular · v2 · resizable"
-          />
-        </div>
+        <Workspace
+          workspaceId="perps"
+          title="Perps workspace"
+          subtitle="modular · v2 · resizable"
+        />
       </PerpsSymbolProvider>
     </div>
   );
