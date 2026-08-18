@@ -1,10 +1,5 @@
 import { Workspace } from "@/components/workspace/Workspace";
 import { PerpsSymbolProvider } from "@/lib/perps-symbol";
-import { PerpsPositionsPanel } from "@/components/trading/perps/PerpsPositionsPanel";
-import { PerpsOrdersPanel } from "@/components/trading/perps/PerpsOrdersPanel";
-import { PerpsFillsPanel } from "@/components/trading/perps/PerpsFillsPanel";
-import { PerpsLiquidationsPanel } from "@/components/trading/perps/PerpsLiquidationsPanel";
-import { PerpsFundingPanel } from "@/components/trading/perps/PerpsFundingPanel";
 
 export default function PerpsPage() {
   return (
@@ -21,6 +16,15 @@ export default function PerpsPage() {
        * mainnet guard, (c) the backend returning `503 PerpsNotLive` on
        * every one of the 9 Perps mutation URLs, and (d) the readiness
        * probe reporting `perps_public_routes: fail_closed`.
+       *
+       * The bottom "read-only account activity" strip (positions /
+       * orders / fills / liquidations / funding) was removed for
+       * visual polish. Every one of those panels rendered the same
+       * "Trading is not enabled yet" chrome and repeated the same
+       * empty-state copy — pure noise while Perps stays fail-closed.
+       * The corresponding backend read endpoints remain live for
+       * operators; when Perps trading is authorized they can be
+       * remounted from git history.
        */}
       <PerpsSymbolProvider>
         {/*
@@ -36,25 +40,6 @@ export default function PerpsPage() {
             title="Perps workspace"
             subtitle="modular · v2 · resizable"
           />
-        </div>
-        {/*
-         * PERPS-FRONTEND-ORDERS-FILLS-LIQUIDATIONS-FUNDING-V1 —
-         * read-only account activity area. `PerpsPositionsPanel`
-         * remains here from `PERPS-ISOLATED-MARGIN-POSITION-ENGINE-V1`;
-         * the four new panels (orders, fills, liquidations, funding)
-         * all wire REST snapshots to `/accounts/:address/perps/*` and
-         * refresh on their matching lifecycle channel delta. Empty
-         * states are honest; no fake rows. Trading remains disabled.
-         */}
-        <div
-          data-testid="perps-account-activity"
-          className="flex flex-shrink-0 flex-col gap-2 border-t border-zinc-900 bg-black/40 p-2"
-        >
-          <PerpsPositionsPanel />
-          <PerpsOrdersPanel />
-          <PerpsFillsPanel />
-          <PerpsLiquidationsPanel />
-          <PerpsFundingPanel />
         </div>
       </PerpsSymbolProvider>
     </div>
