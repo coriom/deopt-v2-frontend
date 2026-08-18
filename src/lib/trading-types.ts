@@ -491,6 +491,11 @@ export interface OptionOrderResponse {
   order_id: string;
   option_series_id: SeriesId;
   account: EthAddress;
+  /** SUBACCOUNTS-OPTIONS-ROUTING-V1 — persisted `(owner,
+   * subaccount_id)` scope. `1` for every v1 flow and every
+   * pre-migration row. Present on every response since
+   * migration 0039. */
+  subaccount_id: number;
   side: OptionOrderSide;
   price_1e8: DecimalString;
   size_1e8: DecimalString;
@@ -500,8 +505,19 @@ export interface OptionOrderResponse {
   client_order_id?: string | null;
   nonce?: string | null;
   deadline_ms?: number | null;
-  signature?: Hex | null;
+  /** OPTIONS-HYBRID-V2-BACKEND-FINAL-CLOSURE-V1 Part M — the
+   * public read routes no longer echo the raw EIP-712 signature.
+   * They surface a boolean witness instead. Callers that need
+   * the signature already possess it (they signed the order). */
+  signature_present: boolean;
   status: OptionOrderStatusValue;
+  /** HISTORY-V2-TERMINAL-REASONS-V1 — populated only on terminal
+   * state transitions (user cancel, IOC remainder, expired,
+   * post-only rejection). Null for live rows and pre-migration
+   * rows (before migration 0030). */
+  terminal_reason_code?: string | null;
+  terminal_reason_message?: string | null;
+  terminal_reason_source?: string | null;
   created_at_ms: number;
   updated_at_ms: number;
 }
