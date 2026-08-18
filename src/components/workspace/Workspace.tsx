@@ -555,10 +555,17 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
       const r = resolveWidgetRect(w, canvasSize);
       if (r.y + r.h > lowestBottom) lowestBottom = r.y + r.h;
     }
-    // A small buffer so the user can drop a new widget below the
-    // current bottom without immediately hitting the edge.
+    // A layout that already fits within the viewport (widgets summing
+    // to `baseline` or less) does NOT need extra virtual height — the
+    // default perps + options layouts fill the canvas exactly, and
+    // adding a scroll buffer here left a ~128px black band below the
+    // widgets on every page load. Only reserve the drop-buffer when
+    // the user has already dragged a widget past the baseline; then
+    // the buffer lets them drop the next one below without hitting
+    // the edge.
+    if (lowestBottom <= baseline) return baseline;
     const buffer = CANVAS_SNAP_PX * 4;
-    return Math.max(baseline, lowestBottom + buffer);
+    return lowestBottom + buffer;
   }, [widgets, canvasSize]);
 
   // Overlap preview (Phase 2) — while a drag is in flight, propose a
