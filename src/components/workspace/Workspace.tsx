@@ -21,6 +21,7 @@ import {
   geometryToRect,
   isCanvasReady,
   rectToPctGeometry,
+  resolveAdaptiveSnap,
   resolveWidgetRect,
   snapWidgetGeometry,
   type CanvasSize,
@@ -527,17 +528,25 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
   const renderWidgets = hydrated && widgets !== null && ready;
 
   // Derive-style snap-to-grid backdrop: emerald dots sitting exactly
-  // on the snap positions. `radial-gradient(circle, ...)` centers each
-  // dot in the middle of its tile by default, so we shift the
+  // on the snap positions. `radial-gradient(circle, ...)` centers
+  // each dot in the middle of its tile by default, so we shift the
   // background by `-SNAP/2` on both axes to land the dot centers on
-  // the widget snap grid (0, 32, 64, …) instead of in between.
-  const halfSnap = Math.round(CANVAS_SNAP_PX / 2);
+  // the widget snap grid instead of in between.
+  //
+  // The tile size uses the same canvas-adaptive snap as widget
+  // placement (`resolveAdaptiveSnap`), so a canvas whose height /
+  // width isn't a perfect multiple of the ideal 32-px step still
+  // produces integer rows / columns that reach the canvas edge
+  // exactly. Widgets snapped with `snapWidgetGeometry` now land
+  // precisely on these dots — no visible drift.
+  const backdropSnapX = ready ? resolveAdaptiveSnap(canvasSize.width) : CANVAS_SNAP_PX;
+  const backdropSnapY = ready ? resolveAdaptiveSnap(canvasSize.height) : CANVAS_SNAP_PX;
   const backdropStyle: React.CSSProperties = ready
     ? {
         backgroundImage:
           "radial-gradient(circle, rgba(110, 231, 183, 0.22) 1px, transparent 1.4px)",
-        backgroundSize: `${CANVAS_SNAP_PX}px ${CANVAS_SNAP_PX}px`,
-        backgroundPosition: `-${halfSnap}px -${halfSnap}px`,
+        backgroundSize: `${backdropSnapX}px ${backdropSnapY}px`,
+        backgroundPosition: `-${backdropSnapX / 2}px -${backdropSnapY / 2}px`,
       }
     : {};
 

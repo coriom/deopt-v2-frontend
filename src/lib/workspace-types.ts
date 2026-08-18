@@ -130,6 +130,44 @@ export function snapPx(value: number): number {
   return Math.round(value / CANVAS_SNAP_PX) * CANVAS_SNAP_PX;
 }
 
+/** Resolve the effective snap step for a specific canvas dimension.
+ *
+ *  A fixed 32px grid is fine visually, but no real viewport is a
+ *  perfect multiple of 32 — so snapping widget geometry to the fixed
+ *  grid causes the last row / column to fall a few pixels short of
+ *  (or overshoot) the canvas edge. That was the source of the black
+ *  band visible below the perps default layout: `hPct=0.66` chart +
+ *  `hPct=0.34` bottom-dock snapped to fixed 32px multiples that
+ *  summed 8-24 px past the canvas height, then the workspace's
+ *  `virtualHeightPx` reserved a scroll buffer to accommodate the
+ *  overshoot.
+ *
+ *  This helper returns a snap step CLOSE to `CANVAS_SNAP_PX` but
+ *  chosen so the canvas dimension divides evenly into it. E.g. a
+ *  canvas 823 px tall snapped with ideal 32 resolves to `823 / 26 =
+ *  31.65 px` per row, giving 26 exact rows. Every widget snapped
+ *  with this step lands exactly on the canvas edge — no residual
+ *  drift, no scroll buffer required. */
+export function resolveAdaptiveSnap(
+  canvasSize: number,
+  ideal: number = CANVAS_SNAP_PX,
+): number {
+  if (!Number.isFinite(canvasSize) || canvasSize <= 0) return ideal;
+  if (!Number.isFinite(ideal) || ideal <= 0) return canvasSize;
+  const rows = Math.max(1, Math.round(canvasSize / ideal));
+  return canvasSize / rows;
+}
+
+/** Snap a raw pixel value to the nearest multiple of `snap`. When
+ *  `snap` is the canvas-adaptive value from `resolveAdaptiveSnap`,
+ *  a snapped canvas edge (`value == canvasSize`) lands exactly on
+ *  the last row boundary. */
+export function snapPxTo(value: number, snap: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(snap) || snap <= 0) return value;
+  return Math.round(value / snap) * snap;
+}
+
 export function pxToPct(px: number, canvasPx: number): number {
   if (!Number.isFinite(canvasPx) || canvasPx <= 0) return 0;
   if (!Number.isFinite(px)) return 0;
@@ -306,11 +344,19 @@ export function snapWidgetGeometry(
   const raw = geometryToRect(widget, canvas);
   const minW = widget.minWPx ?? DEFAULT_MIN_W_PX;
   const minH = widget.minHPx ?? DEFAULT_MIN_H_PX;
+  // Adaptive snap per axis: each dimension is divided into an
+  // integer number of rows/cols close to `CANVAS_SNAP_PX`, so a
+  // widget whose stored geometry reaches the canvas edge (e.g.
+  // hPct=1.0 or a bottom dock at yPct=0.66 + hPct=0.34) snaps
+  // exactly to `canvas.height`. Without this, fixed 32-px snapping
+  // rounded past the edge and left a visible scroll gap on load.
+  const snapX = resolveAdaptiveSnap(canvas.width);
+  const snapY = resolveAdaptiveSnap(canvas.height);
   const snapped: PixelRect = {
-    x: snapPx(raw.x),
-    y: snapPx(raw.y),
-    w: Math.max(snapPx(raw.w), Math.ceil(minW / CANVAS_SNAP_PX) * CANVAS_SNAP_PX),
-    h: Math.max(snapPx(raw.h), Math.ceil(minH / CANVAS_SNAP_PX) * CANVAS_SNAP_PX),
+    x: snapPxTo(raw.x, snapX),
+    y: snapPxTo(raw.y, snapY),
+    w: Math.max(snapPxTo(raw.w, snapX), Math.ceil(minW / snapX) * snapX),
+    h: Math.max(snapPxTo(raw.h, snapY), Math.ceil(minH / snapY) * snapY),
   };
   const clamped = clampRectToCanvas(snapped, canvas, minW, minH);
   return {
