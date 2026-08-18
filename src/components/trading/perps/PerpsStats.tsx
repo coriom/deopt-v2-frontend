@@ -121,46 +121,54 @@ export function PerpsStatsWidget() {
   const priceState = usePerpsPriceState(market.symbol);
   const stateTag = priceStateTag(priceState);
   return (
+    // The outer bandeau does NOT set `overflow-x-auto`. CSS forces
+    // `overflow-y: auto` on any element whose `overflow-x` is not
+    // `visible` — that quirk previously clipped the dropdown popover
+    // below the short bandeau, hiding every option except the first
+    // one visible above the fold. The stat cells scroll horizontally
+    // inside their own inner container instead.
     <div
       data-testid="widget-perps-stats-body"
       data-perps-price-state={stateTag}
-      className="flex h-full min-h-0 w-full items-stretch overflow-x-auto"
+      className="flex h-full min-h-0 w-full items-stretch"
     >
       {/* Symbol selector — current symbol as a trigger button; click
-          opens a small dropdown with the other markets. Replaces the
-          horizontal tab strip so only the active market shows in the
-          bandeau. */}
+          opens a dropdown with the other markets. Kept outside the
+          scrolling stats row so the popover can escape freely. */}
       <PerpsSymbolMenu
         current={market.symbol}
         markets={markets}
         onSelect={setMarket}
       />
-      {/* Stat cells */}
-      {CELLS.map((c) => {
-        const value = c.value(priceState);
-        return (
-          <div
-            key={c.id}
-            data-testid={`widget-perps-stat-${c.id}`}
-            data-perps-cell-state={stateTag}
-            className="flex min-w-0 shrink-0 flex-col justify-center gap-0 border-r border-zinc-900 px-3 py-0.5"
-          >
-            <span className="text-[9px] uppercase leading-tight tracking-[0.12em] text-zinc-500">
-              {c.label}
-            </span>
-            <span
-              className={
-                stateTag === "stale"
-                  ? "text-[12px] leading-tight text-zinc-500"
-                  : "text-[12px] leading-tight text-zinc-300"
-              }
-              style={{ fontFamily: "var(--app-font-mono)" }}
+      {/* Stat cells — this is the only region that scrolls horizontally
+          when the widget is narrow enough that the 7 cells don't fit. */}
+      <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
+        {CELLS.map((c) => {
+          const value = c.value(priceState);
+          return (
+            <div
+              key={c.id}
+              data-testid={`widget-perps-stat-${c.id}`}
+              data-perps-cell-state={stateTag}
+              className="flex min-w-0 shrink-0 flex-col justify-center gap-0 border-r border-zinc-900 px-3 py-0.5"
             >
-              {value}
-            </span>
-          </div>
-        );
-      })}
+              <span className="text-[9px] uppercase leading-tight tracking-[0.12em] text-zinc-500">
+                {c.label}
+              </span>
+              <span
+                className={
+                  stateTag === "stale"
+                    ? "text-[12px] leading-tight text-zinc-500"
+                    : "text-[12px] leading-tight text-zinc-300"
+                }
+                style={{ fontFamily: "var(--app-font-mono)" }}
+              >
+                {value}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
