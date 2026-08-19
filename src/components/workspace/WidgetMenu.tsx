@@ -71,7 +71,7 @@ export function WidgetMenu({ instance, def, onRemove }: WidgetMenuProps) {
         onClick={() => setOpen((v) => !v)}
         data-testid={`widget-menu-trigger-${instance.id}`}
         aria-label="Widget menu"
-        className="shrink-0 rounded border border-transparent bg-zinc-950/70 px-1.5 py-0 text-[18px] leading-none text-zinc-500 hover:border-zinc-700 hover:text-emerald-200"
+        className="shrink-0 rounded border border-transparent bg-zinc-950/70 px-1.5 py-0 text-[15px] leading-none text-zinc-500 hover:border-zinc-700 hover:text-emerald-200"
       >
         ⋮
       </button>
