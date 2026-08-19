@@ -28,6 +28,12 @@ import {
   TradesWidget,
 } from "./widgets";
 
+export interface WidgetMenuActionsProps {
+  /** Close the widget's kebab menu. Call after an action commits so
+   *  the popover dismisses cleanly. */
+  close: () => void;
+}
+
 export interface WidgetDef {
   type: WidgetType;
   title: string;
@@ -42,6 +48,11 @@ export interface WidgetDef {
   minHPx: number;
   implemented: boolean;
   Render: ComponentType;
+  /** Optional per-widget menu items rendered above the shared
+   *  "Remove widget" action in the kebab (⋯) menu. Each widget owns
+   *  its own settings surface — the shared menu framework only
+   *  provides the trigger + popover + Remove action. */
+  MenuActions?: ComponentType<WidgetMenuActionsProps>;
 }
 
 const ALL_WS: WorkspaceId[] = ["options", "perps", "custom-1", "custom-2", "custom-3"];

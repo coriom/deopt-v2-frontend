@@ -49,6 +49,9 @@ test("Remove control inside a widget still removes it", async ({ page }) => {
   await page.getByTestId("navbar-widget-button").click();
   await page.getByTestId("navbar-widget-option-feedback").click();
   await expect(page.getByTestId("widget-feedback")).toBeVisible();
+  // Remove moved from an always-visible ✕ into the kebab (⋯) menu.
+  // Open the menu first, then click the Remove menu item.
+  await page.locator("[data-testid^='widget-menu-trigger-']").first().click();
   const removeBtn = page.locator("[data-testid^='widget-remove-']").first();
   await removeBtn.click();
   await expect(page.getByTestId("widget-feedback")).toHaveCount(0);

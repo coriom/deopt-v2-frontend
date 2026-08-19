@@ -3,6 +3,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { WidgetInstance } from "@/lib/workspace-types";
 import type { WidgetDef } from "./registry";
+import { WidgetMenu } from "./WidgetMenu";
 
 interface WidgetFrameProps {
   instance: WidgetInstance;
@@ -63,10 +64,13 @@ export function WidgetFrame({
       >
         <Render />
       </div>
-      {/* Top-right action cluster — aligns with the first row of body
-          content (status badge + close cross). Container is
-          pointer-events-none so empty space passes drags through to
-          the section; only the badge and the button capture clicks. */}
+      {/* Top-right action cluster — status badge + kebab (⋯) menu.
+          Container is pointer-events-none so empty space passes drags
+          through to the section; only the badge and the menu capture
+          clicks. The kebab replaces the prior always-visible ✕ close
+          button and includes "Remove widget" plus any per-widget
+          settings the widget's registry entry declares via
+          `MenuActions`. */}
       <div
         data-testid={`widget-actions-${instance.id}`}
         className="pointer-events-none absolute top-1 right-1.5 z-10 flex items-center gap-1.5"
@@ -79,16 +83,7 @@ export function WidgetFrame({
             coming later
           </span>
         ) : null}
-        <button
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={onRemove}
-          data-testid={`widget-remove-${instance.id}`}
-          aria-label="Remove widget"
-          className="pointer-events-auto shrink-0 rounded border border-transparent bg-zinc-950/70 px-1 text-[10px] leading-tight text-zinc-500 hover:border-zinc-700 hover:text-emerald-200"
-        >
-          ✕
-        </button>
+        <WidgetMenu instance={instance} def={def} onRemove={onRemove} />
       </div>
       <div
         data-testid={`widget-resize-handle-${instance.id}`}

@@ -195,21 +195,26 @@ test("Widget header truncates instead of overlapping the remove button", async (
   await page.getByTestId("navbar-widget-button").click();
   await page.getByTestId("navbar-widget-option-docs-help").click();
   await expect(page.getByTestId("widget-docs-help")).toBeVisible();
-  const removeBtn = page.locator("[data-testid^='widget-remove-']").first();
-  await expect(removeBtn).toBeVisible();
-  const removeBox = await removeBtn.boundingBox();
+  // The former always-visible ✕ is now the kebab (⋯) menu trigger.
+  // The header-overlap invariant applies to the trigger, since the
+  // Remove item is only revealed once the menu popover opens.
+  const menuTrigger = page
+    .locator("[data-testid^='widget-menu-trigger-']")
+    .first();
+  await expect(menuTrigger).toBeVisible();
+  const triggerBox = await menuTrigger.boundingBox();
   const headerBox = await page
     .locator("[data-testid^='widget-drag-handle-']")
     .first()
     .boundingBox();
-  expect(removeBox).not.toBeNull();
+  expect(triggerBox).not.toBeNull();
   expect(headerBox).not.toBeNull();
-  if (removeBox && headerBox) {
-    // Remove button is inside the header strip.
-    expect(removeBox.x + removeBox.width).toBeLessThanOrEqual(
+  if (triggerBox && headerBox) {
+    // Kebab trigger is inside the header strip.
+    expect(triggerBox.x + triggerBox.width).toBeLessThanOrEqual(
       headerBox.x + headerBox.width + 1,
     );
-    expect(removeBox.y).toBeGreaterThanOrEqual(headerBox.y - 1);
+    expect(triggerBox.y).toBeGreaterThanOrEqual(headerBox.y - 1);
   }
 });
 

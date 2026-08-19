@@ -59,8 +59,15 @@ test("widget chrome carries a drag handle + remove button on /custom", async ({
   await page.getByTestId("navbar-widget-button").click();
   await page.getByTestId("navbar-widget-option-docs-help").click();
   const handle = page.locator("[data-testid^='widget-drag-handle-']").first();
-  const remove = page.locator("[data-testid^='widget-remove-']").first();
+  const menuTrigger = page
+    .locator("[data-testid^='widget-menu-trigger-']")
+    .first();
   await expect(handle).toBeVisible();
+  // Kebab menu (⋯) replaces the always-visible ✕. The Remove item
+  // lives inside the popover, revealed once the trigger is clicked.
+  await expect(menuTrigger).toBeVisible();
+  await menuTrigger.click();
+  const remove = page.locator("[data-testid^='widget-remove-']").first();
   await expect(remove).toBeVisible();
 });
 
