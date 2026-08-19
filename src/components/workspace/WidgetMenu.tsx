@@ -73,7 +73,7 @@ export function WidgetMenu({ instance, def, onRemove }: WidgetMenuProps) {
         aria-label="Widget menu"
         className="shrink-0 rounded border border-transparent bg-zinc-950/70 px-1 text-[12px] leading-none text-zinc-500 hover:border-zinc-700 hover:text-emerald-200"
       >
-        ⋯
+        ⋮
       </button>
       {open ? (
         <div
