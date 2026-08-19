@@ -48,7 +48,7 @@ export function WidgetFrame({
       aria-label={def.title}
       title={def.title}
       onPointerDown={handleSectionPointerDown}
-      className="relative flex h-full w-full cursor-move flex-col rounded border border-zinc-900 bg-zinc-950 select-none"
+      className="group relative flex h-full w-full cursor-move flex-col rounded border border-zinc-900 bg-zinc-950 select-none"
     >
       {/* Full-section drag handle. pointer-events-none so events fall
           through to <section>; tests still locate it by testid. */}
@@ -99,7 +99,13 @@ export function WidgetFrame({
         // Larger hit area (16px instead of 12px) and inset 2px from
         // the corner so the handle is always grabbable even if the
         // browser's scrollbar gutter ever sneaks pixels back.
-        className="absolute bottom-0.5 right-0.5 h-4 w-4 cursor-se-resize border-r border-b border-emerald-500/40 hover:border-emerald-300"
+        //
+        // Only visible when the cursor hovers this widget (via the
+        // `group` class on the parent <section>). The handle stays
+        // functional and remains in the DOM regardless — Playwright's
+        // `toBeVisible()` treats `opacity: 0` elements as visible,
+        // and the pointer-events + resize gesture logic is unchanged.
+        className="absolute bottom-0.5 right-0.5 h-4 w-4 cursor-se-resize border-r border-b border-emerald-500/40 opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-emerald-300"
       />
     </section>
   );
