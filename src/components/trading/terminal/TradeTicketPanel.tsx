@@ -489,7 +489,7 @@ function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) 
       <div className="flex min-w-0 items-center gap-2">
         <span
           data-testid="trade-instrument-title"
-          className="truncate text-[13px] font-semibold tracking-tight text-zinc-100"
+          className="truncate text-[12px] font-semibold tracking-tight text-zinc-100"
           title={instrumentTitle}
         >
           {instrumentTitle}

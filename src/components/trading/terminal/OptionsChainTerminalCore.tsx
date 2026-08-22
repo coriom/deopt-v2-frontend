@@ -167,7 +167,11 @@ export function OptionsChainTerminalCore() {
     <div data-testid="options-chain-core" className="flex flex-col gap-2">
       <header
         data-testid="terminal-header"
-        className="flex flex-wrap items-center gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-[11px]"
+        // Fixed h-10 to match the Trade widget's header height so the
+        // bottom borders of both widgets sit on the exact same
+        // Y-coordinate — the top horizontal traits align across the
+        // options chain + trade columns.
+        className="flex h-10 shrink-0 flex-wrap items-center gap-3 rounded border border-zinc-800 bg-zinc-950 px-3 text-[11px]"
       >
         <NativeSelect
           aria-label="Underlying"
