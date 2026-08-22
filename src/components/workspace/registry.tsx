@@ -218,22 +218,24 @@ export function defaultWidgetsFor(workspaceId: WorkspaceId): DefaultPlacement[] 
       // avoiding the overlap the split layout produced when the
       // ticket needed more vertical room than 58% of the canvas.
       //
-      //   ┌───────────────────────┬──────────────┐
-      //   │  OPTIONS CHAIN        │  TRADE       │
-      //   │  72% × 72%            │  TICKET      │
-      //   │                       │  (Payoff /   │
-      //   │                       │   Greeks /   │
-      //   ├───────────────────────│   Trades /   │
-      //   │  BOTTOM DOCK          │   Book tabs) │
-      //   │  72% × 28%            │  28% × 100%  │
-      //   └───────────────────────┴──────────────┘
+      //   ┌────────────────────────┬────────────┐
+      //   │  OPTIONS CHAIN         │  TRADE     │
+      //   │  75% × 72%             │  TICKET    │
+      //   │                        │  (Payoff / │
+      //   │                        │   Greeks / │
+      //   ├────────────────────────│   Trades / │
+      //   │  BOTTOM DOCK           │   Book)    │
+      //   │  75% × 28%             │ 25% × 100% │
+      //   └────────────────────────┴────────────┘
       //
+      // Trade column trimmed from 28% → 25% (2025-11 pass) so the
+      // chain grid + bottom dock get a touch more horizontal room.
       // Existing users keep their saved layout — only first-time
       // visitors and explicit resets land on this seed.
       return [
-        { type: "options-chain", xPct: 0,    yPct: 0,     wPct: 0.72, hPct: 0.72 },
-        { type: "bottom-dock",   xPct: 0,    yPct: 0.72,  wPct: 0.72, hPct: 0.28 },
-        { type: "trade",         xPct: 0.72, yPct: 0,     wPct: 0.28, hPct: 1.0  },
+        { type: "options-chain", xPct: 0,    yPct: 0,     wPct: 0.75, hPct: 0.72 },
+        { type: "bottom-dock",   xPct: 0,    yPct: 0.72,  wPct: 0.75, hPct: 0.28 },
+        { type: "trade",         xPct: 0.75, yPct: 0,     wPct: 0.25, hPct: 1.0  },
       ];
     case "perps":
       // 3-column layout. The combined Order Book / Perps Feed widget
