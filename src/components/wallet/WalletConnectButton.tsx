@@ -18,7 +18,7 @@ export function WalletConnectButton() {
         rel="noopener noreferrer"
         data-testid="wallet-connect-button"
         data-wallet-state="no-provider"
-        className="rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        className="cursor-pointer rounded border border-transparent px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:bg-zinc-800"
       >
         Install a wallet
       </a>
@@ -61,7 +61,7 @@ export function WalletConnectButton() {
       onClick={disconnect}
       data-testid="wallet-connect-button"
       data-wallet-state="connected"
-      className="flex items-center gap-2 rounded border border-zinc-300 px-3 py-1.5 text-xs font-mono font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      className="flex cursor-pointer items-center gap-2 rounded border border-transparent px-3 py-1.5 text-xs font-mono font-medium text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:bg-zinc-800"
       title="Click to disconnect"
     >
       <span className="h-2 w-2 rounded-full bg-emerald-500" />
