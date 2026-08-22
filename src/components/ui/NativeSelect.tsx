@@ -38,10 +38,11 @@ const SELECT_CLASSES_BY_VARIANT: Record<NativeSelectVariant, string> = {
     // No border, transparent bg. Suited for use inline in a header.
     "appearance-none cursor-pointer rounded bg-transparent pl-0 pr-5 py-0.5 text-[12px] font-semibold uppercase tracking-wider text-zinc-100 transition-colors hover:text-emerald-300 focus:outline-none",
   halo:
-    // No visible border in the resting state; an emerald ring
-    // fades in on hover / focus (`ring` + `ring-emerald-500/40`
-    // reads as a soft halo rather than the harder `border` line).
-    "appearance-none cursor-pointer rounded bg-black/40 pl-2.5 pr-6 py-1 text-[11px] font-medium text-zinc-200 transition-shadow ring-1 ring-transparent hover:ring-emerald-500/40 hover:text-zinc-100 focus:ring-emerald-400/60 focus:outline-none",
+    // Fully chromeless in the resting state — no border, no
+    // background pill. A soft emerald ring fades in on hover /
+    // focus so the control still signals it's interactive without
+    // competing with the surrounding widget-frame chrome.
+    "appearance-none cursor-pointer rounded bg-transparent pl-2.5 pr-6 py-1 text-[11px] font-medium text-zinc-200 transition-shadow ring-1 ring-transparent hover:ring-emerald-500/40 hover:text-zinc-100 focus:ring-emerald-400/60 focus:outline-none",
 };
 
 const CARET_OFFSET_BY_VARIANT: Record<NativeSelectVariant, string> = {
