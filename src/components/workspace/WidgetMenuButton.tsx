@@ -47,7 +47,7 @@ export function WidgetMenuButton() {
         data-testid="navbar-widget-button"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="rounded border border-emerald-500/40 px-2 py-0.5 text-[12px] text-emerald-200 hover:bg-emerald-500/10"
+        className="rounded px-2 py-0.5 text-[12px] text-zinc-100 hover:text-white"
       >
         Widget
       </button>
