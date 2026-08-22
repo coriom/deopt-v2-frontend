@@ -25,7 +25,6 @@ import { underlyingDisplaySymbol } from "@/lib/underlying-symbols";
 import { scaled1e8ToHuman } from "@/lib/price-scaling";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { useChainColumnPrefs } from "@/hooks/useChainColumnPrefs";
-import { ChainColumnsMenu } from "./ChainColumnsMenu";
 import { ExpirySelector } from "./ExpirySelector";
 import { OptionsChainGrid } from "./OptionsChainGrid";
 
@@ -192,9 +191,11 @@ export function OptionsChainTerminalCore() {
           selected={expiryPick}
           onSelect={setExpiryPick}
         />
-        <div className="ml-auto">
-          <ChainColumnsMenu prefs={chainPrefs} />
-        </div>
+        {/* OPTIONS-CHAIN-WIDGET-MENU-V1 — the column-visibility
+            hamburger that used to live here (`ChainColumnsMenu`)
+            moved into the widget's kebab (⋮) menu, wired through
+            `WidgetDef.MenuActions` on the `options-chain` registry
+            entry. The grid still consumes `chainPrefs` directly. */}
       </header>
       <OptionsChainGrid
         rows={visibleRows}

@@ -27,6 +27,7 @@ import {
   TradeWidget,
   TradesWidget,
 } from "./widgets";
+import { OptionsChainMenuActions } from "@/components/trading/terminal/OptionsChainMenuActions";
 
 export interface WidgetMenuActionsProps {
   /** Close the widget's kebab menu. Call after an action commits so
@@ -66,6 +67,7 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     workspaces: OPTIONS_WS,
     defaultWPct: 0.7, defaultHPct: 0.7, minWPx: 360, minHPx: 240,
     implemented: true, Render: OptionsChainWidget,
+    MenuActions: OptionsChainMenuActions,
   },
   trade: {
     type: "trade", title: "Trade",
