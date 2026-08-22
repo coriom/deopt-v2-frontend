@@ -674,6 +674,22 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
                 if (isObstacle && overlapPreview && overlapPreview.valid) {
                   outline = "1px dashed rgb(16 185 129 / 0.55)";
                 }
+                // Border-seam merger: widgets are laid out with pixel-
+                // precise abutting rects (widget A right at x=w, widget
+                // B left at x=w). With `border-box` sizing each has a
+                // 1-px border sitting side-by-side — the classic
+                // "double line" seam. Extend each widget's right +
+                // bottom edge by 1 px when it is NOT already at the
+                // canvas edge, so the neighbouring border overlaps our
+                // border on the exact same pixel column / row. Two
+                // borders paint into the same pixel → visually a
+                // single crisp line. Widgets at the canvas edge stay
+                // at their real size so the workspace never overflows
+                // the parent scroll container.
+                const touchesRightEdge = rect.x + rect.w >= canvasSize.width;
+                const touchesBottomEdge = rect.y + rect.h >= canvasSize.height;
+                const seamW = touchesRightEdge ? rect.w : rect.w + 1;
+                const seamH = touchesBottomEdge ? rect.h : rect.h + 1;
                 return (
                   <div
                     key={w.id}
@@ -696,8 +712,8 @@ export function Workspace({ workspaceId, title, subtitle }: WorkspaceProps) {
                     style={{
                       left: `${rect.x}px`,
                       top: `${rect.y}px`,
-                      width: `${rect.w}px`,
-                      height: `${rect.h}px`,
+                      width: `${seamW}px`,
+                      height: `${seamH}px`,
                       zIndex: isDragging ? 30 : isObstacle ? 20 : 10,
                       willChange: isDragging
                         ? "left, top, width, height"
