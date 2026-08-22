@@ -478,7 +478,13 @@ function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) 
   return (
     <header
       data-testid="trade-header"
-      className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 px-2"
+      // The right padding (`pr-8`) reserves room for the widget
+      // frame's kebab (⋮) menu that sits at `top-1 right-1.5` on
+      // the section — without it the execution-mode select docked
+      // under / next to the kebab. `bordered` was replaced by
+      // `halo` on the select so the mode dropdown blends into the
+      // header instead of competing with the widget frame border.
+      className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 pl-2 pr-8"
     >
       <div className="flex min-w-0 items-center gap-2">
         <span
@@ -498,7 +504,7 @@ function TradeHeader({ instrumentTitle, mode, onModeChange }: TradeHeaderProps) 
           onChange={(e) =>
             onModeChange(e.target.value as RequestedExecutionMode)
           }
-          variant="bordered"
+          variant="halo"
         >
           <option value="auto" className="bg-zinc-950 text-zinc-100">
             Auto

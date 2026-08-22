@@ -10,15 +10,19 @@
 //
 // The visual treatment strips the browser chrome (`appearance-none`)
 // and paints a consistent zinc/emerald caret via inline SVG on the
-// right edge. Two variants match the two call sites currently in use:
+// right edge. Three variants match the current call sites:
 //
 //   - `bordered` — pill with a subtle border, hover in emerald.
 //   - `ghost`    — transparent, uppercase, used for the underlying
 //                   selector in the Options terminal banner.
+//   - `halo`     — no border, soft emerald ring on hover/focus
+//                   (subtle halo) — used inline in widget headers
+//                   where a hard border would compete with the widget
+//                   frame chrome and the kebab (⋮) menu.
 
 import { forwardRef, type SelectHTMLAttributes } from "react";
 
-export type NativeSelectVariant = "bordered" | "ghost";
+export type NativeSelectVariant = "bordered" | "ghost" | "halo";
 
 interface Props extends SelectHTMLAttributes<HTMLSelectElement> {
   variant?: NativeSelectVariant;
@@ -33,11 +37,17 @@ const SELECT_CLASSES_BY_VARIANT: Record<NativeSelectVariant, string> = {
   ghost:
     // No border, transparent bg. Suited for use inline in a header.
     "appearance-none cursor-pointer rounded bg-transparent pl-0 pr-5 py-0.5 text-[12px] font-semibold uppercase tracking-wider text-zinc-100 transition-colors hover:text-emerald-300 focus:outline-none",
+  halo:
+    // No visible border in the resting state; an emerald ring
+    // fades in on hover / focus (`ring` + `ring-emerald-500/40`
+    // reads as a soft halo rather than the harder `border` line).
+    "appearance-none cursor-pointer rounded bg-black/40 pl-2.5 pr-6 py-1 text-[11px] font-medium text-zinc-200 transition-shadow ring-1 ring-transparent hover:ring-emerald-500/40 hover:text-zinc-100 focus:ring-emerald-400/60 focus:outline-none",
 };
 
 const CARET_OFFSET_BY_VARIANT: Record<NativeSelectVariant, string> = {
   bordered: "right-2",
   ghost: "right-0",
+  halo: "right-2",
 };
 
 export const NativeSelect = forwardRef<HTMLSelectElement, Props>(
