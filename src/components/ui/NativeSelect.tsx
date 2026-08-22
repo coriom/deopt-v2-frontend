@@ -39,10 +39,12 @@ const SELECT_CLASSES_BY_VARIANT: Record<NativeSelectVariant, string> = {
     "appearance-none cursor-pointer rounded bg-transparent pl-0 pr-5 py-0.5 text-[12px] font-semibold uppercase tracking-wider text-zinc-100 transition-colors hover:text-emerald-300 focus:outline-none",
   halo:
     // Fully chromeless in the resting state — no border, no
-    // background pill. A soft emerald ring fades in on hover /
-    // focus so the control still signals it's interactive without
-    // competing with the surrounding widget-frame chrome.
-    "appearance-none cursor-pointer rounded bg-transparent pl-2.5 pr-6 py-1 text-[11px] font-medium text-zinc-200 transition-shadow ring-1 ring-transparent hover:ring-emerald-500/40 hover:text-zinc-100 focus:ring-emerald-400/60 focus:outline-none",
+    // background pill. A soft emerald ring fades in on hover and on
+    // KEYBOARD focus only (`focus-visible`), so the halo cleanly
+    // disappears when the user clicks the select and then clicks
+    // anywhere else — a mouse-click focus does not leave a
+    // persistent outline.
+    "appearance-none cursor-pointer rounded bg-transparent pl-2.5 pr-6 py-1 text-[11px] font-medium text-zinc-200 transition-shadow ring-1 ring-transparent hover:ring-emerald-500/40 hover:text-zinc-100 focus:outline-none focus-visible:ring-emerald-400/60",
 };
 
 const CARET_OFFSET_BY_VARIANT: Record<NativeSelectVariant, string> = {
