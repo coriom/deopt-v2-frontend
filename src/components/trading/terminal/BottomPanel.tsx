@@ -48,7 +48,10 @@ export function BottomPanel() {
     <section
       data-testid="bottom-panel"
       aria-label="Account"
-      className="flex flex-col gap-2 rounded border border-zinc-800 bg-zinc-950 p-2"
+      // Border removed — the widget frame's border already draws
+      // the outer edge; adding a second one here rendered a
+      // visible double-line seam right inside the widget.
+      className="flex flex-col gap-2 rounded bg-zinc-950 p-2"
     >
       <nav
         role="tablist"

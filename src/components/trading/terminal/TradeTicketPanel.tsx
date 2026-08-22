@@ -112,7 +112,10 @@ export function TradeTicketPanel() {
       data-resolved-mode={resolved.kind}
       data-leg-count={legs.length}
       data-trade-side={side}
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded border border-zinc-800 bg-black/60 text-zinc-200"
+      // Border removed — the widget frame's border already draws
+      // the outer edge; adding a second one here rendered a
+      // visible double-line seam right inside the widget.
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded bg-black/60 text-zinc-200"
     >
       <TradeHeader
         instrumentTitle={primaryTitle}
