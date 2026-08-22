@@ -38,6 +38,7 @@ const TERMINAL_ROUTES = [
   "/api",
   "/fees",
   "/fundings",
+  "/settings",
 ];
 
 function isTerminalRoute(pathname: string | null): boolean {
