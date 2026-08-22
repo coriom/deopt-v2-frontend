@@ -259,25 +259,34 @@ test.describe("OPTIONS-TRADE-WIDGET-TP-SL-UX-V1 — Attached TP/SL simplified in
     });
   });
 
-  test("missing Take Profit price surfaces human-readable validation copy", async ({
+  test("empty Take Profit stays quiet; invalid input surfaces human-readable copy", async ({
     page,
   }) => {
     await installMockWallet(page);
     await page.goto("/options");
     await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
     const err = page.getByTestId("direct-orderbook-attach-tp-error");
-    await expect(err).toContainText(/Take Profit price is required/);
+    // Empty field → no message rendered. Submit is still blocked by
+    // validation.ok internally; we don't shout "required" at a user
+    // who just toggled the checkbox.
+    await expect(err).toHaveCount(0);
+    // Typing an invalid value surfaces the friendly copy, never the
+    // wire-scale ("1e8") vocabulary.
+    await page.getByTestId("direct-orderbook-attach-tp-price").fill("abc");
+    await expect(err).toContainText(/valid price/);
     await expect(err).not.toContainText(/1e8/i);
   });
 
-  test("missing Stop Loss price surfaces human-readable validation copy", async ({
+  test("empty Stop Loss stays quiet; invalid input surfaces human-readable copy", async ({
     page,
   }) => {
     await installMockWallet(page);
     await page.goto("/options");
     await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
     const err = page.getByTestId("direct-orderbook-attach-sl-error");
-    await expect(err).toContainText(/Stop Loss price is required/);
+    await expect(err).toHaveCount(0);
+    await page.getByTestId("direct-orderbook-attach-sl-price").fill("abc");
+    await expect(err).toContainText(/valid price/);
     await expect(err).not.toContainText(/1e8/i);
   });
 

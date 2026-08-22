@@ -391,10 +391,16 @@ export function DirectOrderbookForm({
                   placeholder="$15.00"
                   className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
                 />
-                {validation.tpError ? (
+                {/* Show the message only once the user has typed
+                    something. An empty field just needs a value, not
+                    a warning — this softens the ticket while still
+                    blocking submit via `validation.ok`. Colour is
+                    plain white / zinc so it reads as a helper prompt,
+                    not a hard error. */}
+                {validation.tpError && tpPriceHuman.trim().length > 0 ? (
                   <span
                     data-testid="direct-orderbook-attach-tp-error"
-                    className="block text-[10px] text-red-300"
+                    className="block text-[10px] text-zinc-100"
                   >
                     {validation.tpError}
                   </span>
@@ -414,10 +420,10 @@ export function DirectOrderbookForm({
                   placeholder="$5.00"
                   className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-red-500/60 focus:outline-none"
                 />
-                {validation.slError ? (
+                {validation.slError && slPriceHuman.trim().length > 0 ? (
                   <span
                     data-testid="direct-orderbook-attach-sl-error"
-                    className="block text-[10px] text-red-300"
+                    className="block text-[10px] text-zinc-100"
                   >
                     {validation.slError}
                   </span>
