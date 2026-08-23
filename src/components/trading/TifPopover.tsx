@@ -9,6 +9,7 @@
 // user interacts with the menu's empty space.
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type Tif = "GTC" | "IOC" | "FOK";
 
@@ -157,6 +158,22 @@ export interface PostCheckboxProps {
 
 /** Compact "Post" (post-only) checkbox matching the Derive trade-ticket style. */
 export function PostCheckbox({ checked, onChange, testid = "trade-post" }: PostCheckboxProps) {
+  const textRef = useRef<HTMLSpanElement>(null);
+  // Portal-based tooltip: rendered directly under <body> so it always
+  // paints above every widget (each widget frame owns its stacking
+  // context, and their body divs use `overflow-auto` which would
+  // otherwise clip any absolute tooltip inside them). Tooltip state
+  // is only ever set from a pointer handler — SSR always sees `null`,
+  // so `document.body` is only accessed on the client.
+  const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
+
+  const showTooltip = () => {
+    if (!textRef.current) return;
+    const rect = textRef.current.getBoundingClientRect();
+    setTooltip({ x: rect.left + rect.width / 2, y: rect.top });
+  };
+  const hideTooltip = () => setTooltip(null);
+
   return (
     <label
       data-no-drag
@@ -169,7 +186,31 @@ export function PostCheckbox({ checked, onChange, testid = "trade-post" }: PostC
         data-testid={`${testid}-checkbox`}
         className="h-3 w-3 cursor-pointer accent-emerald-500"
       />
-      Post
+      <span
+        ref={textRef}
+        onPointerEnter={showTooltip}
+        onPointerLeave={hideTooltip}
+      >
+        Post
+      </span>
+      {tooltip
+        ? createPortal(
+            <span
+              data-testid={`${testid}-tooltip`}
+              role="tooltip"
+              style={{
+                position: "fixed",
+                left: tooltip.x,
+                top: tooltip.y - 4,
+                transform: "translate(-50%, -100%)",
+              }}
+              className="pointer-events-none z-[9999] whitespace-nowrap rounded border border-zinc-700/70 bg-zinc-950/70 px-2 py-1 text-[10px] font-medium text-zinc-100 shadow-lg backdrop-blur-sm"
+            >
+              Always performed as a maker
+            </span>,
+            document.body,
+          )
+        : null}
     </label>
   );
 }
