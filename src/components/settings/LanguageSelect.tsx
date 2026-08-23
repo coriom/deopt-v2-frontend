@@ -3,15 +3,12 @@
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { SUPPORTED_LOCALES } from "@/lib/language";
 import { useLanguage } from "@/lib/language-context";
+import { SettingRow } from "./SettingRow";
 
 export function LanguageSelect() {
   const { language, setLanguage } = useLanguage();
   return (
-    <label
-      data-testid="settings-language-field"
-      className="flex items-center gap-3 text-[13px] text-zinc-300"
-    >
-      <span className="min-w-24 text-zinc-400">Language</span>
+    <SettingRow testid="settings-language-field" label="Language">
       <NativeSelect
         data-testid="settings-language-select"
         aria-label="Language"
@@ -25,6 +22,6 @@ export function LanguageSelect() {
           </option>
         ))}
       </NativeSelect>
-    </label>
+    </SettingRow>
   );
 }

@@ -5,15 +5,12 @@ import {
   MIN_BRIGHTNESS_PCT,
 } from "@/lib/brightness";
 import { useBrightness } from "@/lib/brightness-context";
+import { SettingRow } from "./SettingRow";
 
 export function BrightnessSlider() {
   const { pct, setBrightness } = useBrightness();
   return (
-    <label
-      data-testid="settings-brightness-field"
-      className="flex items-center gap-3 text-[13px] text-zinc-300"
-    >
-      <span className="min-w-24 text-zinc-400">Brightness</span>
+    <SettingRow testid="settings-brightness-field" label="Brightness">
       <input
         data-testid="settings-brightness-slider"
         type="range"
@@ -34,6 +31,6 @@ export function BrightnessSlider() {
       >
         {pct}%
       </span>
-    </label>
+    </SettingRow>
   );
 }
