@@ -5,6 +5,13 @@ import type { WidgetInstance } from "@/lib/workspace-types";
 import type { WidgetDef } from "./registry";
 import { WidgetMenu } from "./WidgetMenu";
 
+/** Height of the top "header strip" that acts as the drag handle.
+ *  Only pointer-downs inside this vertical band initiate a widget
+ *  drag — clicks in the body region below never start a move gesture,
+ *  even if they land on empty space. Matches the natural top row where
+ *  every widget already renders its title / controls / kebab. */
+const DRAG_HEADER_PX = 32;
+
 interface WidgetFrameProps {
   instance: WidgetInstance;
   def: WidgetDef;
@@ -26,11 +33,19 @@ export function WidgetFrame({
   onResizeStart,
 }: WidgetFrameProps) {
   const Render = def.Render;
-  // The whole widget acts as a drag handle, but interactive descendants
-  // (buttons, inputs, tabs, links) should NOT start a drag — otherwise
-  // beginDrag's preventDefault() would swallow their click. We gate the
-  // drag start on the event target so internal controls keep working.
+  // A drag only starts when:
+  //   1. The pointer lands inside the top header strip (Y ≤ DRAG_HEADER_PX
+  //      from the section's top edge) — everything below is a no-drag zone,
+  //      so users cannot inadvertently move a widget by clicking empty body
+  //      space.
+  //   2. The event target is not an interactive control — otherwise
+  //      beginDrag's preventDefault() would swallow clicks on buttons,
+  //      dropdowns, tabs, etc. that widgets render in their header.
   const handleSectionPointerDown = (e: ReactPointerEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const localY = e.clientY - rect.top;
+    if (localY > DRAG_HEADER_PX) return;
+
     const target = e.target as HTMLElement | null;
     if (
       target?.closest(
@@ -41,6 +56,18 @@ export function WidgetFrame({
     }
     onDragStart(e);
   };
+  // Cursor affordance: hovering the top header strip swaps the section
+  // cursor to `grab` (hand), so users see the drag zone without any
+  // visual chrome. We mutate the style imperatively — a React state
+  // toggle on every pointermove would trigger unnecessary re-renders
+  // of the whole widget subtree. Interactive descendants (buttons,
+  // dropdowns, kebab, resize handle) keep their own cursor because
+  // they are the actual pointerover target inside their bounds.
+  const handleSectionPointerMove = (e: ReactPointerEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const inHeader = e.clientY - rect.top <= DRAG_HEADER_PX;
+    e.currentTarget.style.cursor = inHeader ? "grab" : "";
+  };
   return (
     <section
       data-testid={`widget-${instance.type}`}
@@ -49,14 +76,20 @@ export function WidgetFrame({
       aria-label={def.title}
       title={def.title}
       onPointerDown={handleSectionPointerDown}
-      className="group relative flex h-full w-full cursor-move flex-col rounded border border-zinc-900 bg-zinc-950 select-none"
+      onPointerMove={handleSectionPointerMove}
+      className="group relative flex h-full w-full flex-col rounded border border-zinc-900 bg-zinc-950 select-none"
     >
-      {/* Full-section drag handle. pointer-events-none so events fall
-          through to <section>; tests still locate it by testid. */}
+      {/* Header strip = drag handle. pointer-events-none so widget-
+          owned controls at the top of the body (title pills, symbol
+          dropdown, tabs, kebab, ...) keep working — the strip only
+          provides the `cursor: move` affordance over any empty space
+          in that band. Its height matches DRAG_HEADER_PX above so the
+          visual affordance and the drag hit-test stay in sync. */}
       <span
         data-testid={`widget-drag-handle-${instance.id}`}
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0"
+        style={{ height: DRAG_HEADER_PX }}
+        className="pointer-events-none absolute top-0 right-0 left-0 z-0 cursor-move"
       />
       <div
         data-testid={`widget-body-${instance.type}`}
