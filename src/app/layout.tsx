@@ -43,6 +43,19 @@ export default function RootLayout({
       className={`${sans.variable} ${nav.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Apply the user's saved brightness preference synchronously
+            before first paint to avoid a flash of default brightness.
+            The formula is duplicated from
+            `brightnessPctToFilter()` in src/lib/brightness.ts — keep
+            in sync if the mapping ever changes. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var v=parseInt(localStorage.getItem('deopt:brightness'),10);if(!isFinite(v))v=50;if(v<0)v=0;if(v>100)v=100;document.documentElement.style.filter='brightness('+(0.5+v/100).toFixed(3)+')';}catch(e){}})();",
+          }}
+        />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );

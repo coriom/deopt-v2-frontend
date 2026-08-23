@@ -1,3 +1,4 @@
+import { BrightnessSlider } from "@/components/settings/BrightnessSlider";
 import { LanguageSelect } from "@/components/settings/LanguageSelect";
 
 export const metadata = {
@@ -16,6 +17,7 @@ export default function SettingsPage() {
           className="flex flex-col gap-3"
         >
           <LanguageSelect />
+          <BrightnessSlider />
         </section>
       </div>
 
