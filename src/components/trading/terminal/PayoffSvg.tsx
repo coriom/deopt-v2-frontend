@@ -79,11 +79,6 @@ export function PayoffSvg({ isCall, isBuy, strikeLabel }: PayoffSvgProps) {
           − loss
         </text>
       </svg>
-      <p className="mt-2 text-[10px] text-zinc-500">
-        Schematic only — no live underlying price scale. Real PnL depends on
-        the broadcast oracle reading at settlement and the testnet mUSDC
-        collateral path. Testnet only; no real funds.
-      </p>
     </div>
   );
 }
