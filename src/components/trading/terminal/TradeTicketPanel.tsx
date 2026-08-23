@@ -33,6 +33,7 @@ import {
   useSelectedOption,
 } from "@/lib/workspace-selected-option";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
+import { TradeBookLadder } from "./TradeBookLadder";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
 import { NativeSelect } from "@/components/ui/NativeSelect";
@@ -440,15 +441,15 @@ function TradeTabBody({
     );
   }
   // book
+  const bookTitle =
+    leg && row
+      ? `${row.strikeLabel} ${leg.isCall ? "Call" : "Put"}`
+      : undefined;
   return (
-    <div
-      data-testid="trade-tab-book-body"
-      className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-500"
-    >
-      {leg && row
-        ? `Orderbook for ${row.strikeLabel} ${leg.isCall ? "Call" : "Put"} — coming soon.`
-        : "Pick an instrument to preview its book."}
-    </div>
+    <TradeBookLadder
+      seriesId={leg?.seriesId ?? null}
+      instrumentTitle={bookTitle}
+    />
   );
 }
 
