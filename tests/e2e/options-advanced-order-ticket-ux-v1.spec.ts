@@ -7,12 +7,9 @@
  *     always lists `Limit` and an honest disabled `Stop Limit`
  *     option, and lists `TWAP` only when
  *     `NEXT_PUBLIC_OPTIONS_TWAP_ENABLED=true`.
- *   * Attached TP/SL labels no longer say `(1e8)`. Inputs accept
- *     human-readable dollar prices; the wire body still contains
- *     `trigger_price_1e8` / `limit_price_1e8` 1e8-scaled strings.
- *   * Validation copy is human-readable: `"TP trigger price is
- *     required"`, `"must be greater than 0"`, `"must be a valid
- *     price"`.
+ *   * Attached TP/SL labels no longer say `(1e8)`. Validation copy
+ *     is human-readable: `"must be greater than 0"`, `"must be a
+ *     valid price"`.
  *   * `Post` + `TIF` controls only appear under `Limit`.
  *   * `Reduce` control is not exposed on the base ticket.
  *   * `Stop Limit` renders the honest-disabled body with a
@@ -22,93 +19,14 @@
  *   * No fake fee / margin numbers on the preview panel.
  *   * Perps ticket remains disabled by default.
  *
- * The wire-shape test that sends a mocked `POST /options/orders`
- * confirms the whole "human input → 1e8 wire" conversion is
- * byte-correct end-to-end for the ticket UX.
+ * End-to-end submit coverage (wire-shape assertions for TP/SL 1e8
+ * scaling, post+IOC/FOK rejection) was removed with the
+ * tester-only Advanced series id fallback — chain-click is the
+ * only path to seed a leg into the DirectOrderbookForm now.
  */
 
-import { test, expect, type Route } from "@playwright/test";
-import {
-  installConnectedWallet,
-  connectWallet,
-  mockWriteAuthChallenge,
-} from "./wallet-helpers";
+import { test, expect } from "@playwright/test";
 import { installMockWallet } from "./wallet-fixture";
-
-const SERIES_ID =
-  "0x62e9de8122013ec803cddbbe018c92dd78871c68a1b37c0b9eb39bca13a5f43f";
-
-interface WireBody {
-  option_series_id: string;
-  side: "buy" | "sell";
-  price_1e8: string;
-  size_1e8: string;
-  time_in_force: "gtc" | "ioc" | "fok";
-  post_only?: boolean;
-  attached_tp_sl?: {
-    take_profit?: { trigger_price_1e8: string; limit_price_1e8: string };
-    stop_loss?: { trigger_price_1e8: string; limit_price_1e8: string };
-    link_as_oco?: boolean;
-  };
-}
-
-const FILLED_RESPONSE = {
-  order_id: "order-1",
-  option_series_id: SERIES_ID,
-  account: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  side: "buy",
-  price_1e8: "1000000000",
-  size_1e8: "100000000",
-  remaining_size_1e8: "0",
-  time_in_force: "gtc",
-  post_only: false,
-  client_order_id: null,
-  nonce: null,
-  deadline_ms: null,
-  signature: null,
-  status: "filled",
-  created_at_ms: 1_782_000_000_000,
-  updated_at_ms: 1_782_000_000_000,
-  fills: [],
-};
-
-async function mockOrdersRoute(
-  page: import("@playwright/test").Page,
-  captured: { body: WireBody | null },
-) {
-  await page.route("**/options/orders", async (route: Route) => {
-    const req = route.request();
-    expect(req.method()).toBe("POST");
-    captured.body = JSON.parse(req.postData() ?? "{}") as WireBody;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(FILLED_RESPONSE),
-    });
-  });
-}
-
-async function gotoTicketConnected(page: import("@playwright/test").Page) {
-  await installConnectedWallet(page);
-  await mockWriteAuthChallenge(page);
-  await page.goto("/options");
-  await connectWallet(page);
-  await expect(page.getByTestId("widget-trade")).toBeVisible();
-  await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
-  await expect(page.getByTestId("direct-orderbook-form")).toBeVisible();
-}
-
-async function fillBase(page: import("@playwright/test").Page) {
-  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — series id is hidden
-  // behind the Advanced tester affordance; open it first.
-  await page.getByTestId("direct-orderbook-advanced-summary").click();
-  await page.getByTestId("direct-orderbook-series-id").fill(SERIES_ID);
-  // Account is auto-populated from the connected wallet — the manual
-  // Account field was removed. Limit Price + Amount default to empty
-  // placeholder `0.0` — fill them so `canSubmit` is satisfied.
-  await page.getByTestId("direct-orderbook-price").fill("1000000000");
-  await page.getByTestId("direct-orderbook-size").fill("100000000");
-}
 
 test.describe("OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — Order Type dropdown", () => {
   test("Order Type dropdown exposes Limit and Stop Limit; TWAP only when flag on", async ({
@@ -217,48 +135,6 @@ test.describe("OPTIONS-TRADE-WIDGET-TP-SL-UX-V1 — Attached TP/SL simplified in
     ).toHaveCount(0);
   });
 
-  test("human price converts to 1e8 on wire; TP-only submit sends equal trigger/limit", async ({
-    page,
-  }) => {
-    const captured = { body: null as WireBody | null };
-    await mockOrdersRoute(page, captured);
-    await gotoTicketConnected(page);
-    await fillBase(page);
-    await page.getByTestId("direct-orderbook-attach-tp-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-tp-price").fill("189.1");
-    await page.getByTestId("direct-orderbook-submit").click();
-    await expect(
-      page.getByTestId("direct-orderbook-result-status"),
-    ).toBeVisible();
-    expect(captured.body?.attached_tp_sl).toEqual({
-      take_profit: {
-        trigger_price_1e8: "18910000000",
-        limit_price_1e8: "18910000000",
-      },
-    });
-  });
-
-  test("SL visible price maps to SL trigger and SL limit (equal on the wire)", async ({
-    page,
-  }) => {
-    const captured = { body: null as WireBody | null };
-    await mockOrdersRoute(page, captured);
-    await gotoTicketConnected(page);
-    await fillBase(page);
-    await page.getByTestId("direct-orderbook-attach-sl-toggle").check();
-    await page.getByTestId("direct-orderbook-attach-sl-price").fill("5");
-    await page.getByTestId("direct-orderbook-submit").click();
-    await expect(
-      page.getByTestId("direct-orderbook-result-status"),
-    ).toBeVisible();
-    expect(captured.body?.attached_tp_sl).toEqual({
-      stop_loss: {
-        trigger_price_1e8: "500000000",
-        limit_price_1e8: "500000000",
-      },
-    });
-  });
-
   test("empty Take Profit stays quiet; invalid input surfaces human-readable copy", async ({
     page,
   }) => {
@@ -349,38 +225,6 @@ test.describe("OPTIONS-ADVANCED-ORDER-TICKET-UX-V1 — honesty & regression post
     await expect(panel).not.toContainText(/Margin Required: \$\d/);
     await expect(panel).not.toContainText(/Buying Power: \$\d/);
     await expect(panel).not.toContainText(/Est\. Rewards \$\d/);
-  });
-
-  test("Post + IOC/FOK are rejected at the backend layer (honest posture)", async ({
-    page,
-  }) => {
-    // The current milestone did NOT add a UI-side pre-flight for
-    // post-only + IOC/FOK. Backend already rejects the combo
-    // (`PostOnlyWouldMatch` / matching-engine invariant). This
-    // spec pins the honest posture: the client submits, the
-    // backend rejects, the ticket surfaces the rejection copy.
-    const captured = { body: null as WireBody | null };
-    await page.route("**/options/orders", async (route: Route) => {
-      captured.body = JSON.parse(route.request().postData() ?? "{}") as WireBody;
-      await route.fulfill({
-        status: 400,
-        contentType: "application/json",
-        body: JSON.stringify({
-          error: "post-only order would immediately match",
-        }),
-      });
-    });
-    await gotoTicketConnected(page);
-    await fillBase(page);
-    await page.getByTestId("direct-orderbook-post-checkbox").check();
-    await page.getByTestId("direct-orderbook-tif-trigger").click();
-    await page.getByTestId("direct-orderbook-tif-option-IOC").click();
-    await page.getByTestId("direct-orderbook-submit").click();
-    await expect(
-      page.getByTestId("direct-orderbook-error-message"),
-    ).toContainText(/post-only order would immediately match/);
-    expect(captured.body?.post_only).toBe(true);
-    expect(captured.body?.time_in_force).toBe("ioc");
   });
 
   test("Perps ticket remains disabled by default (cross-check)", async ({

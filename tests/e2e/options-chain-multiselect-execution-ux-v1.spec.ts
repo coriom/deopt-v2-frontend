@@ -179,33 +179,6 @@ test.describe("OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — execution selector"
     await expect(select.locator("option")).toHaveCount(3);
   });
 
-  test("with 0 legs + Auto, ticket exposes the Advanced fallback (collapsed by default)", async ({
-    page,
-  }) => {
-    await installMockWallet(page);
-    await page.goto("/options");
-    // The legs strip is absent (no chip list, no placeholder) and
-    // the picker hint text was retired for a cleaner ticket. Only
-    // the Advanced fallback for testers remains as the visible
-    // affordance while no leg is selected.
-    await expect(page.getByTestId("ticket-legs-list")).toHaveCount(0);
-    await expect(page.getByTestId("ticket-legs-empty")).toHaveCount(0);
-    await expect(page.getByTestId("ticket-picker-hint")).toHaveCount(0);
-    const advanced = page.getByTestId("direct-orderbook-advanced");
-    await expect(advanced).toBeVisible();
-    await expect(advanced).toHaveAttribute("data-open", "false");
-    await expect(page.getByTestId("direct-orderbook-series-id")).toHaveCount(0);
-  });
-
-  test("clicking the Advanced summary reveals the raw Series id (tester affordance)", async ({
-    page,
-  }) => {
-    await installMockWallet(page);
-    await page.goto("/options");
-    await page.getByTestId("direct-orderbook-advanced-summary").click();
-    await expect(page.getByTestId("direct-orderbook-series-id")).toBeVisible();
-  });
-
   test("with 0 legs + RFQ requested → honest rfq_disabled body (regardless of flag)", async ({
     page,
   }) => {

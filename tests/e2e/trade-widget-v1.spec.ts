@@ -57,12 +57,6 @@ test("Book (Auto) mode renders the shared DirectOrderbookForm with TIF + Post co
   await page.goto("/options");
   await expect(page.getByTestId("trade-body-orderbook")).toBeVisible();
   await expect(page.getByTestId("direct-orderbook-form")).toBeVisible();
-  // Required inputs for a real submission.
-  // OPTIONS-CHAIN-MULTISELECT-EXECUTION-UX-V1 — series id is now
-  // gated behind an Advanced tester affordance; opening it exposes
-  // the input which existing coverage still needs.
-  await page.getByTestId("direct-orderbook-advanced-summary").click();
-  await expect(page.getByTestId("direct-orderbook-series-id")).toBeVisible();
   // Account field was removed — it is auto-populated from the connected
   // wallet (`useWallet().address`). Regression pin.
   await expect(page.getByTestId("direct-orderbook-account")).toHaveCount(0);
