@@ -325,3 +325,108 @@ body {
 .chain-scroll-hover::-webkit-scrollbar {
   display: none; /* WebKit / Chromium / Edge / Safari */
 }
+
+/*
+ * Dark checkbox — used by the Trade widget (TP, SL, Post). The native
+ * `<input type="checkbox">` renders bright white on dark backgrounds;
+ * `accent-color` only tints the check, not the unchecked box. This
+ * class strips the native chrome (`appearance: none`) and paints a
+ * zinc-950 square with a subtle zinc-700 border when unchecked. When
+ * checked, `background-color` + `border-color` follow `currentColor`
+ * — set `text-emerald-500` for a green tick or `text-red-500` for a
+ * red tick without duplicating rules per accent.
+ */
+.deopt-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background-color: #09090b; /* zinc-950 */
+  border: 1px solid #3f3f46; /* zinc-700 */
+  border-radius: 2px;
+  transition:
+    background-color 100ms,
+    border-color 100ms;
+}
+.deopt-checkbox:hover {
+  border-color: #71717a; /* zinc-500 */
+}
+.deopt-checkbox:checked {
+  background-color: currentColor;
+  border-color: currentColor;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5 L5 9 L9.5 3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 80%;
+}
+.deopt-checkbox:focus-visible {
+  outline: 2px solid #10b981; /* emerald-500 */
+  outline-offset: 1px;
+}
+
+/*
+ * Dark range slider — used by the perps trade form's leverage
+ * control. The native `<input type="range">` renders its unfilled
+ * (right-of-thumb) track as a bright white/gray band on Chromium
+ * and Safari, which reads too loud on the dark widget chrome.
+ *
+ * Instead of shipping a full custom slider, we override the track
+ * with a `linear-gradient` background driven by the `--slider-pct`
+ * CSS variable (set inline by React from the current value). Fill
+ * colour stops at `--slider-pct` (emerald-800), then a dark
+ * zinc-900 track continues to 100 % with a subtle zinc-700 border
+ * so the "empty" region is still legible. Firefox has native
+ * `::-moz-range-progress` so we can keep the gradient trick
+ * WebKit-only there.
+ */
+.deopt-slider-dark {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.deopt-slider-dark:focus {
+  outline: none;
+}
+.deopt-slider-dark::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  border: 1px solid #3f3f46; /* zinc-700 */
+  background: linear-gradient(
+    to right,
+    #065f46 0%,
+    #065f46 var(--slider-pct, 0%),
+    #18181b var(--slider-pct, 0%),
+    #18181b 100%
+  );
+}
+.deopt-slider-dark::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  border: 1px solid #3f3f46;
+  background: #18181b; /* zinc-900 */
+}
+.deopt-slider-dark::-moz-range-progress {
+  height: 4px;
+  border-radius: 9999px;
+  background: #065f46; /* emerald-800 */
+}
+.deopt-slider-dark::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: #065f46; /* emerald-800 */
+  border: 1px solid #064e3b; /* emerald-900 rim */
+  margin-top: -5px; /* centre on the 4 px track */
+  cursor: pointer;
+}
+.deopt-slider-dark::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: #065f46;
+  border: 1px solid #064e3b;
+  cursor: pointer;
+}

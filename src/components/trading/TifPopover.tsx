@@ -184,7 +184,7 @@ export function PostCheckbox({ checked, onChange, testid = "trade-post" }: PostC
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         data-testid={`${testid}-checkbox`}
-        className="h-3 w-3 cursor-pointer accent-emerald-500"
+        className="deopt-checkbox h-3 w-3 text-emerald-500"
       />
       <span
         ref={textRef}

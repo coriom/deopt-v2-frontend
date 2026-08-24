@@ -355,7 +355,7 @@ export function DirectOrderbookForm({
                   checked={tpEnabled}
                   onChange={(e) => setTpEnabled(e.target.checked)}
                   data-testid="direct-orderbook-attach-tp-toggle"
-                  className="size-3.5 accent-emerald-500"
+                  className="deopt-checkbox size-3.5 text-emerald-500"
                 />
                 TP
               </label>
@@ -365,7 +365,7 @@ export function DirectOrderbookForm({
                   checked={slEnabled}
                   onChange={(e) => setSlEnabled(e.target.checked)}
                   data-testid="direct-orderbook-attach-sl-toggle"
-                  className="size-3.5 accent-red-500"
+                  className="deopt-checkbox size-3.5 text-red-500"
                 />
                 SL
               </label>
