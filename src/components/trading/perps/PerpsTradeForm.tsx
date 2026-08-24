@@ -18,6 +18,7 @@
 //
 // (PERPS-FRONTEND-TICKET-ENABLEMENT-V1)
 
+import type { CSSProperties } from "react";
 import { useState } from "react";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
 import { TifPopover, PostCheckbox, type Tif } from "../TifPopover";
@@ -34,6 +35,25 @@ import { buildAuthorization, canonicalV2 } from "@/lib/write-auth";
 type Side = "long" | "short";
 type Mode = "market" | "limit";
 
+/** Leverage bounds — must match the slider min/max and the backend's
+ *  `max_leverage` cap per market. Kept as constants so the slider and
+ *  the exact numeric input can never drift out of sync. Step is
+ *  fractional (0.1) so operators can dial in a decimal leverage like
+ *  1.5× or 3.7×; `computeIsolatedMargin1e8` handles decimals via a
+ *  1e8-scaled BigInt division. */
+const MIN_LEVERAGE = 1;
+const MAX_LEVERAGE = 10;
+const LEVERAGE_STEP = 0.1;
+
+function clampLeverage(n: number): number {
+  if (!Number.isFinite(n)) return MIN_LEVERAGE;
+  if (n < MIN_LEVERAGE) return MIN_LEVERAGE;
+  if (n > MAX_LEVERAGE) return MAX_LEVERAGE;
+  // Snap to one decimal so the slider + input never surface floating-
+  // point noise like 3.6000000000000005.
+  return Math.round(n * 10) / 10;
+}
+
 export function PerpsTradeFormWidget() {
   const { market } = usePerpsSymbol();
   const wallet = useWallet();
@@ -46,7 +66,18 @@ export function PerpsTradeFormWidget() {
   const [mode, setMode] = useState<Mode>("market");
   const [qty, setQty] = useState<string>("");
   const [limitPrice, setLimitPrice] = useState<string>("");
-  const [leverage, setLeverage] = useState<number>(1);
+  const [leverage, setLeverageState] = useState<number>(1);
+  // The number input holds a separate "draft" string so the field can
+  // be freely cleared, retyped, or left with a trailing "." during
+  // editing without the controlled `value={leverage}` snapping it
+  // back on every keystroke. `commitLeverage` keeps the numeric state
+  // and the draft in lockstep whenever the slider (or blur) writes.
+  const [leverageDraft, setLeverageDraft] = useState<string>("1");
+  const commitLeverage = (n: number) => {
+    const clamped = clampLeverage(n);
+    setLeverageState(clamped);
+    setLeverageDraft(String(clamped));
+  };
   const [slippagePct, setSlippagePct] = useState<string>("0.5");
   const [tif, setTif] = useState<Tif>("GTC");
   const [postOnly, setPostOnly] = useState(false);
@@ -249,18 +280,68 @@ export function PerpsTradeFormWidget() {
         </Field>
       )}
 
-      {/* Leverage slider */}
-      <Field label={`Leverage ${leverage}×`}>
-        <input
-          type="range"
-          min={1}
-          max={10}
-          step={1}
-          value={leverage}
-          onChange={(e) => setLeverage(Number(e.target.value))}
-          data-testid="widget-perps-trade-leverage"
-          className="w-full accent-emerald-500"
-        />
+      {/* Leverage — slider + exact numeric input (both write the
+          same state, values clamped to [MIN_LEVERAGE, MAX_LEVERAGE]
+          so the numeric input never exceeds the slider range). */}
+      <Field label="Leverage">
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={MIN_LEVERAGE}
+            max={MAX_LEVERAGE}
+            step={LEVERAGE_STEP}
+            value={leverage}
+            onChange={(e) => commitLeverage(Number(e.target.value))}
+            data-testid="widget-perps-trade-leverage"
+            // `--slider-pct` drives the gradient stop inside
+            // `.deopt-slider-dark::-webkit-slider-runnable-track`
+            // so the unfilled right portion stays a dark zinc-900
+            // strip with only a subtle border instead of the
+            // bright default track WebKit paints.
+            style={
+              {
+                "--slider-pct": `${((leverage - MIN_LEVERAGE) / (MAX_LEVERAGE - MIN_LEVERAGE)) * 100}%`,
+              } as CSSProperties
+            }
+            className="deopt-slider-dark min-w-0 flex-1"
+          />
+          <div className="flex items-center gap-0.5 rounded border border-zinc-800 bg-black/40 pl-1.5 pr-1 py-0.5 focus-within:border-emerald-500/60">
+            <input
+              type="number"
+              min={MIN_LEVERAGE}
+              max={MAX_LEVERAGE}
+              step={LEVERAGE_STEP}
+              value={leverageDraft}
+              onChange={(e) => {
+                const raw = e.target.value;
+                // Always echo the raw keystroke into the draft so the
+                // field can be cleared, retyped, or hold intermediate
+                // strings like "" or "5.". Only push the numeric
+                // state forward when the draft parses to a finite
+                // number — otherwise `leverage` stays at its last
+                // committed value.
+                setLeverageDraft(raw);
+                if (raw === "") return;
+                const n = Number(raw);
+                if (!Number.isFinite(n)) return;
+                setLeverageState(clampLeverage(n));
+              }}
+              onBlur={() => {
+                // On focus loss, snap the draft back to the committed
+                // leverage so trailing dots / empty strings / out-of-
+                // range noise never linger in the field.
+                setLeverageDraft(String(leverage));
+              }}
+              aria-label="Leverage value"
+              data-testid="widget-perps-trade-leverage-input"
+              className="w-10 bg-transparent text-right font-mono text-[12px] text-zinc-100 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              style={{ fontFamily: "var(--app-font-mono)" }}
+            />
+            <span className="font-mono text-[12px] text-zinc-500" style={{ fontFamily: "var(--app-font-mono)" }}>
+              ×
+            </span>
+          </div>
+        </div>
       </Field>
 
       {/* Post-only + Time-In-Force */}
@@ -392,10 +473,13 @@ export function PerpsTradeFormWidget() {
 }
 
 // Compute a naive isolated-margin figure in 1e8 units from the raw
-// size + price 1e8 strings and the integer leverage. The backend
-// re-validates against the market's `max_leverage` cap so a bad
-// number surfaces as a clear rejection there rather than silently
-// running. Uses BigInt to avoid drift on large positions.
+// size + price 1e8 strings and the (possibly fractional) leverage.
+// Leverage is scaled to 1e8 as a BigInt so decimals like 1.5× or
+// 3.7× divide precisely — a prior version floored the leverage to
+// an integer which silently under-utilised any fractional dial-in.
+// The backend re-validates against the market's `max_leverage` cap
+// so a bad number surfaces as a clear rejection there rather than
+// silently running.
 function computeIsolatedMargin1e8(
   size1e8: string,
   price1e8: string,
@@ -403,11 +487,14 @@ function computeIsolatedMargin1e8(
 ): string {
   const s = BigInt(size1e8);
   const p = BigInt(price1e8);
-  const lev = BigInt(Math.max(1, Math.floor(leverage)));
   const scale = BigInt(100_000_000);
-  // notional_1e8 = size * price / 1e8; margin = notional / leverage.
+  const lev1e8 = BigInt(
+    Math.round(Math.max(MIN_LEVERAGE, leverage) * 100_000_000),
+  );
+  // notional_1e8 = size * price / 1e8;
+  // margin_1e8   = notional_1e8 * 1e8 / lev_1e8.
   const notional = (s * p) / scale;
-  const margin = notional / lev;
+  const margin = (notional * scale) / lev1e8;
   return margin.toString();
 }
 
