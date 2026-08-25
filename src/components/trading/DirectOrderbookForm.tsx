@@ -341,7 +341,7 @@ export function DirectOrderbookForm({
 
           <section
             data-testid="direct-orderbook-attached-section"
-            className="flex flex-col gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-300"
+            className="flex flex-col gap-2 text-xs text-zinc-300"
           >
             <header className="flex items-center justify-between">
               <h3 className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">

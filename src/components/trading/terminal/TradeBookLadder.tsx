@@ -2,13 +2,14 @@
 
 // Live top-of-book ladder for the Trade widget's "Book" tab.
 //
-// Columns: Price · Size · Total. Asks are stacked descending above a
-// spread band; bids stacked descending below. The row closest to the
-// spread on each side is populated from `useOrderbook()` (returns
-// `orderbook_top` — best bid / best ask). Deeper levels show `—`
-// until the backend exposes a full ladder endpoint (honest testnet
-// posture: nothing fabricated). A soft depth bar behind each row
-// scales with the row's size vs. the visible max.
+// Columns: Price · Size · Total. Asks are stacked with the highest
+// price at the very top and the best ask (lowest of the asks) sitting
+// flush against the spread band. Bids are stacked with the best bid
+// (highest bid price) flush against the spread on top, descending
+// downwards. When there are fewer real levels than the visible slot
+// count, the missing rows render as blank space — no `—`
+// placeholders — so the ladder honestly shows what's there and
+// nothing more (testnet posture: never fabricate depth).
 
 import { useMemo } from "react";
 import { useOrderbook } from "@/hooks/trading";
@@ -21,7 +22,7 @@ interface TradeBookLadderProps {
 }
 
 /** Number of visible rows on each side of the spread. */
-const LEVELS_PER_SIDE = 4;
+const LEVELS_PER_SIDE = 6;
 
 interface Level {
   price: string;
@@ -29,12 +30,16 @@ interface Level {
   total: string;
   /** 0..1 depth ratio used to size the row's backdrop. */
   depth: number;
-  /** Whether this row carries live data or a placeholder. */
+  /** Whether this row carries live data. Blank rows render as
+   *  transparent placeholders that only preserve row height. */
   live: boolean;
 }
 
 function emptyLevel(): Level {
-  return { price: "—", size: "—", total: "—", depth: 0, live: false };
+  // Non-breaking spaces preserve each cell's line-height so the row's
+  // vertical footprint matches the live rows — otherwise empty spans
+  // collapse and the ladder rows become inconsistent heights.
+  return { price: " ", size: " ", total: " ", depth: 0, live: false };
 }
 
 export function TradeBookLadder({ seriesId, instrumentTitle }: TradeBookLadderProps) {
@@ -104,7 +109,7 @@ export function TradeBookLadder({ seriesId, instrumentTitle }: TradeBookLadderPr
     return (
       <div
         data-testid="trade-tab-book-body"
-        className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-500"
+        className="px-3 py-2 text-[11px] text-zinc-500"
       >
         Pick an instrument to preview its book.
       </div>
@@ -116,7 +121,7 @@ export function TradeBookLadder({ seriesId, instrumentTitle }: TradeBookLadderPr
     return (
       <div
         data-testid="trade-tab-book-body"
-        className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-zinc-500"
+        className="px-3 py-2 text-[11px] text-zinc-500"
       >
         Loading book{instrumentTitle ? ` for ${instrumentTitle}` : ""}…
       </div>
@@ -128,17 +133,20 @@ export function TradeBookLadder({ seriesId, instrumentTitle }: TradeBookLadderPr
     return (
       <div
         data-testid="trade-tab-book-body"
-        className="rounded border border-zinc-800 bg-black/40 p-3 text-[11px] text-red-300"
+        className="px-3 py-2 text-[11px] text-red-300"
       >
         Failed to load book.
       </div>
     );
   }
 
+  // Live ladder — no outer border / bg so the widget frame is the
+  // only visible edge; row-level `px-3` keeps horizontal breathing
+  // room from the widget chrome.
   return (
     <div
       data-testid="trade-tab-book-body"
-      className="overflow-hidden rounded border border-zinc-800 bg-black/40 font-mono text-[11px]"
+      className="font-mono text-[11px]"
       style={{ fontFamily: "var(--app-font-mono)" }}
     >
       <BookHeader />
@@ -194,7 +202,7 @@ function BookRow({
       role="row"
       data-testid={`trade-book-row-${side}-${idx}`}
       data-live={row.live ? "true" : "false"}
-      className="relative grid grid-cols-3 gap-3 px-3 py-0.5"
+      className="relative grid grid-cols-3 gap-3 px-3 py-[3px]"
     >
       <span
         aria-hidden
@@ -218,7 +226,7 @@ function SpreadBand({
   return (
     <div
       data-testid="trade-book-spread"
-      className="grid grid-cols-3 gap-3 border-y border-zinc-800 bg-zinc-900/60 px-3 py-1 text-[11px]"
+      className="grid grid-cols-3 gap-3 bg-zinc-900/60 px-3 py-1 text-[11px]"
       style={{ fontFamily: "var(--app-font-sans)" }}
     >
       <span className="text-left text-[10px] uppercase tracking-[0.12em] text-zinc-400">

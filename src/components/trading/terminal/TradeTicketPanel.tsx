@@ -353,7 +353,7 @@ function TradeTabsSection({ active, onChange, leg, row }: TradeTabsSectionProps)
   return (
     <section
       data-testid="trade-tabs-section"
-      className="flex flex-col border-t border-zinc-800"
+      className="flex flex-col"
     >
       <div
         role="tablist"
@@ -386,7 +386,14 @@ function TradeTabsSection({ active, onChange, leg, row }: TradeTabsSectionProps)
       <div
         role="tabpanel"
         data-testid={`trade-tab-body-${active}`}
-        className="border-t border-zinc-800 p-3"
+        // Book tab renders an edge-to-edge live orderbook that owns
+        // its own row paddings, so we drop the `p-3` gutter for it.
+        // Every other tab keeps the inner padding.
+        className={
+          active === "book"
+            ? "border-t border-zinc-800"
+            : "border-t border-zinc-800 p-3"
+        }
       >
         <TradeTabBody active={active} leg={leg} row={row} />
       </div>
