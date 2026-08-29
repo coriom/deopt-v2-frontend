@@ -150,7 +150,13 @@ export function PerpsStatsWidget() {
               key={c.id}
               data-testid={`widget-perps-stat-${c.id}`}
               data-perps-cell-state={stateTag}
-              className="flex min-w-0 shrink-0 flex-col justify-center gap-0 border-r border-zinc-900 px-3 py-0.5"
+              // `flex-1` + `basis-0` makes every cell take an equal
+              // share of the available width to the right of the
+              // symbol pill, so the bandeau spreads edge-to-edge
+              // instead of clustering the cells on the left with a
+              // blank tail. `overflow-x-auto` on the parent still
+              // acts as the safety net when the widget is squeezed.
+              className="flex min-w-0 flex-1 basis-0 flex-col justify-center gap-0 border-r border-zinc-900 px-3 py-0.5"
             >
               <span className="text-[9px] uppercase leading-tight tracking-[0.12em] text-zinc-500">
                 {c.label}
