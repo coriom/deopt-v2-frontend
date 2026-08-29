@@ -247,13 +247,13 @@ export function DirectOrderbookForm({
       onSubmit={handleSubmit}
       className="flex flex-col gap-3 text-zinc-100"
     >
-      <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 text-[11px] text-zinc-300">
+      <label className="grid grid-cols-[7rem_1fr] items-center gap-3 text-[11px] text-zinc-300">
         <span className="text-[11px] font-medium text-zinc-300">Order Type</span>
         <select
           data-testid="options-order-type-select"
           value={orderType}
           onChange={(e) => setOrderType(e.target.value as OrderType)}
-          className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
+          className="w-44 justify-self-end rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
         >
           <option value="limit">Limit</option>
           <option value="stop_limit" data-testid="options-order-type-option-stop-limit">
@@ -295,7 +295,7 @@ export function DirectOrderbookForm({
           data-testid="options-order-type-body-limit"
           className="flex flex-col gap-3"
         >
-          <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 text-[11px]">
+          <label className="grid grid-cols-[7rem_1fr] items-center gap-3 text-[11px]">
             <span className="text-[11px] font-medium text-zinc-300">
               Limit Price
             </span>
@@ -306,11 +306,11 @@ export function DirectOrderbookForm({
               onChange={(e) => setPrice1e8(e.target.value)}
               placeholder="0.0"
               data-testid="direct-orderbook-price"
-              className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-right font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/60 focus:outline-none"
+              className="w-44 justify-self-end rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-right font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/60 focus:outline-none"
             />
           </label>
 
-          <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 text-[11px]">
+          <label className="grid grid-cols-[7rem_1fr] items-center gap-3 text-[11px]">
             <span className="text-[11px] font-medium text-zinc-300">Amount</span>
             <input
               type="text"
@@ -319,7 +319,7 @@ export function DirectOrderbookForm({
               onChange={(e) => setSize1e8(e.target.value)}
               placeholder="0.0"
               data-testid="direct-orderbook-size"
-              className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-right font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/60 focus:outline-none"
+              className="w-44 justify-self-end rounded border border-zinc-800 bg-black/40 px-2 py-1.5 text-right font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500/60 focus:outline-none"
             />
           </label>
 
@@ -381,7 +381,7 @@ export function DirectOrderbookForm({
                   data-testid="direct-orderbook-attach-tp-price"
                   aria-invalid={validation.tpError !== null}
                   placeholder="$15.00"
-                  className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
+                  className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 font-mono text-xs focus:border-emerald-500/60 focus:outline-none"
                 />
                 {/* Show the message only once the user has typed
                     something. An empty field just needs a value, not
@@ -410,7 +410,7 @@ export function DirectOrderbookForm({
                   data-testid="direct-orderbook-attach-sl-price"
                   aria-invalid={validation.slError !== null}
                   placeholder="$5.00"
-                  className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs focus:border-red-500/60 focus:outline-none"
+                  className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 font-mono text-xs focus:border-red-500/60 focus:outline-none"
                 />
                 {validation.slError && slPriceHuman.trim().length > 0 ? (
                   <span
