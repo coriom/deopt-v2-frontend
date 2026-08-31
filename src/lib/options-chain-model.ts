@@ -251,6 +251,22 @@ export function distinctExpiries(
  * frozen Base-Sepolia address table, then a truncated `0xABCD…6789`,
  * then the raw value.
  */
+/** Frozen Base Sepolia address for the mock BTC collateral token, kept
+ *  in lockstep with the frontend `KNOWN_UNDERLYING_SYMBOLS` mapping in
+ *  `src/lib/underlying-symbols.ts`. Used to inject BTC into the
+ *  dropdown when the backend hasn't seeded any BTC products yet — the
+ *  moment it does, the seeded product hits the same key and takes
+ *  over the entry with real chain data. */
+const BTC_UNDERLYING_KEY = "0x9d871ac7595e8da271e866608e5145252047967c";
+
+/** Base list of underlyings that should always appear in the dropdown
+ *  even when the backend hasn't seeded them. Each entry has the same
+ *  `{ key, label }` shape a real product would produce so the
+ *  filter path (`p.underlying === key`) stays uniform. */
+const ALWAYS_ON_UNDERLYINGS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: BTC_UNDERLYING_KEY, label: "BTC" },
+];
+
 export function distinctUnderlyings(
   products: Product[],
 ): Array<{ key: string; label: string }> {
@@ -264,6 +280,14 @@ export function distinctUnderlyings(
       key,
       label: underlyingDisplaySymbol(p.underlying, p.underlying_symbol),
     });
+  }
+  // Append always-on entries the backend hasn't returned yet. Using
+  // the canonical addresses means that as soon as a BTC product is
+  // seeded the backend entry wins and this pass becomes a no-op.
+  for (const entry of ALWAYS_ON_UNDERLYINGS) {
+    if (seen.has(entry.key)) continue;
+    seen.add(entry.key);
+    out.push(entry);
   }
   return out;
 }
