@@ -81,8 +81,8 @@ test("Gaps are preserved — a widget placed at (xPct=0.4, yPct=0.4) is NOT pack
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
 
   await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
@@ -91,7 +91,7 @@ test("Gaps are preserved — a widget placed at (xPct=0.4, yPct=0.4) is NOT pack
     const layout = parsed.workspaces["custom-1"];
     if (!layout) return;
     for (const w of layout.widgets) {
-      if (w.type === "docs-help") {
+      if (w.type === "balances") {
         w.xPct = 0.4;
         w.yPct = 0.4;
       }
@@ -102,14 +102,14 @@ test("Gaps are preserved — a widget placed at (xPct=0.4, yPct=0.4) is NOT pack
     );
   });
   await page.reload();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const widget = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     const ws = parsed?.workspaces?.["custom-1"];
     if (!ws) return null;
-    return ws.widgets.find((w: { type: string }) => w.type === "docs-help") ?? null;
+    return ws.widgets.find((w: { type: string }) => w.type === "balances") ?? null;
   });
   expect(widget).not.toBeNull();
   if (widget) {
@@ -129,8 +129,8 @@ test("V6 layout schema persists with pct geometry (no column coords, no V1 size 
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const parsed = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     return raw ? JSON.parse(raw) : null;

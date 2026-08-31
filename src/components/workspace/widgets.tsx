@@ -14,7 +14,6 @@ import { OptionsChainTerminalCore } from "@/components/trading/terminal/OptionsC
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
 import { TradeTicketPanel } from "@/components/trading/terminal/TradeTicketPanel";
 import { useSelectedOption } from "@/lib/workspace-selected-option";
-import Link from "next/link";
 // FRONTEND-PERPS-POLISH-V1 — perps widgets live in their own files now.
 import { PerpsStatsWidget as PerpsStatsBody } from "@/components/trading/perps/PerpsStats";
 import { PerpsChartWidget as PerpsChartBody } from "@/components/trading/perps/PerpsChart";
@@ -133,69 +132,3 @@ export function PerpsBookFeedWidget() {
   return <PerpsBookFeedBody />;
 }
 
-export function DocsHelpWidget() {
-  return (
-    <div
-      data-testid="widget-docs-help-body"
-      className="flex flex-col gap-2 rounded border border-emerald-500/30 bg-zinc-950 p-3 text-[11px] text-zinc-300"
-    >
-      <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">
-        Docs · help
-      </div>
-      <ul className="ml-4 list-disc space-y-0.5 text-zinc-400">
-        <li>
-          <Link href="/docs/quickstart" className="text-emerald-300 hover:underline">
-            Quickstart
-          </Link>{" "}
-          — Base Sepolia setup.
-        </li>
-        <li>
-          <Link href="/docs/testing-guide" className="text-emerald-300 hover:underline">
-            Testing guide
-          </Link>{" "}
-          — end-to-end trade walkthrough.
-        </li>
-        <li>
-          <Link href="/docs/limitations" className="text-emerald-300 hover:underline">
-            Known limitations
-          </Link>{" "}
-          — what is NOT covered by this beta.
-        </li>
-        <li>
-          <Link href="/docs/faq" className="text-emerald-300 hover:underline">
-            FAQ
-          </Link>
-        </li>
-      </ul>
-    </div>
-  );
-}
-
-export function FeedbackWidget() {
-  return (
-    <div
-      data-testid="widget-feedback-body"
-      className="flex flex-col gap-2 rounded border border-emerald-500/30 bg-zinc-950 p-3 text-[11px] text-zinc-300"
-    >
-      <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">
-        Feedback
-      </div>
-      <p className="text-zinc-400">
-        Found a bug or have feedback? Use the public-safe report template at{" "}
-        <Link href="/feedback" className="text-emerald-300 hover:underline">
-          /feedback
-        </Link>
-        . Never share private keys, seed phrases, or RPC URLs.
-      </p>
-      <a
-        data-testid="widget-feedback-discord"
-        href="https://discord.gg/zaEMvWuxu"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="self-start rounded border border-emerald-500/40 px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-500/10"
-      >
-        Open Discord
-      </a>
-    </div>
-  );
-}

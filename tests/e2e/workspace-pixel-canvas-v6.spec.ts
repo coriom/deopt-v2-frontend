@@ -134,8 +134,8 @@ test("Widget placed with x+w = 1 reaches the right edge and persists", async ({
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return;
@@ -143,7 +143,7 @@ test("Widget placed with x+w = 1 reaches the right edge and persists", async ({
     const ws = parsed.workspaces["custom-1"];
     if (!ws) return;
     for (const w of ws.widgets) {
-      if (w.type === "docs-help") {
+      if (w.type === "balances") {
         w.xPct = 0.75;
         w.yPct = 0.0;
         w.wPct = 0.25;
@@ -156,7 +156,7 @@ test("Widget placed with x+w = 1 reaches the right edge and persists", async ({
     );
   });
   await page.reload();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const widget = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return null;
@@ -164,7 +164,7 @@ test("Widget placed with x+w = 1 reaches the right edge and persists", async ({
     const ws = parsed?.workspaces?.["custom-1"];
     if (!ws) return null;
     return (
-      ws.widgets.find((w: { type: string }) => w.type === "docs-help") ?? null
+      ws.widgets.find((w: { type: string }) => w.type === "balances") ?? null
     );
   });
   expect(widget).not.toBeNull();
@@ -172,7 +172,7 @@ test("Widget placed with x+w = 1 reaches the right edge and persists", async ({
     expect(widget.xPct + widget.wPct).toBeCloseTo(1, 5);
   }
   const containerBox = await page
-    .locator(`[data-widget-type="docs-help"]`)
+    .locator(`[data-widget-type="balances"]`)
     .first()
     .boundingBox();
   const canvasBox = await page
@@ -197,7 +197,7 @@ test("Widget menu shows titles but NO description text, and hides unimplemented 
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  const docsOption = page.getByTestId("navbar-widget-option-docs-help");
+  const docsOption = page.getByTestId("navbar-widget-option-balances");
   await expect(docsOption).toContainText(/Docs · help/i);
   await expect(docsOption).not.toContainText(/Quickstart \/ Testing guide/i);
 
@@ -225,7 +225,7 @@ test("Layout schema is V6 with pct geometry (no column coords)", async ({
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
+  await page.getByTestId("navbar-widget-option-balances").click();
   const parsed = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     return raw ? JSON.parse(raw) : null;
@@ -253,8 +253,8 @@ test("Saved layout survives a viewport resize — percentages preserve proportio
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const before = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return null;
@@ -265,7 +265,7 @@ test("Saved layout survives a viewport resize — percentages preserve proportio
   await page.setViewportSize({ width: 2560, height: 1440 });
   await page.waitForTimeout(80);
   await page.reload();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const after = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return null;
@@ -297,7 +297,7 @@ test("V5 column bucket is wiped on V7 load (safe migration)", async ({
       workspaces: {
         "custom-1": {
           workspaceId: "custom-1",
-          widgets: [{ id: "w-v5", type: "docs-help", x: 0, y: 0, w: 12, h: 6 }],
+          widgets: [{ id: "w-v5", type: "balances", x: 0, y: 0, w: 12, h: 6 }],
           cols: 48,
           updatedAt: Date.now(),
           expiresAt: Date.now() + 60_000,
@@ -327,7 +327,7 @@ test("V6 bucket is wiped on V7 load (post-hydration-bug safe-reset)", async ({
           widgets: [
             {
               id: "w-v6",
-              type: "docs-help",
+              type: "balances",
               xPct: 0,
               yPct: 0,
               wPct: 0.25,

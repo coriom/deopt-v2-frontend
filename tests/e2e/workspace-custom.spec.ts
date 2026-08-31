@@ -39,22 +39,22 @@ test("Navbar Widget button opens the menu and adds a widget to /custom", async (
   await expect(page.getByTestId("navbar-widget-button")).toHaveText(/Widget/);
   await page.getByTestId("navbar-widget-button").click();
   await expect(page.getByTestId("navbar-widget-menu")).toBeVisible();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   await expect(page.getByTestId("workspace-empty-custom-1")).toHaveCount(0);
 });
 
 test("Remove control inside a widget still removes it", async ({ page }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-feedback").click();
-  await expect(page.getByTestId("widget-feedback")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   // Remove moved from an always-visible ✕ into the kebab (⋯) menu.
   // Open the menu first, then click the Remove menu item.
   await page.locator("[data-testid^='widget-menu-trigger-']").first().click();
   const removeBtn = page.locator("[data-testid^='widget-remove-']").first();
   await removeBtn.click();
-  await expect(page.getByTestId("widget-feedback")).toHaveCount(0);
+  await expect(page.getByTestId("widget-balances")).toHaveCount(0);
 });
 
 test("localStorage stores V6 pct-geometry bucket with no secrets", async ({
@@ -62,8 +62,8 @@ test("localStorage stores V6 pct-geometry bucket with no secrets", async ({
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
 
   const bucket = await page.evaluate(() => {
     const out: Record<string, string> = {};

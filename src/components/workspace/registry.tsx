@@ -10,9 +10,7 @@ import type { WidgetType, WorkspaceId } from "@/lib/workspace-types";
 import {
   BalancesWidget,
   BottomDockWidget,
-  DocsHelpWidget,
   EventsWidget,
-  FeedbackWidget,
   GreeksWidget,
   OptionsChainWidget,
   OrdersWidget,
@@ -173,20 +171,6 @@ export const WIDGET_REGISTRY: Record<WidgetType, WidgetDef> = {
     workspaces: PERPS_WS,
     defaultWPct: 0.22, defaultHPct: 0.62, minWPx: 220, minHPx: 200,
     implemented: true, Render: PerpsBookFeedWidget,
-  },
-  "docs-help": {
-    type: "docs-help", title: "Docs · help",
-    description: "Quickstart / Testing guide / Limitations / FAQ links.",
-    workspaces: ALL_WS,
-    defaultWPct: 0.25, defaultHPct: 0.25, minWPx: 220, minHPx: 140,
-    implemented: true, Render: DocsHelpWidget,
-  },
-  feedback: {
-    type: "feedback", title: "Feedback",
-    description: "Report a bug + open Discord.",
-    workspaces: ALL_WS,
-    defaultWPct: 0.25, defaultHPct: 0.25, minWPx: 220, minHPx: 140,
-    implemented: true, Render: FeedbackWidget,
   },
 };
 

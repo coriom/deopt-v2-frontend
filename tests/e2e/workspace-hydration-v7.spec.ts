@@ -90,8 +90,8 @@ test("Adding the first widget in /custom creates a readable size", async ({
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  const widget = page.getByTestId("widget-docs-help");
+  await page.getByTestId("navbar-widget-option-balances").click();
+  const widget = page.getByTestId("widget-balances");
   await expect(widget).toBeVisible();
   const box = await widget.boundingBox();
   expect(box).not.toBeNull();
@@ -109,7 +109,7 @@ test.describe("invalid layouts are rejected and default is restored", () => {
     {
       name: "NaN xPct",
       widgets: [
-        { id: "w1", type: "docs-help", xPct: NaN, yPct: 0, wPct: 0.25, hPct: 0.25 },
+        { id: "w1", type: "balances", xPct: NaN, yPct: 0, wPct: 0.25, hPct: 0.25 },
       ],
     },
     {
@@ -117,7 +117,7 @@ test.describe("invalid layouts are rejected and default is restored", () => {
       widgets: [
         {
           id: "w1",
-          type: "docs-help",
+          type: "balances",
           xPct: 0,
           yPct: 0,
           wPct: Infinity,
@@ -128,19 +128,19 @@ test.describe("invalid layouts are rejected and default is restored", () => {
     {
       name: "negative xPct",
       widgets: [
-        { id: "w1", type: "docs-help", xPct: -0.1, yPct: 0, wPct: 0.25, hPct: 0.25 },
+        { id: "w1", type: "balances", xPct: -0.1, yPct: 0, wPct: 0.25, hPct: 0.25 },
       ],
     },
     {
       name: "tiny wPct (sub-readable)",
       widgets: [
-        { id: "w1", type: "docs-help", xPct: 0, yPct: 0, wPct: 0.001, hPct: 0.25 },
+        { id: "w1", type: "balances", xPct: 0, yPct: 0, wPct: 0.001, hPct: 0.25 },
       ],
     },
     {
       name: "xPct + wPct overflow",
       widgets: [
-        { id: "w1", type: "docs-help", xPct: 0.9, yPct: 0, wPct: 0.5, hPct: 0.25 },
+        { id: "w1", type: "balances", xPct: 0.9, yPct: 0, wPct: 0.5, hPct: 0.25 },
       ],
     },
     {
@@ -152,7 +152,7 @@ test.describe("invalid layouts are rejected and default is restored", () => {
     {
       name: "missing geometry field",
       widgets: [
-        { id: "w1", type: "docs-help", xPct: 0, yPct: 0, wPct: 0.25 },
+        { id: "w1", type: "balances", xPct: 0, yPct: 0, wPct: 0.25 },
       ],
     },
   ];
@@ -193,8 +193,8 @@ test("Widget header truncates instead of overlapping the remove button", async (
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   // The former always-visible ✕ is now the kebab (⋯) menu trigger.
   // The header-overlap invariant applies to the trigger, since the
   // Remove item is only revealed once the menu popover opens.
@@ -224,8 +224,8 @@ test("__deoptClearWorkspaceLayouts is exposed on window for console recovery", a
   await page.goto("/custom");
   // Plant a real layout first.
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const before = await page.evaluate(() =>
     window.localStorage.getItem("deopt:v2:workspace:anon"),
   );
@@ -247,8 +247,8 @@ test("__deoptClearWorkspaceLayouts is exposed on window for console recovery", a
 test("Saved bucket carries the V8 version field", async ({ page }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const version = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return null;

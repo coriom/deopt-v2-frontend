@@ -57,7 +57,7 @@ test("widget chrome carries a drag handle + remove button on /custom", async ({
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
+  await page.getByTestId("navbar-widget-option-balances").click();
   const handle = page.locator("[data-testid^='widget-drag-handle-']").first();
   const menuTrigger = page
     .locator("[data-testid^='widget-menu-trigger-']")
@@ -76,8 +76,8 @@ test("V6 pixel-canvas resize handle is rendered for each widget on /custom", asy
 }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const handles = page.locator("[data-testid^='widget-resize-handle-']");
   await expect(handles.first()).toBeVisible();
 });

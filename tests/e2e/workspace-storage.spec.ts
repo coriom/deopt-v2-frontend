@@ -27,7 +27,7 @@ test("V1 bucket (size enum) is wiped when the V7 loader sees it", async ({
       workspaces: {
         "custom-1": {
           workspaceId: "custom-1",
-          widgets: [{ id: "w-v1", type: "docs-help", size: "sm" }],
+          widgets: [{ id: "w-v1", type: "balances", size: "sm" }],
           updatedAt: Date.now(),
           expiresAt: Date.now() + 60_000,
         },
@@ -54,7 +54,7 @@ test("expired V7 anon bucket is pruned on next page load", async ({ page }) => {
           widgets: [
             {
               id: "w-stale",
-              type: "docs-help",
+              type: "balances",
               xPct: 0,
               yPct: 0,
               wPct: 0.25,
@@ -91,7 +91,7 @@ test("wrong-version (future) bucket is wiped and replaced with the default", asy
           widgets: [
             {
               id: "w-future",
-              type: "docs-help",
+              type: "balances",
               xPct: 0,
               yPct: 0,
               wPct: 0.25,
@@ -117,17 +117,17 @@ test("wrong-version (future) bucket is wiped and replaced with the default", asy
 test("saved layout survives a reload (V7)", async ({ page }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   await page.reload();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
 });
 
 test("anon layout expiresAt is bounded by 24h (V7)", async ({ page }) => {
   await page.goto("/custom");
   await page.getByTestId("navbar-widget-button").click();
-  await page.getByTestId("navbar-widget-option-docs-help").click();
-  await expect(page.getByTestId("widget-docs-help")).toBeVisible();
+  await page.getByTestId("navbar-widget-option-balances").click();
+  await expect(page.getByTestId("widget-balances")).toBeVisible();
   const expiry = await page.evaluate(() => {
     const raw = window.localStorage.getItem("deopt:v2:workspace:anon");
     if (!raw) return null;

@@ -26,9 +26,7 @@ export type WidgetType =
   | "perps-orderbook"
   | "perps-trade-form"
   | "perps-trade-feed"
-  | "perps-book-feed"
-  | "docs-help"
-  | "feedback";
+  | "perps-book-feed";
 
 export type WorkspaceId =
   | "options"
@@ -55,8 +53,6 @@ export const KNOWN_WIDGET_TYPES: ReadonlySet<WidgetType> = new Set<WidgetType>([
   "perps-trade-form",
   "perps-trade-feed",
   "perps-book-feed",
-  "docs-help",
-  "feedback",
 ]);
 
 export interface WidgetInstance {
