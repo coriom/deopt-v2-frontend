@@ -39,6 +39,7 @@ const TERMINAL_ROUTES = [
   "/fees",
   "/fundings",
   "/settings",
+  "/rfq-strategy",
 ];
 
 function isTerminalRoute(pathname: string | null): boolean {
