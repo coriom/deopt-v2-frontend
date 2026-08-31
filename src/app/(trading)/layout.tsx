@@ -15,6 +15,7 @@ import { PrimaryNavLinks } from "@/components/PrimaryNavLinks";
 import { TradingShell } from "@/components/TradingShell";
 import { WorkspaceBridgeProvider } from "@/lib/workspace-bridge";
 import { WidgetMenuButton } from "@/components/workspace/WidgetMenuButton";
+import { NewWindowButton } from "@/components/workspace/NewWindowButton";
 
 interface NavItem {
   testid: string;
@@ -94,6 +95,7 @@ export default function TradingLayout({ children }: { children: ReactNode }) {
               </svg>
             </Link>
             <WidgetMenuButton />
+            <NewWindowButton />
             <SubaccountSwitcher />
             <WalletConnectButton />
           </div>
