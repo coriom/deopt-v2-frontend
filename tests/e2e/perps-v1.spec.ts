@@ -119,22 +119,17 @@ test("/perps trade form: Long/Short + Market/Limit tabs functional, submit disab
   await expect(submit).toContainText(/not live/i);
 });
 
-test("/perps chart renders the lightweight-charts canvas and timeframe tabs", async ({
+test("/perps chart renders the TradingView container", async ({
   page,
 }) => {
   await gotoPerps(page);
+  // The chart is now a TradingView embed loaded from
+  // s3.tradingview.com — that script + its iframe may be blocked
+  // by the test runner's network (offline / ad-blocker / CSP).
+  // We only assert that the container div exists so the widget
+  // shell is intact; the TV widget's own DOM is out of scope for
+  // this spec.
   await expect(page.getByTestId("widget-perps-chart-canvas")).toBeVisible();
-  await expect(page.getByTestId("widget-perps-chart-empty")).toContainText(
-    /No live price feed/i,
-  );
-  for (const tf of ["1m", "5m", "15m", "1h", "4h", "1D"]) {
-    await expect(page.getByTestId(`widget-perps-chart-tf-${tf}`)).toBeVisible();
-  }
-  // 1h selected by default.
-  await expect(page.getByTestId("widget-perps-chart-tf-1h")).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
 });
 
 test("/perps trade feed is empty by default", async ({ page }) => {
