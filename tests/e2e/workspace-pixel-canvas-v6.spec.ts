@@ -192,7 +192,7 @@ test("Widget placed with x+w = 1 reaches the right edge and persists", async ({
   }
 });
 
-test("Widget menu shows titles + 'coming soon' chip but NO description text", async ({
+test("Widget menu shows titles but NO description text, and hides unimplemented widgets", async ({
   page,
 }) => {
   await page.goto("/custom");
@@ -201,14 +201,12 @@ test("Widget menu shows titles + 'coming soon' chip but NO description text", as
   await expect(docsOption).toContainText(/Docs · help/i);
   await expect(docsOption).not.toContainText(/Quickstart \/ Testing guide/i);
 
-  const ordersOption = page.getByTestId("navbar-widget-option-orders");
-  await expect(ordersOption).toContainText(/Orders/);
-  await expect(
-    page.getByTestId("navbar-widget-option-status-orders"),
-  ).toContainText(/coming soon/i);
-  await expect(ordersOption).not.toContainText(
-    /Resting limit-order book — not live/i,
-  );
+  // Unimplemented widgets (orders / greeks / events) are filtered
+  // out of the menu entirely — the user asked to see only the
+  // widgets that can actually be added.
+  await expect(page.getByTestId("navbar-widget-option-orders")).toHaveCount(0);
+  await expect(page.getByTestId("navbar-widget-option-greeks")).toHaveCount(0);
+  await expect(page.getByTestId("navbar-widget-option-events")).toHaveCount(0);
 });
 
 test("Terminal routes still hide PublicBetaFooter at 1920x1080 (V6)", async ({

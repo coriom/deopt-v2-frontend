@@ -37,7 +37,14 @@ export function WidgetMenuButton() {
 
   if (!active) return null;
 
-  const options = widgetsForWorkspace(active.workspaceId);
+  // Only show widgets that are actually implemented — the registry
+  // also carries a few `coming soon` placeholders (orders / greeks /
+  // events) that used to render greyed-out here. Per operator
+  // feedback, the menu now hides them entirely so the list only
+  // contains widgets the user can meaningfully add.
+  const options = widgetsForWorkspace(active.workspaceId).filter(
+    (w) => w.implemented,
+  );
 
   return (
     <div ref={wrapperRef} className="relative">
