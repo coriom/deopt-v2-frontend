@@ -182,15 +182,15 @@ const DEFAULT_ANCHOR: Record<StrategyUnderlying, number> = {
   ETH: 4_000,
 };
 
-let legIdCounter = 0;
-function nextLegId(): string {
-  legIdCounter += 1;
-  return `leg-${legIdCounter}`;
-}
-
-/** Reset the leg-id counter — test helper only. */
-export function resetLegIdCounterForTests(): void {
-  legIdCounter = 0;
+/** Build a deterministic leg id from the preset that seeded it and
+ *  the leg's index in that preset. Deterministic ids keep the SSR
+ *  markup byte-identical to the first client render so hydration
+ *  never mismatches — a module-scoped counter used to increment
+ *  differently on server vs. client (React 19 dev-mode double-
+ *  invocation, Fast Refresh, cross-request module reuse), which
+ *  produced `data-testid` diffs like `leg-1` vs. `leg-2`. */
+function legIdFor(presetId: string, index: number): string {
+  return `${presetId}-leg-${index + 1}`;
 }
 
 /**
@@ -209,7 +209,7 @@ export function applyPreset(
   return {
     ...state,
     presetId,
-    legs: seeds.map((seed) => ({ ...seed, id: nextLegId() })),
+    legs: seeds.map((seed, i) => ({ ...seed, id: legIdFor(presetId, i) })),
   };
 }
 
