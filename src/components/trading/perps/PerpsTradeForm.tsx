@@ -19,7 +19,7 @@
 // (PERPS-FRONTEND-TICKET-ENABLEMENT-V1)
 
 import type { CSSProperties } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
 import { TifPopover, PostCheckbox, type Tif } from "../TifPopover";
 import { isPerpsTicketEnabled } from "@/lib/perps-flag";
@@ -266,18 +266,7 @@ export function PerpsTradeFormWidget() {
           />
         </Field>
       ) : (
-        <Field label="Slippage tolerance">
-          <input
-            type="text"
-            inputMode="decimal"
-            value={slippagePct}
-            onChange={(e) => setSlippagePct(e.target.value)}
-            placeholder="0.5"
-            data-testid="widget-perps-trade-slippage"
-            className="w-full rounded border border-zinc-800 bg-black/40 px-2 py-1.5 font-mono text-[12px] text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
-            style={{ fontFamily: "var(--app-font-mono)" }}
-          />
-        </Field>
+        <MaxSlippageRow value={slippagePct} onChange={setSlippagePct} />
       )}
 
       {/* Leverage — slider + exact numeric input (both write the
@@ -496,6 +485,115 @@ function computeIsolatedMargin1e8(
   const notional = (s * p) / scale;
   const margin = (notional * scale) / lev1e8;
   return margin.toString();
+}
+
+/** Preset chips (in percent) offered next to the Max Slippage
+ *  label. "Custom" hides the chips and reveals a small numeric
+ *  input so the operator can dial an exact value. */
+const SLIPPAGE_PRESETS = [0.1, 0.25, 0.5, 1] as const;
+
+interface MaxSlippageRowProps {
+  /** Percent as a string (matches the pre-existing state shape). */
+  value: string;
+  onChange: (next: string) => void;
+}
+
+/** Compact `Max Slippage 0.5%` row with preset chips + a Custom
+ *  affordance. Rendered only for Market orders — Limit orders use
+ *  the limit price as their own execution-price protection.
+ *
+ *  UI-only for now: the backend `SubmitPerpsOrderRequest` does not
+ *  accept `max_execution_price` / `min_execution_price` yet, so we
+ *  do NOT thread the chosen value into the submit body. The chip
+ *  state is preserved so the backend wiring is a one-liner when
+ *  the fields ship. */
+function MaxSlippageRow({ value, onChange }: MaxSlippageRowProps) {
+  const numeric = Number.parseFloat(value);
+  const matchesPreset = SLIPPAGE_PRESETS.some(
+    (p) => Number.isFinite(numeric) && Math.abs(p - numeric) < 1e-6,
+  );
+  // Whether the Custom input is visible. Independent of the value
+  // itself — otherwise clicking Custom while `value === "0.5"` (a
+  // preset) would leave `showCustom` false and reveal nothing.
+  // Initialised from the value so a non-preset default (e.g. loaded
+  // from user prefs later) opens the input on mount.
+  const [showCustom, setShowCustom] = useState<boolean>(!matchesPreset);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <div
+      data-testid="widget-perps-trade-max-slippage"
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.12em] text-zinc-500"
+    >
+      <span>Max Slippage</span>
+      {SLIPPAGE_PRESETS.map((p) => {
+        const active = !showCustom && Math.abs(p - numeric) < 1e-6;
+        return (
+          <button
+            key={p}
+            type="button"
+            onClick={() => {
+              setShowCustom(false);
+              onChange(String(p));
+            }}
+            data-testid={`widget-perps-trade-max-slippage-preset-${p}`}
+            aria-pressed={active}
+            className={
+              active
+                ? "rounded border border-emerald-500/50 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] normal-case text-emerald-200"
+                : "rounded border border-zinc-800 bg-black/40 px-1.5 py-0.5 font-mono text-[10px] normal-case text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-200"
+            }
+            style={{ fontFamily: "var(--app-font-mono)" }}
+          >
+            {p}%
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => {
+          const next = !showCustom;
+          setShowCustom(next);
+          if (next) {
+            // Wait a tick for the input to mount, then focus + select
+            // so typing overwrites the current value immediately.
+            requestAnimationFrame(() => inputRef.current?.select());
+          }
+        }}
+        data-testid="widget-perps-trade-max-slippage-custom-toggle"
+        aria-pressed={showCustom}
+        className={
+          showCustom
+            ? "rounded border border-emerald-500/50 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] normal-case text-emerald-200"
+            : "rounded border border-zinc-800 bg-black/40 px-1.5 py-0.5 text-[10px] normal-case text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-200"
+        }
+      >
+        Custom
+      </button>
+      {showCustom ? (
+        <span className="inline-flex items-center gap-0.5 rounded border border-zinc-800 bg-black/40 px-1 py-0.5 focus-within:border-emerald-500/60">
+          <input
+            ref={inputRef}
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={0.01}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label="Custom max slippage percent"
+            data-testid="widget-perps-trade-max-slippage-input"
+            className="w-10 bg-transparent text-right font-mono text-[11px] normal-case text-zinc-100 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            style={{ fontFamily: "var(--app-font-mono)" }}
+          />
+          <span
+            className="font-mono text-[11px] normal-case text-zinc-500"
+            style={{ fontFamily: "var(--app-font-mono)" }}
+          >
+            %
+          </span>
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function Field({

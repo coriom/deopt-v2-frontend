@@ -112,7 +112,10 @@ test("/perps trade form: Long/Short + Market/Limit tabs functional, submit disab
   await page.getByTestId("widget-perps-trade-mode-limit").click();
   await expect(page.getByTestId("widget-perps-trade-limit-price")).toBeVisible();
   await page.getByTestId("widget-perps-trade-mode-market").click();
-  await expect(page.getByTestId("widget-perps-trade-slippage")).toBeVisible();
+  // Market mode surfaces the compact Max Slippage row with preset chips.
+  await expect(
+    page.getByTestId("widget-perps-trade-max-slippage"),
+  ).toBeVisible();
   // Submit button stays disabled.
   const submit = page.getByTestId("widget-perps-trade-submit");
   await expect(submit).toBeDisabled();
