@@ -1,0 +1,32 @@
+{
+  "name": "DeOpt",
+  "short_name": "DeOpt",
+  "description": "DeOpt — programmable derivatives infrastructure.",
+  "start_url": "/custom",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "/logo-deopt.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-deopt.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "138x176",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
