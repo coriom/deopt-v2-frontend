@@ -1935,6 +1935,31 @@ export interface SubmitPerpsOrderRequest {
   isolated_margin_1e8: string;
   client_order_id?: string | null;
   /**
+   * PERPS-PRICING-AND-EXECUTION-SAFETY-CORE-V1 — user-chosen execution
+   * price bound. 1e8-scaled decimal strings mirroring `price_1e8`.
+   *
+   * These fields carry the trader's slippage protection end-to-end
+   * from the ticket to the on-chain matching engine's `PerpTrade`
+   * EIP-712 payload (`maxExecutionPrice1e8` / `minExecutionPrice1e8`
+   * — 12 fields total, inserted between `executionPrice1e8` and
+   * `buyerIsMaker`). The router computes the effective fill price
+   * and rejects any match that violates the user's bound; no
+   * server-side widening is permitted.
+   *
+   * Semantics (per the locked Solidity spec):
+   *   * `"0"` → strict / no user bound. The executed price MUST
+   *     equal the signed `price_1e8` (legacy behaviour).
+   *   * non-zero → inclusive user-chosen bound:
+   *       - Buy side  → `max_execution_price_1e8` caps how high the
+   *         fill can print; `min_execution_price_1e8` should be `"0"`.
+   *       - Sell side → `min_execution_price_1e8` floors how low the
+   *         fill can print; `max_execution_price_1e8` should be `"0"`.
+   *   * LIMIT orders (non-zero `price_1e8`) send both bounds as
+   *     `"0"` — the signed exec price IS the limit.
+   */
+  max_execution_price_1e8: string;
+  min_execution_price_1e8: string;
+  /**
    * PERPS-V2-WRITE-AUTH-ENFORCEMENT-V1 — v2 authorization envelope.
    *
    * REQUIRED when the backend gate opens (closed-test allowlist or

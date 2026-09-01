@@ -19,12 +19,13 @@
 // (PERPS-FRONTEND-TICKET-ENABLEMENT-V1)
 
 import type { CSSProperties } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePerpsSymbol } from "@/lib/perps-symbol";
 import { TifPopover, PostCheckbox, type Tif } from "../TifPopover";
 import { isPerpsTicketEnabled } from "@/lib/perps-flag";
 import { isPerpsClosedTestEnabled } from "@/lib/perps-closed-test-flag";
 import {
+  getPerpsMarketPrice,
   submitPerpsOrder,
   TradingApiError,
   type SubmitPerpsOrderRequest,
@@ -84,6 +85,47 @@ export function PerpsTradeFormWidget() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [lastAcceptedOrderId, setLastAcceptedOrderId] = useState<string | null>(null);
+  // PERPS-PRICING-AND-EXECUTION-SAFETY-CORE-V1 — reference price used
+  // to convert the user's chosen slippage percent into an absolute
+  // `max_execution_price_1e8` / `min_execution_price_1e8` bound at
+  // submit time. Sourced from the backend mark-price snapshot the
+  // stats bandeau already polls (`getPerpsMarketPrice`). When the
+  // snapshot is unavailable or stale, this stays null and the ticket
+  // refuses to submit rather than sending an unbounded market order.
+  const [referencePrice1e8, setReferencePrice1e8] = useState<string | null>(null);
+  useEffect(() => {
+    // Effect syncs to an external system (the backend price
+    // snapshot). State writes happen only inside the async task, not
+    // synchronously in the effect body.
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const symbol = market.symbol;
+    async function tick() {
+      try {
+        const snap = await getPerpsMarketPrice(symbol, ctrl.signal);
+        if (cancelled) return;
+        // Refuse stale marks — a stale reference would produce a
+        // stale slippage bound that could accept a fill way off the
+        // current book. The submit path surfaces this as a clear
+        // error.
+        if (snap.stale) {
+          setReferencePrice1e8(null);
+        } else {
+          setReferencePrice1e8(snap.mark_price_1e8);
+        }
+      } catch (err) {
+        if (cancelled || (err as Error)?.name === "AbortError") return;
+        setReferencePrice1e8(null);
+      }
+    }
+    void tick();
+    const handle = window.setInterval(() => void tick(), 15_000);
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+      window.clearInterval(handle);
+    };
+  }, [market.symbol]);
 
   const walletConnected =
     wallet.address !== null && wallet.isExpectedChain;
@@ -122,6 +164,33 @@ export function PerpsTradeFormWidget() {
     const tifStr = tif.toLowerCase() as "gtc" | "ioc" | "fok";
     const isolatedMargin1e8 = computeIsolatedMargin1e8(size, priceStr, leverage);
     const clientOrderId = `ticket-${Date.now()}`;
+    // PERPS-PRICING-AND-EXECUTION-SAFETY-CORE-V1 — user-chosen bound.
+    // LIMIT orders (`price_1e8 != "0"`) send both bounds as `"0"`
+    // because the signed exec price IS the limit. MARKET orders
+    // convert the chosen slippage percent + a fresh mark reference
+    // into an absolute bound and refuse to submit if the mark is
+    // unavailable — never sends an unbounded market order.
+    let maxExecutionPrice1e8 = "0";
+    let minExecutionPrice1e8 = "0";
+    if (mode === "market") {
+      if (referencePrice1e8 === null) {
+        setSubmitError(
+          "No fresh mark price available to compute slippage bound — retry when the market price loads.",
+        );
+        return;
+      }
+      const bounds = computeSlippageBounds1e8({
+        referencePrice1e8,
+        slippagePct,
+        side: sideStr,
+      });
+      if (bounds === null) {
+        setSubmitError("Max Slippage must be a positive number.");
+        return;
+      }
+      maxExecutionPrice1e8 = bounds.max;
+      minExecutionPrice1e8 = bounds.min;
+    }
     setSubmitting(true);
     try {
       // PERPS-V2-WRITE-AUTH-ENFORCEMENT-V1 — build v2 canonical bytes,
@@ -161,6 +230,12 @@ export function PerpsTradeFormWidget() {
         reduce_only: false,
         isolated_margin_1e8: isolatedMargin1e8,
         client_order_id: clientOrderId,
+        // PERPS-PRICING-AND-EXECUTION-SAFETY-CORE-V1 — the trader's
+        // slippage bound flows end-to-end via these two fields; the
+        // backend threads them into the on-chain matching engine's
+        // PerpTrade EIP-712 payload verbatim. `"0"` means strict.
+        max_execution_price_1e8: maxExecutionPrice1e8,
+        min_execution_price_1e8: minExecutionPrice1e8,
         authorization,
       };
       const response = await submitPerpsOrder(req);
@@ -492,6 +567,52 @@ function computeIsolatedMargin1e8(
  *  input so the operator can dial an exact value. */
 const SLIPPAGE_PRESETS = [0.1, 0.25, 0.5, 1] as const;
 
+/** PERPS-PRICING-AND-EXECUTION-SAFETY-CORE-V1 — converts the user's
+ *  chosen slippage percent + a fresh oracle reference price into
+ *  absolute `max_execution_price_1e8` / `min_execution_price_1e8`
+ *  bounds. BigInt arithmetic only — no floating-point drift on the
+ *  wire.
+ *
+ *  Semantics (per the locked Solidity spec):
+ *    - Buy  → max = ceil(ref × (1 + pct/100)), min = "0"
+ *    - Sell → min = floor(ref × (1 − pct/100)), max = "0"
+ *
+ *  Returns null for non-positive / non-finite pct or when
+ *  Math.round(pct * 100) rounds to 0 (i.e. below 0.01% — the
+ *  wire uses bp resolution). */
+export function computeSlippageBounds1e8(args: {
+  referencePrice1e8: string;
+  slippagePct: string;
+  side: "buy" | "sell";
+}): { max: string; min: string } | null {
+  const ZERO = BigInt(0);
+  const ONE = BigInt(1);
+  const DENOM = BigInt(10_000);
+  const pct = Number.parseFloat(args.slippagePct);
+  if (!Number.isFinite(pct) || pct <= 0) return null;
+  const bps = BigInt(Math.round(pct * 100)); // 0.5% → 50 bps
+  if (bps <= ZERO) return null;
+  let ref: bigint;
+  try {
+    ref = BigInt(args.referencePrice1e8);
+  } catch {
+    return null;
+  }
+  if (ref <= ZERO) return null;
+  if (args.side === "buy") {
+    // max = ceil(ref * (DENOM + bps) / DENOM)
+    const numer = ref * (DENOM + bps);
+    const max = (numer + DENOM - ONE) / DENOM;
+    return { max: max.toString(), min: "0" };
+  }
+  // sell: min = floor(ref * (DENOM - bps) / DENOM). Guard against
+  // an absurdly large slippage that would drive the floor negative.
+  if (bps >= DENOM) return null;
+  const numer = ref * (DENOM - bps);
+  const min = numer / DENOM;
+  return { max: "0", min: min.toString() };
+}
+
 interface MaxSlippageRowProps {
   /** Percent as a string (matches the pre-existing state shape). */
   value: string;
@@ -502,11 +623,13 @@ interface MaxSlippageRowProps {
  *  affordance. Rendered only for Market orders — Limit orders use
  *  the limit price as their own execution-price protection.
  *
- *  UI-only for now: the backend `SubmitPerpsOrderRequest` does not
- *  accept `max_execution_price` / `min_execution_price` yet, so we
- *  do NOT thread the chosen value into the submit body. The chip
- *  state is preserved so the backend wiring is a one-liner when
- *  the fields ship. */
+ *  PERPS-PRICING-AND-EXECUTION-SAFETY-CORE-V1: the chosen percent
+ *  is converted at submit time (via `computeSlippageBounds1e8`)
+ *  into an absolute `max_execution_price_1e8` /
+ *  `min_execution_price_1e8` bound and threaded into the submit
+ *  body. The backend then propagates the bound verbatim into the
+ *  on-chain matching engine's `PerpTrade` payload; no server-side
+ *  widening. */
 function MaxSlippageRow({ value, onChange }: MaxSlippageRowProps) {
   const numeric = Number.parseFloat(value);
   const matchesPreset = SLIPPAGE_PRESETS.some(
