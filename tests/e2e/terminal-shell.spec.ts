@@ -5,7 +5,7 @@
  *   - /options, /perps, /custom render `trading-main-terminal` (no
  *     marketing-style max-width gutter)
  *   - No PublicBetaFooter on terminal routes
- *   - Non-terminal trading routes (/, /markets, /portfolio) still
+ *   - Non-terminal trading routes (/, /portfolio) still
  *     render `trading-main` (page mode) + footer
  *   - Widget chrome carries a drag handle and remove button (V6 pixel
  *     canvas renders its own resize handle as `widget-resize-handle-*`)
@@ -20,7 +20,6 @@ const TERMINAL_ROUTES = [
   "/options",
   "/perps",
   "/custom",
-  "/markets",
   "/portfolio",
   "/history",
   "/leaderboard",

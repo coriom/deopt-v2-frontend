@@ -30,7 +30,6 @@ interface DrawerEntry {
 const PRIMARY_ITEMS: DrawerEntry[] = [
   { id: "options",       label: "Options",         href: "/options",       internal: true },
   { id: "perps",         label: "Perps",           href: "/perps",         internal: true },
-  { id: "markets",       label: "Markets",         href: "/markets",       internal: true },
   { id: "rfq-strategy",  label: "RFQ/Strategy",    href: "/rfq-strategy",  internal: true },
   { id: "custom",        label: "Custom",          href: "/custom",        internal: true },
   { id: "academy",       label: "DeOpt Academy",   href: "/docs",          internal: true },

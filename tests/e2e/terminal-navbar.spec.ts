@@ -5,7 +5,7 @@
  *
  *   left side (in DOM order):
  *     logo → "DeOpt" brand → hamburger button →
- *     Options → Perps → Markets → RFQ/Strategy → Custom → DeOpt Academy
+ *     Options → Perps → RFQ/Strategy → Custom → DeOpt Academy
  *
  *   right side (in DOM order):
  *     Widget → Connect wallet
@@ -15,9 +15,9 @@
  *   added:   RFQ/Strategy (link to /rfq-strategy).
  *
  *   the hamburger now opens a LEFT-anchored drawer that lists the
- *   13 primary IA items in exact order:
+ *   12 primary IA items in exact order:
  *
- *     Options · Perps · Markets · RFQ/Strategy · Custom · DeOpt Academy ·
+ *     Options · Perps · RFQ/Strategy · Custom · DeOpt Academy ·
  *     History · Leaderboard · API · Fees · Fundings · Settings · Support
  */
 import { test, expect } from "@playwright/test";
@@ -26,7 +26,6 @@ import { installMockWallet } from "./wallet-fixture";
 const PRIMARY_NAV_ORDER = [
   { testid: "navbar-link-options",      href: "/options",       label: "Options" },
   { testid: "navbar-link-perps",        href: "/perps",         label: "Perps" },
-  { testid: "navbar-link-markets",      href: "/markets",       label: "Markets" },
   { testid: "navbar-link-rfq-strategy", href: "/rfq-strategy",  label: "RFQ/Strategy" },
   { testid: "navbar-link-custom",       href: "/custom",        label: "Custom" },
   { testid: "navbar-link-academy",      href: "/docs",          label: "DeOpt Academy" },
@@ -35,7 +34,6 @@ const PRIMARY_NAV_ORDER = [
 const DRAWER_ORDER = [
   "options",
   "perps",
-  "markets",
   "rfq-strategy",
   "custom",
   "academy",
@@ -51,7 +49,6 @@ const DRAWER_ORDER = [
 const DRAWER_HREFS: Record<string, string> = {
   options: "/options",
   perps: "/perps",
-  markets: "/markets",
   "rfq-strategy": "/rfq-strategy",
   custom: "/custom",
   academy: "/docs",
@@ -64,7 +61,7 @@ const DRAWER_HREFS: Record<string, string> = {
   support: "/feedback",
 };
 
-test("primary navbar shows the 6 IA-V1 items in exact order with correct hrefs", async ({
+test("primary navbar shows the 5 IA-V1 items in exact order with correct hrefs", async ({
   page,
 }) => {
   await installMockWallet(page);
@@ -163,7 +160,7 @@ test("hamburger drawer opens from the LEFT side", async ({ page }) => {
   }
 });
 
-test("hamburger drawer carries the 13 IA-V1 items in exact order with correct hrefs", async ({
+test("hamburger drawer carries the 12 IA-V1 items in exact order with correct hrefs", async ({
   page,
 }) => {
   await installMockWallet(page);
@@ -200,7 +197,7 @@ test("hamburger drawer keeps Discord + GitHub as small secondary links (not comp
   const github = page.getByTestId("hamburger-link-github");
   await expect(discord).toHaveAttribute("href", "https://discord.gg/zaEMvWuxu");
   await expect(github).toHaveAttribute("href", "https://github.com/DeOpt");
-  // They live in a different container than the primary 13.
+  // They live in a different container than the primary 12.
   const secondary = page.getByTestId("hamburger-secondary-list");
   await expect(secondary).toContainText(/Discord/);
   await expect(secondary).toContainText(/GitHub/);

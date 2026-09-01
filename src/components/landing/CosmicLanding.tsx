@@ -229,13 +229,6 @@ function HeroSection() {
           Launch the terminal
         </Link>
         <Link
-          href="/markets"
-          data-testid="landing-cta-markets"
-          className="rounded-md px-5 py-2.5 text-[13px] font-semibold text-emerald-200 ring-1 ring-inset ring-emerald-500/40 backdrop-blur-sm hover:bg-emerald-500/10"
-        >
-          Markets
-        </Link>
-        <Link
           href="/docs"
           data-testid="landing-cta-docs"
           className="rounded-md px-5 py-2.5 text-[13px] font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-800 backdrop-blur-sm hover:text-emerald-200 hover:ring-emerald-500/40"
@@ -745,13 +738,6 @@ function FinalCtaSection() {
           className="rounded-md bg-emerald-500 px-5 py-2.5 text-[13px] font-semibold text-black shadow-[0_0_28px_rgba(16,185,129,0.4)] hover:bg-emerald-400"
         >
           Launch the terminal
-        </Link>
-        <Link
-          href="/markets"
-          data-testid="landing-final-cta-markets"
-          className="rounded-md px-5 py-2.5 text-[13px] font-semibold text-emerald-200 ring-1 ring-inset ring-emerald-500/40 backdrop-blur-sm hover:bg-emerald-500/10"
-        >
-          Markets
         </Link>
         <Link
           href="/feedback"

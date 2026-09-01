@@ -44,9 +44,6 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
           <Link href="/docs" className="text-zinc-400 hover:text-emerald-300">
             Docs
           </Link>
-          <Link href="/markets" className="text-zinc-400 hover:text-emerald-300">
-            Markets
-          </Link>
           <Link
             href="/feedback"
             className="text-zinc-400 hover:text-emerald-300"

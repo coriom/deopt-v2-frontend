@@ -14,8 +14,8 @@ import { PublicBetaFooter } from "@/components/PublicBetaFooter";
  *                          kept as a server-side redirect to
  *                          `/options` for backwards compatibility —
  *                          see OPTIONS-ROUTE-RENAMING-V1.)
- * /markets, /portfolio:    trading utility surfaces with their own
- *                          dense layouts; the bottom marketing footer
+ * /portfolio:              trading utility surface with its own
+ *                          dense layout; the bottom marketing footer
  *                          is unwanted here per operator feedback.
  * /history:                dense terminal-style history screen
  *                          (FRONTEND-BACKEND-HISTORY-V1) — the bottom
@@ -31,7 +31,6 @@ const TERMINAL_ROUTES = [
   "/trade",
   "/perps",
   "/custom",
-  "/markets",
   "/portfolio",
   "/history",
   "/leaderboard",

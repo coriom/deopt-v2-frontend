@@ -21,7 +21,6 @@ import { BottomPanel } from "./BottomPanel";
 interface SelectedState {
   leg: OptionLeg;
   row: OptionsChainRow;
-  productId: string | null;
 }
 
 // Resolve series details one at a time via the single useSeriesDetails
@@ -212,14 +211,13 @@ export function OptionsChainTerminal() {
           rows={visibleRows}
           selectedSeriesId={selected?.leg.seriesId ?? null}
           onSelect={(leg, row) =>
-            setSelected({ leg, row, productId: leg.productId })
+            setSelected({ leg, row })
           }
         />
         <div className="lg:sticky lg:top-2 lg:self-start">
           <OptionDetailPanel
             leg={selected?.leg ?? null}
             row={selected?.row ?? null}
-            productId={selected?.productId ?? null}
           />
         </div>
       </div>

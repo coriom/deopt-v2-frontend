@@ -34,7 +34,7 @@ test("main DOM contains no amber/yellow Tailwind class on key routes", async ({
     account: DEFAULT_TEST_ACCOUNT,
     chainId: BASE_SEPOLIA_CHAIN_ID,
   });
-  const routes = ["/", "/markets", "/portfolio", "/history", "/health"];
+  const routes = ["/", "/portfolio", "/history", "/health"];
   for (const route of routes) {
     await page.goto(route);
     const html = await page.locator("main").innerHTML();

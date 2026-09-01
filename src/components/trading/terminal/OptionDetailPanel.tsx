@@ -10,7 +10,6 @@ type Tab = "trade" | "payoff" | "greeks" | "details" | "risk";
 interface OptionDetailPanelProps {
   leg: OptionLeg | null;
   row: OptionsChainRow | null;
-  productId: string | null;
 }
 
 const TABS: Array<{ id: Tab; label: string }> = [
@@ -30,7 +29,6 @@ function shortHash(s: string | null): string {
 export function OptionDetailPanel({
   leg,
   row,
-  productId,
 }: OptionDetailPanelProps) {
   const [tab, setTab] = useState<Tab>("trade");
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -184,27 +182,6 @@ export function OptionDetailPanel({
                 — <NaTag />
               </dd>
             </dl>
-            <p className="text-[10px] leading-relaxed text-zinc-400">
-              Live premium / fee / collateral preview is wired in
-              <code className="mx-1 rounded border border-emerald-500/30 bg-black/40 px-1 text-emerald-200">
-                /markets/[productId]
-              </code>
-              via{" "}
-              <code className="mx-1 rounded border border-emerald-500/30 bg-black/40 px-1 text-emerald-200">
-                QuotePreviewCard
-              </code>{" "}
-              + the create-intent + sign flow. Open the underlying product
-              page to actually sign and submit a testnet trade.
-            </p>
-            {productId && leg.seriesId && (
-              <Link
-                href={`/markets/${productId}`}
-                data-testid="detail-open-trade-ticket-cta"
-                className="rounded bg-emerald-500 px-3 py-1.5 text-center text-xs font-semibold text-black hover:bg-emerald-400"
-              >
-                Open trade ticket for this product →
-              </Link>
-            )}
             <p className="text-[10px] text-zinc-500">
               Your wallet signs typed data. Nothing is broadcast from your
               wallet — the operator-side executor submits the testnet tx on

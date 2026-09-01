@@ -52,7 +52,7 @@ Paste this whole block into your report and fill in the fields. Lines you can't 
 - Browser + version: e.g. Chrome 128 / Firefox 130 / Safari 18
 - Wallet provider + version: e.g. MetaMask 12.x / Rabby 2.x / Coinbase Wallet 30.x
 - OS: e.g. macOS 15 / Windows 11 / Linux Ubuntu 24
-- App URL / page: e.g. /markets/0x… or /transactions/<intent_id>
+- App URL / page: e.g. /options or /transactions/<intent_id>
 
 ### Steps to reproduce
 

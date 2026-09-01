@@ -61,16 +61,12 @@ test("hero subhead reinforces the product surface (options · perps · API · wo
   expect(text).toMatch(/workspaces?\b/);
 });
 
-test("hero CTAs route to /options, /markets, /docs", async ({ page }) => {
+test("hero CTAs route to /options, /docs", async ({ page }) => {
   await installMockWallet(page);
   await page.goto("/");
   await expect(page.getByTestId("landing-cta-launch-app")).toHaveAttribute(
     "href",
     "/options",
-  );
-  await expect(page.getByTestId("landing-cta-markets")).toHaveAttribute(
-    "href",
-    "/markets",
   );
   await expect(page.getByTestId("landing-cta-docs")).toHaveAttribute(
     "href",
