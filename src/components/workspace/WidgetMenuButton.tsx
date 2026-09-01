@@ -4,13 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import { useActiveWorkspace } from "@/lib/workspace-bridge";
 import { widgetsForWorkspace } from "./registry";
 
+/** Where the popover flies out from the trigger. `below-right` (the
+ *  default) suits the navbar; `above-left` suits the floating button
+ *  on `/window` which sits in the bottom-left corner and needs to
+ *  open upward + rightward. */
+export type WidgetMenuPlacement = "below-right" | "above-left";
+
+interface WidgetMenuButtonProps {
+  placement?: WidgetMenuPlacement;
+}
+
 /**
  * Navbar `Widget` button. Hidden when no workspace is active (e.g. on
  * /, /docs, /feedback). When a workspace IS active, the dropdown
  * lists the widgets that workspace supports. Click → adds the widget
  * to that workspace.
  */
-export function WidgetMenuButton() {
+export function WidgetMenuButton({
+  placement = "below-right",
+}: WidgetMenuButtonProps = {}) {
   const active = useActiveWorkspace();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -63,7 +75,11 @@ export function WidgetMenuButton() {
           role="menu"
           aria-label="Add widget"
           data-testid="navbar-widget-menu"
-          className="deopt-scroll-dark absolute right-0 top-7 z-30 flex max-h-[70vh] w-72 flex-col gap-1 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-2"
+          className={`deopt-scroll-dark absolute z-30 flex max-h-[70vh] w-72 flex-col gap-1 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-2 ${
+            placement === "above-left"
+              ? "bottom-7 left-0"
+              : "right-0 top-7"
+          }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">

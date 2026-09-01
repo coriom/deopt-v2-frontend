@@ -41,7 +41,7 @@ export function NewWindowButton() {
     // `window.opener` — no reverse control from the new window
     // back into the parent.
     window.open(
-      "/custom",
+      "/window",
       "_blank",
       `popup=yes,noopener,noreferrer,width=${w},height=${h},left=${left},top=${top}`,
     );
