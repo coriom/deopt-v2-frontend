@@ -27,11 +27,19 @@ import { isPerpsClosedTestEnabled } from "@/lib/perps-closed-test-flag";
 import {
   getPerpsMarketPrice,
   submitPerpsOrder,
+  submitPerpsSignedOrder,
   TradingApiError,
   type SubmitPerpsOrderRequest,
+  type SubmitPerpsSignedOrderRequest,
 } from "@/lib/trading-api";
 import { useWallet } from "@/lib/wallet";
 import { buildAuthorization, canonicalV2 } from "@/lib/write-auth";
+import {
+  buildPerpOrderIntentTypedData,
+  generateIntentId,
+  validatePerpOrderIntent,
+  type PerpOrderIntent,
+} from "@/lib/perp-order-intent";
 
 type Side = "long" | "short";
 type Mode = "market" | "limit";
@@ -193,6 +201,96 @@ export function PerpsTradeFormWidget() {
     }
     setSubmitting(true);
     try {
+      if (closedTestCopyVisible) {
+        // PERPS-FULLSTACK-RUNTIME-INTEGRATION-V1 (Part D + H) — signed
+        // `PerpOrderIntent` submit path. Only active when the closed-
+        // test UI flag is on; the backend `POST /perps/orders/signed`
+        // route is still gated by the closed-test allowlist +
+        // `PERPS_PUBLIC_TRADING_ENABLED`. This flag flips the SIGNING
+        // shape only; backend is the authority.
+        //
+        // Signing method: viem `walletClient.signTypedData` via the
+        // wallet context. The wagmi `useSignTypedData` hook is not
+        // available in this repo (viem-only stack — see wallet.tsx
+        // header) — the wallet context wraps the same underlying EIP-
+        // 712 v4 typed-data JSON-RPC method.
+        const engineAddress = perpMatchingEngineAddress();
+        if (engineAddress === null) {
+          setSubmitError(
+            "Perps signing is not configured: NEXT_PUBLIC_PERP_MATCHING_ENGINE_ADDRESS is unset on this build.",
+          );
+          return;
+        }
+        if (wallet.chainId === null) {
+          setSubmitError("Wallet chain unknown — reconnect and try again.");
+          return;
+        }
+        const numericMarketId = BigInt(market.marketId);
+        const intent: PerpOrderIntent = {
+          intentId: generateIntentId(),
+          trader: account,
+          subaccountId,
+          marketId: numericMarketId,
+          side: sideStr === "buy" ? 0 : 1,
+          size1e8: BigInt(size),
+          limitPrice1e8: BigInt(priceStr),
+          maxExecPrice1e8: BigInt(maxExecutionPrice1e8),
+          minExecPrice1e8: BigInt(minExecutionPrice1e8),
+          // V1 closed-test: `Date.now()` (millis) as a monotonic
+          // pseudo-nonce. Backend accepts any u128 and prevents
+          // replay via its consumed-nonce set; a production nonce
+          // store lives backend-side and will replace this.
+          nonce: BigInt(Date.now()),
+          // 60 s signing window. If the wallet UX takes longer, the
+          // backend will refuse and the operator retries.
+          deadline: BigInt(Math.floor(Date.now() / 1000) + 60),
+        };
+        const invalid = validatePerpOrderIntent(intent);
+        if (invalid !== null) {
+          setSubmitError(`Refusing to sign malformed intent: ${invalid}`);
+          return;
+        }
+        const typedData = buildPerpOrderIntentTypedData(
+          intent,
+          wallet.chainId,
+          engineAddress,
+        );
+        const signResult = await wallet.signTypedData(typedData);
+        if (!signResult.ok) {
+          if (signResult.reason === "rejected") {
+            setSubmitError("Signature rejected in wallet. Try again.");
+          } else if (signResult.reason === "wrong_network") {
+            setSubmitError("Wallet is on the wrong network.");
+          } else if (signResult.reason === "no_provider") {
+            setSubmitError("No wallet provider available.");
+          } else {
+            setSubmitError(
+              signResult.message ?? "Signing failed. Try again.",
+            );
+          }
+          return;
+        }
+        // Signature is discarded after this call — never persisted.
+        const req: SubmitPerpsSignedOrderRequest = {
+          intent: {
+            intentId: intent.intentId,
+            trader: intent.trader,
+            subaccountId: intent.subaccountId,
+            marketId: intent.marketId.toString(),
+            side: intent.side,
+            size1e8: intent.size1e8.toString(),
+            limitPrice1e8: intent.limitPrice1e8.toString(),
+            maxExecPrice1e8: intent.maxExecPrice1e8.toString(),
+            minExecPrice1e8: intent.minExecPrice1e8.toString(),
+            nonce: intent.nonce.toString(),
+            deadline: intent.deadline.toString(),
+          },
+          signature: signResult.signature,
+        };
+        const response = await submitPerpsSignedOrder(req);
+        setLastAcceptedOrderId(response.order.order_id);
+        return;
+      }
       // PERPS-V2-WRITE-AUTH-ENFORCEMENT-V1 — build v2 canonical bytes,
       // sign, and thread the envelope into the submit body. The backend
       // rebuilds these bytes from the body fields and rejects any
@@ -534,6 +632,20 @@ export function PerpsTradeFormWidget() {
       ) : null}
     </div>
   );
+}
+
+/** PERPS-FULLSTACK-RUNTIME-INTEGRATION-V1 (Part D + H) — resolve the
+ *  PerpMatchingEngine EIP-712 domain address from the build-time env.
+ *  Returns null when unset (or empty / whitespace / not a 0x-prefixed
+ *  20-byte hex) — the signing path refuses to open the wallet prompt
+ *  rather than silently signing against the zero address on the wrong
+ *  chain. No hardcoded fallback. */
+function perpMatchingEngineAddress(): `0x${string}` | null {
+  const raw = process.env.NEXT_PUBLIC_PERP_MATCHING_ENGINE_ADDRESS;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(trimmed)) return null;
+  return trimmed as `0x${string}`;
 }
 
 // Compute a naive isolated-margin figure in 1e8 units from the raw

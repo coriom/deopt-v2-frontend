@@ -2020,6 +2020,97 @@ export function submitPerpsOrder(
   );
 }
 
+// ---------------------------------------------------------------------
+// PERPS-FULLSTACK-RUNTIME-INTEGRATION-V1 (Part D + H) — signed order
+// submit path.
+//
+// This path threads a `PerpOrderIntent` EIP-712 signature to the
+// backend at `POST /perps/orders/signed`. The backend re-derives the
+// on-chain matching engine's TYPEHASH
+// (`0xeeaf370e4195f568ccb783efe23803dd5bf3c859aef9d0c3e3f211c2da2d5d1c`
+// — see `src/lib/perp-order-intent.ts` for the frozen type string) and
+// re-verifies the signature server-side. The route is still gated by
+// the closed-test allowlist AND `PERPS_PUBLIC_TRADING_ENABLED`; the
+// frontend closed-test copy flag is a UI-only hint and NEVER a
+// security gate. When both backend gates are off, this call returns
+// 503 `PerpsNotLive` verbatim.
+// ---------------------------------------------------------------------
+
+/**
+ * `PerpOrderIntent` in wire-safe (string-only) form. All numeric
+ * fields are base-10 decimal strings mirroring the browser-side
+ * `PerpOrderIntent` bigint fields; the backend re-parses to uint128/
+ * uint256 to derive the on-chain typed-data hash.
+ */
+export interface SignedPerpOrderIntentWire {
+  intentId: string;
+  trader: string;
+  subaccountId: number;
+  marketId: string;
+  side: 0 | 1;
+  size1e8: string;
+  limitPrice1e8: string;
+  maxExecPrice1e8: string;
+  minExecPrice1e8: string;
+  nonce: string;
+  deadline: string;
+}
+
+/**
+ * Request body for `POST /perps/orders/signed`.
+ *
+ * The signature is a 65-byte EIP-712 signature (r || s || v, 0x-prefixed).
+ * The backend rebuilds the typed-data hash from `intent` and asserts
+ * `ecrecover(hash, sig) == intent.trader`; any drift on either side
+ * rejects the order at the challenge verifier.
+ */
+export interface SubmitPerpsSignedOrderRequest {
+  intent: SignedPerpOrderIntentWire;
+  signature: `0x${string}`;
+}
+
+/**
+ * Mirrors the existing `SubmitPerpsOrderResponse` — the backend
+ * returns the same accepted-order envelope regardless of which submit
+ * path (v2 write-auth or signed intent) the caller used.
+ */
+export interface SubmitPerpsSignedOrderResponse {
+  status: "ok";
+  order: PerpOrderView;
+  fills: PerpFillView[];
+  chain_id: number;
+  trading_enabled: true;
+}
+
+/**
+ * Submit a signed `PerpOrderIntent` to the closed-test path.
+ *
+ * Backend behavior:
+ *   - Default (`PERPS_PUBLIC_TRADING_ENABLED=false` AND wallet not
+ *     on closed-test allowlist) → 503 `PerpsNotLive`.
+ *   - Closed-test allowlist match → intent is verified + dispatched
+ *     via the PG repository, same code path as `submitPerpsOrder`.
+ *
+ * Signature semantics: signed under domain
+ * `EIP712("DeOptV2-PerpMatchingEngine", "1")` with
+ * `verifyingContract = NEXT_PUBLIC_PERP_MATCHING_ENGINE_ADDRESS`, over
+ * the frozen TYPEHASH
+ * `0xeeaf370e4195f568ccb783efe23803dd5bf3c859aef9d0c3e3f211c2da2d5d1c`.
+ * See `src/lib/perp-order-intent.ts` for the type string and field
+ * ordering. Backend is the authority.
+ */
+export function submitPerpsSignedOrder(
+  request: SubmitPerpsSignedOrderRequest,
+  signal?: AbortSignal,
+): Promise<SubmitPerpsSignedOrderResponse> {
+  return rawRequest<SubmitPerpsSignedOrderResponse>(
+    "POST",
+    "/perps/orders/signed",
+    request,
+    signal,
+  );
+}
+
 /**
  * Cancel an owned Perps order. `caller` must match the account that
  * submitted the order and the `authorization` envelope must be a v2
