@@ -233,19 +233,83 @@ export interface HistoryData {
 
 // --- Balances ---
 
+/**
+ * DEOPT_MULTICHAIN_SCHEMA_HARDENING_AND_MULTICOLLATERAL_ACTIVATION_DESIGN_V1
+ * Part G — capable of representing USDC + WETH + cbBTC on a future
+ * multi-collateral runtime while remaining byte-compatible with the
+ * V1 USDC-only backend responses.
+ *
+ * Every field beyond `token`/`balance` is optional; the frontend
+ * displays what the backend sends. When the backend gains multi-
+ * collateral endpoints, it fills in the extra USD-normalisation
+ * fields for each row and the existing `BalancesCard` (already an
+ * iterator over `balances[]`) renders the additional rows without
+ * a component change.
+ *
+ * Fail-closed rule for the UI:
+ *   * `is_deposit_enabled === false` → deposit form MUST NOT expose
+ *     this token as depositable, even if it appears in the list with
+ *     a non-zero balance (a paused-deposit / open-withdrawal state).
+ *   * `is_withdrawal_enabled === false` → withdraw form MUST NOT
+ *     expose this token as withdrawable.
+ *   * Missing = treat as `false` (do not expose).
+ */
 export interface Balance {
   token: EthAddress;
   symbol?: string;
   decimals?: number;
+  /** Raw balance in native token decimals, as a decimal string. */
   balance: DecimalString;
   balance_with_yield?: DecimalString;
   strategy_assets_preview?: DecimalString;
+  /**
+   * True iff this asset is currently accepted as *margin backing*
+   * (deposit enabled + non-zero collateral factor). Old field name;
+   * preserved for backwards compatibility. Prefer
+   * `is_deposit_enabled` / `collateral_factor_bps` on new UI.
+   */
   is_collateral_active?: boolean;
+  /**
+   * DEOPT_MULTICOLLATERAL_FRONTEND_CONTRACT_V1 — per-row USD
+   * normalisation. All optional; present when the backend has
+   * priced the asset in USD for the requesting subaccount.
+   */
+  /** Raw USD value, `1e8` scaled, before haircut. */
+  raw_usd_value_1e8?: DecimalString;
+  /** Risk-adjusted USD value, `1e8` scaled, after collateral factor. */
+  risk_adjusted_usd_value_1e8?: DecimalString;
+  /** Collateral factor applied (bps, 10_000 = 100%). */
+  collateral_factor_bps?: number;
+  /** Liquidation factor applied (bps, 10_000 = 100%). */
+  liquidation_factor_bps?: number;
+  /** Whether the vault currently accepts deposits of this token. */
+  is_deposit_enabled?: boolean;
+  /** Whether the vault currently accepts withdrawals of this token. */
+  is_withdrawal_enabled?: boolean;
+}
+
+/**
+ * DEOPT_MULTICOLLATERAL_FRONTEND_CONTRACT_V1 — per-subaccount totals
+ * for the balances panel footer. All optional; present when the
+ * backend has priced every asset in USD.
+ */
+export interface BalancesTotals {
+  /** Sum of raw USD values across all balances, `1e8` scaled. */
+  raw_value_usd_1e8?: DecimalString;
+  /** Sum of risk-adjusted USD values, `1e8` scaled. */
+  margin_value_usd_1e8?: DecimalString;
+  /** Sum of liquidation-adjusted USD values, `1e8` scaled. */
+  liquidation_value_usd_1e8?: DecimalString;
 }
 
 export interface BalancesData {
   address: EthAddress;
   balances: Balance[];
+  /**
+   * DEOPT_MULTICOLLATERAL_FRONTEND_CONTRACT_V1 — optional. Present
+   * on multi-collateral runtimes.
+   */
+  totals?: BalancesTotals;
 }
 
 // --- Exercise / Close previews (NOT_READY data when SOURCE_UNAVAILABLE) ---
