@@ -20,22 +20,55 @@
 
 import type { Address, Hex } from "viem";
 import { keccak256, toBytes, toHex } from "viem";
+import { BASE_SEPOLIA, expectedChain } from "./chains";
 import { tradingApiBaseUrl, TradingApiError } from "./trading-api";
 
 // ---------------------------------------------------------------------
-// Frozen domain constants (must mirror backend `auth::write_authorization`).
+// Domain constants (must mirror backend `auth::write_authorization`).
+//
+// DEOPT_MULTICHAIN_MULTICOLLATERAL_FOUNDATION_V1 — the concrete values
+// now come from the active chain's `writeAuthDomain` in `chains.ts`
+// instead of being hard-coded. The Base Sepolia entry in `chains.ts`
+// is BYTE-FROZEN so the exported literals below are guaranteed
+// byte-identical to the previous constants — the wire-contract tests
+// at `tests/node/write-auth-canonical.contract.mjs` and the backend
+// unit test `canonical_payload_encoding_is_frozen` will fail loudly
+// if this ever drifts.
+//
+// The exported names are preserved as backwards-compatible aliases so
+// downstream imports (`WRITE_AUTH_DOMAIN_CHAIN_ID`, `ENVIRONMENT`,
+// …) continue to compile without changes.
 // ---------------------------------------------------------------------
 
-export const WRITE_AUTH_DOMAIN_NAME = "DeOpt API Write" as const;
-export const WRITE_AUTH_DOMAIN_VERSION = "1" as const;
-export const WRITE_AUTH_DOMAIN_CHAIN_ID = 84532 as const;
-export const WRITE_AUTH_DOMAIN_SALT_PREIMAGE =
-  "deopt-api-write:base-sepolia:v1" as const;
+/**
+ * Resolve the write-auth domain for the currently active chain.
+ * V1: always returns the `BASE_SEPOLIA` entry when
+ * `NEXT_PUBLIC_CHAIN_ENV` selects `sepolia` (the default). Local
+ * dev may select `anvil`. Mainnet is force-remapped to Base Sepolia
+ * by `expectedChainId()` — the UI never activates a mainnet domain.
+ */
+export function activeWriteAuthDomain() {
+  return expectedChain().writeAuthDomain;
+}
+
+// The exported literal constants below reference the Base Sepolia
+// entry directly so their values are compile-time visible and
+// byte-frozen. `activeWriteAuthDomain()` is the correct runtime
+// accessor for any future multi-chain switch.
+export const WRITE_AUTH_DOMAIN_NAME = BASE_SEPOLIA.writeAuthDomain
+  .name as "DeOpt API Write";
+export const WRITE_AUTH_DOMAIN_VERSION = BASE_SEPOLIA.writeAuthDomain
+  .version as "1";
+export const WRITE_AUTH_DOMAIN_CHAIN_ID = BASE_SEPOLIA.writeAuthDomain
+  .chainId as 84532;
+export const WRITE_AUTH_DOMAIN_SALT_PREIMAGE = BASE_SEPOLIA.writeAuthDomain
+  .saltPreimage as "deopt-api-write:base-sepolia:v1";
 export const WRITE_AUTH_DOMAIN_SALT: Hex = keccak256(
   toBytes(WRITE_AUTH_DOMAIN_SALT_PREIMAGE),
 );
 
-export const ENVIRONMENT = "base-sepolia" as const;
+export const ENVIRONMENT = BASE_SEPOLIA.writeAuthDomain
+  .environment as "base-sepolia";
 
 export const WRITE_AUTH_TYPES: Record<
   string,
