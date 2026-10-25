@@ -22,6 +22,7 @@ import type { Address, Hex } from "viem";
 import { keccak256, toBytes, toHex } from "viem";
 import { BASE_SEPOLIA, expectedChain } from "./chains";
 import { tradingApiBaseUrl, TradingApiError } from "./trading-api";
+import { isPublicTradingEnabled } from "./public-trading";
 
 // ---------------------------------------------------------------------
 // Domain constants (must mirror backend `auth::write_authorization`).
@@ -323,6 +324,13 @@ export async function requestChallenge(args: {
   idempotencyKey?: string;
   signal?: AbortSignal;
 }): Promise<WriteAuthChallenge> {
+  if (!isPublicTradingEnabled()) {
+    throw new TradingApiError({
+      code: "NETWORK",
+      message: "Trading authorization is unavailable during maintenance.",
+      status: 0,
+    });
+  }
   const url = `${tradingApiBaseUrl()}/auth/write-challenges`;
   let res: Response;
   try {

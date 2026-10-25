@@ -26,11 +26,55 @@ import {
   type WorkspaceLayout,
 } from "./workspace-types";
 
-function isBrowser(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.localStorage !== "undefined"
-  );
+function storage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function read(key: string): string | null {
+  try {
+    return storage()?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function write(key: string, value: string): boolean {
+  try {
+    const store = storage();
+    if (!store) return false;
+    store.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function remove(key: string): void {
+  try {
+    storage()?.removeItem(key);
+  } catch {
+    // Browser storage may be denied even when the property exists.
+  }
+}
+
+function workspaceKeys(): string[] {
+  try {
+    const store = storage();
+    if (!store) return [];
+    const keys: string[] = [];
+    for (let i = 0; i < store.length; i += 1) {
+      const key = store.key(i);
+      if (key?.startsWith(WORKSPACE_STORAGE_PREFIX)) keys.push(key);
+    }
+    return keys;
+  } catch {
+    return [];
+  }
 }
 
 export function walletKeyFor(address: string | null): string {
@@ -72,22 +116,21 @@ function isStoredWorkspaces(value: unknown): value is StoredWorkspaces {
 }
 
 export function loadBucket(walletKey: string): StoredWorkspaces {
-  if (!isBrowser()) return emptyBucket(walletKey);
-  const raw = window.localStorage.getItem(storageKeyFor(walletKey));
+  const raw = read(storageKeyFor(walletKey));
   if (!raw) return emptyBucket(walletKey);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    window.localStorage.removeItem(storageKeyFor(walletKey));
+    remove(storageKeyFor(walletKey));
     return emptyBucket(walletKey);
   }
   if (!isStoredWorkspaces(parsed) || parsed.version !== WORKSPACE_LAYOUT_VERSION) {
-    window.localStorage.removeItem(storageKeyFor(walletKey));
+    remove(storageKeyFor(walletKey));
     return emptyBucket(walletKey);
   }
   if (parsed.walletKey !== walletKey) {
-    window.localStorage.removeItem(storageKeyFor(walletKey));
+    remove(storageKeyFor(walletKey));
     return emptyBucket(walletKey);
   }
   const now = nowMs();
@@ -113,14 +156,7 @@ export function loadBucket(walletKey: string): StoredWorkspaces {
       walletKey,
       workspaces: kept,
     };
-    try {
-      window.localStorage.setItem(
-        storageKeyFor(walletKey),
-        JSON.stringify(cleaned),
-      );
-    } catch {
-      // ignore — pruning is best-effort.
-    }
+    write(storageKeyFor(walletKey), JSON.stringify(cleaned));
   }
   return {
     version: WORKSPACE_LAYOUT_VERSION,
@@ -143,7 +179,7 @@ export function saveWorkspaceLayout(
   canvasWidthPx: number,
   canvasHeightPx: number,
 ): WorkspaceLayout | null {
-  if (!isBrowser()) return null;
+  if (!storage()) return null;
   // Refuse to persist a layout while the canvas is still measuring —
   // saving zero canvas dimensions would let `findFreeSlot` and other
   // helpers see (0, 0) on next load before ResizeObserver fires.
@@ -166,14 +202,7 @@ export function saveWorkspaceLayout(
     expiresAt: now + defaultTtl(walletKey),
   };
   bucket.workspaces[workspaceId] = layout;
-  try {
-    window.localStorage.setItem(
-      storageKeyFor(walletKey),
-      JSON.stringify(bucket),
-    );
-  } catch {
-    return null;
-  }
+  if (!write(storageKeyFor(walletKey), JSON.stringify(bucket))) return null;
   return layout;
 }
 
@@ -181,17 +210,10 @@ export function resetWorkspaceLayout(
   walletKey: string,
   workspaceId: WorkspaceId,
 ): void {
-  if (!isBrowser()) return;
+  if (!storage()) return;
   const bucket = loadBucket(walletKey);
   delete bucket.workspaces[workspaceId];
-  try {
-    window.localStorage.setItem(
-      storageKeyFor(walletKey),
-      JSON.stringify(bucket),
-    );
-  } catch {
-    // ignore
-  }
+  write(storageKeyFor(walletKey), JSON.stringify(bucket));
 }
 
 /** Recovery helper: wipe every workspace layout bucket under our
@@ -199,14 +221,9 @@ export function resetWorkspaceLayout(
  *  manual console use (`__deoptClearWorkspaceLayouts()`); no UI
  *  surface in the terminal. */
 export function clearWorkspaceLayouts(): number {
-  if (!isBrowser()) return 0;
-  const keys: string[] = [];
-  for (let i = 0; i < window.localStorage.length; i += 1) {
-    const k = window.localStorage.key(i);
-    if (k && k.startsWith(WORKSPACE_STORAGE_PREFIX)) keys.push(k);
-  }
+  const keys = workspaceKeys();
   for (const k of keys) {
-    window.localStorage.removeItem(k);
+    remove(k);
   }
   return keys.length;
 }
@@ -223,25 +240,20 @@ export function clearWorkspaceLayoutForWorkspace(
 /** Prune expired buckets across every key under our prefix. Safe to
  *  call on app boot; idempotent. */
 export function pruneExpiredLayouts(): void {
-  if (!isBrowser()) return;
-  const keysToCheck: string[] = [];
-  for (let i = 0; i < window.localStorage.length; i += 1) {
-    const k = window.localStorage.key(i);
-    if (k && k.startsWith(WORKSPACE_STORAGE_PREFIX)) keysToCheck.push(k);
-  }
+  const keysToCheck = workspaceKeys();
   const now = nowMs();
   for (const k of keysToCheck) {
-    const raw = window.localStorage.getItem(k);
+    const raw = read(k);
     if (!raw) continue;
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      window.localStorage.removeItem(k);
+      remove(k);
       continue;
     }
     if (!isStoredWorkspaces(parsed) || parsed.version !== WORKSPACE_LAYOUT_VERSION) {
-      window.localStorage.removeItem(k);
+      remove(k);
       continue;
     }
     let anyKept = false;
@@ -256,13 +268,9 @@ export function pruneExpiredLayouts(): void {
       }
     }
     if (!anyKept) {
-      window.localStorage.removeItem(k);
+      remove(k);
     } else {
-      try {
-        window.localStorage.setItem(k, JSON.stringify(parsed));
-      } catch {
-        // ignore
-      }
+      write(k, JSON.stringify(parsed));
     }
   }
 }

@@ -162,7 +162,7 @@ export function WrongNetworkBanner() {
       className="flex items-center justify-center gap-3 border-y border-emerald-500/40 bg-zinc-950 px-4 py-2 text-center text-xs font-medium text-emerald-100"
     >
       <span>
-        Wrong network — connected to chain {chainId}. DeOpt V2 testnet beta
+        Wrong network — connected to chain {chainId}. DeOpt testnet beta
         runs on {expected.name} (chain {expected.id}). Switch your wallet
         before signing.
       </span>

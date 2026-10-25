@@ -31,9 +31,9 @@ function safeLocalStorage(): Storage | null {
 export function readActiveSubaccountId(address: string): number | null {
   const ls = safeLocalStorage();
   if (!ls) return null;
-  const raw = ls.getItem(keyFor(address));
-  if (raw == null) return null;
   try {
+    const raw = ls.getItem(keyFor(address));
+    if (raw == null) return null;
     const parsed = JSON.parse(raw) as { subaccountId?: unknown };
     const id = parsed.subaccountId;
     if (typeof id === "number" && Number.isFinite(id) && id >= 1) {

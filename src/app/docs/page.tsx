@@ -40,7 +40,7 @@ export default function DocsIndexPage() {
           DeOpt Public Testnet Beta Docs
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-zinc-300">
-          Everything you need to test DeOpt V2 on Base Sepolia. This is a{" "}
+          Everything you need to test DeOpt on Base Sepolia. This is a{" "}
           <strong className="text-emerald-300">
             public testnet beta — unaudited, experimental, Base Sepolia only.
           </strong>{" "}

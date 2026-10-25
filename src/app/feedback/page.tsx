@@ -16,7 +16,7 @@ export default function FeedbackPage() {
           Report a bug
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-zinc-300">
-          DeOpt V2 is a{" "}
+          DeOpt is a{" "}
           <strong className="text-emerald-300">
             public testnet beta — unaudited, experimental, Base Sepolia only
           </strong>

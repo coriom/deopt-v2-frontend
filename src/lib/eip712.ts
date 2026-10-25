@@ -10,6 +10,7 @@
 // in the TradeTicket / RfqPanel components.
 
 import type { Address, Hex } from "viem";
+import { isPublicTradingEnabled } from "./public-trading";
 
 export interface Eip712Domain {
   name: string;
@@ -26,9 +27,8 @@ export interface TypedData {
 }
 
 /**
- * Hard gate. M-P3b allows user-initiated `signTypedData` calls; M-P3
- * had this hard-coded false. The product policy is now: signing is
- * enabled ONLY when:
+ * Hard gate. Production remains view-only during protocol maintenance.
+ * In local development, user-initiated signing is enabled ONLY when:
  *   1. backend provides the typed-data envelope (via
  *      /options/execution-intents/:id/signing-payload), OR
  *   2. the typed-data is built locally for development against the
@@ -39,7 +39,7 @@ export interface TypedData {
  * wallet prompt opens.
  */
 export function isSigningEnabled(): boolean {
-  return true;
+  return isPublicTradingEnabled();
 }
 
 // ----- OrderbookOptionTrade -----

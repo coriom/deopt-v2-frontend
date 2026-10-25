@@ -415,7 +415,7 @@ export function AdminDashboard() {
         <header className="flex flex-col gap-4 border-b border-neutral-800 pb-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
-              DeOpt v2
+              DeOpt
             </p>
             <h1 className="mt-2 text-2xl font-semibold tracking-normal text-white sm:text-3xl">
               Admin Operations

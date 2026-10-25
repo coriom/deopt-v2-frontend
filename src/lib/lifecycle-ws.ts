@@ -80,7 +80,7 @@ function resolveWsUrl(): string {
   const base = tradingApiBaseUrl();
   if (base.startsWith("https://")) return `${base.replace(/^https:\/\//, "wss://")}/ws`;
   if (base.startsWith("http://")) return `${base.replace(/^http:\/\//, "ws://")}/ws`;
-  return "ws://localhost:8080/ws";
+  return process.env.NODE_ENV === "production" ? "" : "ws://localhost:8080/ws";
 }
 
 export class LifecycleWsClient {
@@ -122,6 +122,10 @@ export class LifecycleWsClient {
   private connect(): void {
     if (this.disposed) return;
     const url = resolveWsUrl();
+    if (!url) {
+      this.setStatus("error", "Trading backend is unavailable during maintenance.");
+      return;
+    }
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);

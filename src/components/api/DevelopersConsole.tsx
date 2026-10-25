@@ -29,6 +29,7 @@ import { baseSepolia } from "viem/chains";
 import { useWallet } from "@/lib/wallet";
 import { docsPath } from "@/lib/docs-url";
 import { expectedChainId, BASE_SEPOLIA } from "@/lib/chains";
+import { isPublicTradingEnabled } from "@/lib/public-trading";
 
 type Environment = "Local" | "Testnet" | "Production" | "Unknown";
 
@@ -240,6 +241,7 @@ const FAUCET_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
  * yields a valid 0x-address.
  */
 function resolveFaucetAddress(): Address | null {
+  if (!isPublicTradingEnabled()) return null;
   const fromEnv =
     typeof process !== "undefined"
       ? (process.env.NEXT_PUBLIC_TESTNET_FAUCET_ADDRESS ?? "").trim()

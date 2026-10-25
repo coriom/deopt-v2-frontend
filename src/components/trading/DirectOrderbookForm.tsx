@@ -44,6 +44,7 @@ import type {
 } from "@/lib/trading-types";
 import { useWallet } from "@/lib/wallet";
 import { buildAuthorization, canonical, canonicalV2 } from "@/lib/write-auth";
+import { isPublicTradingEnabled } from "@/lib/public-trading";
 import { OptionsTwapForm } from "./OptionsTwapForm";
 import { TifPopover, PostCheckbox, type Tif } from "./TifPopover";
 
@@ -159,6 +160,7 @@ export function DirectOrderbookForm({
   );
 
   const canSubmit =
+    isPublicTradingEnabled() &&
     orderType === "limit" &&
     seriesId.length > 0 &&
     walletAddress !== null &&
@@ -438,7 +440,9 @@ export function DirectOrderbookForm({
             data-testid="direct-orderbook-submit"
             className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold text-black hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           >
-            {phase === "submitting"
+            {!isPublicTradingEnabled()
+              ? "Trading unavailable"
+              : phase === "submitting"
               ? "Submitting…"
               : !size1e8 || size1e8 === "0"
                 ? "Enter amount"

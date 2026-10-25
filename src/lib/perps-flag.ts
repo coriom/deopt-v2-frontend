@@ -10,6 +10,8 @@
 // literal strings `"true"` / `"1"` / `"yes"` (case-insensitive) as
 // enabled; everything else is disabled.
 
+import { isPublicTradingEnabled } from "./public-trading";
+
 const ENV_KEY = "NEXT_PUBLIC_PERPS_TICKET_ENABLED";
 
 function truthy(v: string | undefined | null): boolean {
@@ -19,12 +21,11 @@ function truthy(v: string | undefined | null): boolean {
 }
 
 /**
- * Returns true iff the strict opt-in Perps ticket enablement flag is
- * on for this build. Default false. NEVER auto-detected. NEVER
- * inferred from wallet or network state.
+ * Returns true iff the strict opt-in Perps ticket flag is on in a
+ * development build. Production remains view-only during maintenance.
  */
 export function isPerpsTicketEnabled(): boolean {
-  return truthy(process.env[ENV_KEY]);
+  return isPublicTradingEnabled() && truthy(process.env[ENV_KEY]);
 }
 
 /** The literal env var name — surfaced by tests + docs. */

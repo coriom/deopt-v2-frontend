@@ -5,8 +5,8 @@
 // not accept or require it.
 //
 // Base URL: `NEXT_PUBLIC_TRADING_API_BASE_URL` (defaults to
-// `http://localhost:3000` for a local backend; or `http://localhost:4010`
-// for a prism mock against the OpenAPI spec — see
+// `http://localhost:3000` only in development, never in a deployed
+// production build; or `http://localhost:4010` for a prism mock — see
 // `docs/TRADING_UI_MOCK_API_RUNBOOK.md`).
 
 import type {
@@ -36,6 +36,7 @@ import type {
   TradingErrorCode,
   TradingHealthData,
 } from "./trading-types";
+import { isPublicTradingEnabled } from "./public-trading";
 
 export class TradingApiError extends Error {
   code: TradingErrorCode | "NETWORK" | "PARSE";
@@ -59,7 +60,19 @@ export function tradingApiBaseUrl(): string {
     const v = process.env.NEXT_PUBLIC_TRADING_API_BASE_URL;
     if (v && v.length > 0) return v.replace(/\/$/, "");
   }
-  return "http://localhost:3000";
+  return process.env.NODE_ENV === "production" ? "" : "http://localhost:3000";
+}
+
+function backendUrl(path: string): string {
+  const base = tradingApiBaseUrl();
+  if (!base) {
+    throw new TradingApiError({
+      code: "NETWORK",
+      message: "Trading backend is unavailable during maintenance.",
+      status: 0,
+    });
+  }
+  return `${base}${path}`;
 }
 
 async function request<T>(
@@ -68,7 +81,14 @@ async function request<T>(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<Envelope<T>> {
-  const url = `${tradingApiBaseUrl()}${path}`;
+  if (method !== "GET" && !isPublicTradingEnabled()) {
+    throw new TradingApiError({
+      code: "NETWORK",
+      message: "Trading submissions are unavailable during maintenance.",
+      status: 0,
+    });
+  }
+  const url = backendUrl(path);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -459,7 +479,14 @@ async function rawRequest<T>(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const url = `${tradingApiBaseUrl()}${path}`;
+  if (method !== "GET" && !isPublicTradingEnabled()) {
+    throw new TradingApiError({
+      code: "NETWORK",
+      message: "Trading submissions are unavailable during maintenance.",
+      status: 0,
+    });
+  }
+  const url = backendUrl(path);
   let res: Response;
   try {
     res = await fetch(url, {

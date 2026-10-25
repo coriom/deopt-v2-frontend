@@ -41,7 +41,7 @@ function computeDefaultWsUrl(): string {
       }
     }
   }
-  return "ws://localhost:8080/ws";
+  return process.env.NODE_ENV === "production" ? "" : "ws://localhost:8080/ws";
 }
 
 export function WsQuickTest() {
