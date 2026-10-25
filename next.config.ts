@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Only the public Git SHA is embedded in the client build.
+  env: {
+    NEXT_PUBLIC_DEOPT_COMMIT: process.env.VERCEL_GIT_COMMIT_SHA ?? "unknown",
+  },
 };
 
 export default nextConfig;

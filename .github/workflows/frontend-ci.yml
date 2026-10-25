@@ -13,9 +13,6 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
-    env:
-      NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:8080
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,7 +20,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -33,7 +30,32 @@ jobs:
         run: npm run lint
 
       - name: TypeScript
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Build
         run: npm run build
+
+      - name: Node tests
+        run: npm run test:node
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Production browser acceptance
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3101
+          E2E_PRODUCTION_MAINTENANCE: "1"
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3101 >/tmp/deopt-frontend-ci.log 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3101/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3101/health >/dev/null
+          npx playwright test tests/e2e/client-error-monitoring.spec.ts tests/e2e/production-stability.spec.ts tests/e2e/production-maintenance.spec.ts tests/e2e/perps-chart-isolation.spec.ts tests/e2e/workspace-storage-denied.spec.ts tests/e2e/wallet-connect-error-v1.spec.ts tests/e2e/wrong-network-banner.spec.ts
+
+      - name: Live production smoke after automatic deployment
+        if: github.event_name == 'push'
+        run: npm run acceptance:production -- https://deoptv2-frontend.vercel.app "$GITHUB_SHA"

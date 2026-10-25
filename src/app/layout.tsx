@@ -67,6 +67,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        <meta name="deopt-commit" content={process.env.NEXT_PUBLIC_DEOPT_COMMIT ?? "unknown"} />
         {/* Apply the user's saved brightness preference synchronously
             before first paint to avoid a flash of default brightness.
             The formula is duplicated from
