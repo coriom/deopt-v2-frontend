@@ -52,6 +52,7 @@ import {
   readSubaccountFromUrl,
   writeActiveSubaccountId,
 } from "./subaccount-storage";
+import { isPublicTradingEnabled } from "./public-trading";
 import { buildAuthorization, canonical } from "./write-auth";
 
 declare global {
@@ -272,6 +273,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const signTypedData = useCallback(
     async (args: SignTypedDataArgs): Promise<SignResult> => {
+      if (!isPublicTradingEnabled()) {
+        return {
+          ok: false,
+          reason: "error",
+          message: "Trading unavailable during maintenance.",
+        };
+      }
       if (!walletClient || !address) {
         return { ok: false, reason: "no_provider" };
       }
@@ -302,6 +310,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const signMessage = useCallback(
     async (message: string): Promise<SignResult> => {
+      if (!isPublicTradingEnabled()) {
+        return {
+          ok: false,
+          reason: "error",
+          message: "Trading unavailable during maintenance.",
+        };
+      }
       if (!walletClient || !address) {
         return { ok: false, reason: "no_provider" };
       }
