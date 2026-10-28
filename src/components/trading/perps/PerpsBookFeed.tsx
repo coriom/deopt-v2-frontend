@@ -11,8 +11,9 @@
 import { useEffect, useState } from "react";
 import { PerpsOrderbookWidget } from "./PerpsOrderbook";
 import { PerpsTradeFeedWidget } from "./PerpsTradeFeed";
+import { PerpsFeeHistory } from "./PerpsFeeHistory";
 
-type Tab = "book" | "feed";
+type Tab = "book" | "feed" | "fees";
 
 const STORAGE_KEY = "deopt-perps-book-feed-tab-v1";
 
@@ -20,7 +21,7 @@ function readTab(): Tab {
   if (typeof window === "undefined") return "book";
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw === "feed" || raw === "book") return raw;
+    if (raw === "feed" || raw === "book" || raw === "fees") return raw;
   } catch {
     /* fall through */
   }
@@ -61,25 +62,32 @@ export function PerpsBookFeedWidget() {
         role="tablist"
         aria-label="Book or feed"
         data-testid="widget-perps-book-feed-tabs"
-        className="flex items-center gap-1 border-b border-zinc-900 px-2 py-1"
+        className="flex items-center gap-1 border-b border-zinc-900 pl-2 pr-10 py-1"
       >
         <TabButton
           active={tab === "book"}
           onClick={() => select("book")}
           testid="widget-perps-book-feed-tab-book"
         >
-          Order Book
+          Book
         </TabButton>
         <TabButton
           active={tab === "feed"}
           onClick={() => select("feed")}
           testid="widget-perps-book-feed-tab-feed"
         >
-          Perps Feed
+          Feed
+        </TabButton>
+        <TabButton
+          active={tab === "fees"}
+          onClick={() => select("fees")}
+          testid="widget-perps-book-feed-tab-fees"
+        >
+          My Fees
         </TabButton>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
-        {tab === "book" ? <PerpsOrderbookWidget /> : <PerpsTradeFeedWidget />}
+        {tab === "book" ? <PerpsOrderbookWidget /> : tab === "feed" ? <PerpsTradeFeedWidget /> : <PerpsFeeHistory />}
       </div>
     </div>
   );

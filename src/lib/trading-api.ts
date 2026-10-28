@@ -63,6 +63,59 @@ export function tradingApiBaseUrl(): string {
   return process.env.NODE_ENV === "production" ? "" : "http://localhost:3000";
 }
 
+/** Wallet-scoped settled receipt history. Signed subaccount labels are not
+ * independent on-chain economic ownership. Never present them as such. */
+export interface CanonicalPerpFeeRow {
+  chain_id: number;
+  tx_hash: string;
+  trade_log_index: number;
+  block_number: number;
+  market_id: string;
+  wallet: string;
+  role: "maker" | "taker";
+  side: "buy" | "sell";
+  fee_native: string;
+  subaccount_id: null;
+  signed_subaccount_id: number | null;
+  attribution: string;
+  settlement: string;
+}
+
+export interface CanonicalPerpFeeHistory {
+  chain_id: 84532;
+  identity_scope: "wallet";
+  subaccount_attribution: "unresolved";
+  current_chain_canonicality: string;
+  fees: CanonicalPerpFeeRow[];
+  next_cursor: { before_block: number; before_log_index: number } | null;
+  trading_enabled: false;
+}
+
+export async function fetchCanonicalPerpFees(wallet: string, signal?: AbortSignal): Promise<CanonicalPerpFeeHistory> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) throw new Error("Invalid wallet address");
+  const response = await fetch(backendUrl(`/accounts/${wallet}/perps/canonical-fees?limit=25`), {
+    method: "GET", cache: "no-store", signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error("Fee history unavailable");
+  const data: unknown = await response.json();
+  if (!data || typeof data !== "object") throw new Error("Invalid fee history response");
+  const value = data as Partial<CanonicalPerpFeeHistory>;
+  if (value.chain_id !== 84532 || value.identity_scope !== "wallet"
+      || value.subaccount_attribution !== "unresolved" || value.trading_enabled !== false
+      || typeof value.current_chain_canonicality !== "string"
+      || !Array.isArray(value.fees) || value.fees.length > 25
+      || value.fees.some((row) => !row || row.chain_id !== 84532
+        || row.wallet?.toLowerCase() !== wallet.toLowerCase()
+        || row.subaccount_id !== null || !/^[0-9]{1,78}$/.test(row.fee_native ?? "")
+        || !Number.isSafeInteger(row.block_number) || !Number.isSafeInteger(row.trade_log_index)
+        || !["maker", "taker"].includes(row.role) || !["buy", "sell"].includes(row.side)
+        || !/^0x[0-9a-fA-F]{64}$/.test(row.tx_hash ?? ""))) {
+    throw new Error("Fee history identity or accounting mismatch");
+  }
+  return value as CanonicalPerpFeeHistory;
+}
+
 function backendUrl(path: string): string {
   const base = tradingApiBaseUrl();
   if (!base) {
