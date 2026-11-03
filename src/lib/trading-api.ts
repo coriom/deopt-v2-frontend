@@ -56,6 +56,7 @@ export class TradingApiError extends Error {
 }
 
 export function tradingApiBaseUrl(): string {
+  if (walletReadAuthEnabled()) return "/api/deopt/public";
   if (typeof process !== "undefined") {
     const v = process.env.NEXT_PUBLIC_TRADING_API_BASE_URL;
     if (v && v.length > 0) return v.replace(/\/$/, "");
@@ -91,12 +92,72 @@ export interface CanonicalPerpFeeHistory {
   trading_enabled: false;
 }
 
+export function walletReadAuthEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_DEOPT_WALLET_READ_AUTH === "true";
+}
+
+export class WalletReadAuthRequired extends Error {}
+
+export async function issueWalletReadChallenge(wallet: string): Promise<{ nonce: string; message: string }> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) throw new Error("Invalid wallet address");
+  const response = await fetch("/api/deopt/challenge", {
+    method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address: wallet }),
+  });
+  if (!response.ok) throw new Error("Wallet sign-in unavailable");
+  const data: unknown = await response.json();
+  if (!data || typeof data !== "object") throw new Error("Invalid wallet challenge");
+  const value = data as { nonce?: unknown; message?: unknown };
+  const origin = "https://deoptv2-frontend.vercel.app";
+  const lines = typeof value.message === "string" ? value.message.split("\n") : [];
+  const issued = lines.find((line) => line.startsWith("Issued At: "))?.slice(11);
+  const expires = lines.find((line) => line.startsWith("Expiration Time: "))?.slice(17);
+  const expected = `deoptv2-frontend.vercel.app wants you to sign in with your Ethereum account:\n${lines[1]}\n\nAccess DeOpt read-only wallet fee history.\n\nURI: ${origin}\nVersion: 1\nChain ID: 84532\nNonce: ${value.nonce}\nIssued At: ${issued}\nExpiration Time: ${expires}`;
+  if (typeof value.nonce !== "string" || !/^[a-f0-9]{32}$/.test(value.nonce)
+      || typeof value.message !== "string"
+      || lines[0] !== "deoptv2-frontend.vercel.app wants you to sign in with your Ethereum account:"
+      || lines[1]?.toLowerCase() !== wallet.toLowerCase()
+      || value.message !== expected
+      || !issued || !expires || !Number.isFinite(Date.parse(issued)) || !Number.isFinite(Date.parse(expires))
+      || Date.parse(issued) > Date.now() + 30_000 || Date.parse(expires) <= Date.now()
+      || Date.parse(expires) - Date.parse(issued) > 300_000) {
+    throw new Error("Invalid wallet challenge");
+  }
+  return { nonce: value.nonce, message: value.message };
+}
+
+export async function verifyWalletReadChallenge(nonce: string, signature: string): Promise<void> {
+  const response = await fetch("/api/deopt/verify", {
+    method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nonce, signature }),
+  });
+  if (!response.ok) throw new Error("Wallet sign-in rejected");
+}
+
+export async function walletReadSessionMatches(wallet: string): Promise<boolean> {
+  const response = await fetch("/api/deopt/session", { cache: "no-store" });
+  if (response.status === 401) return false;
+  if (!response.ok) throw new Error("Wallet session unavailable");
+  const data: unknown = await response.json();
+  return !!data && typeof data === "object" &&
+    typeof (data as { wallet?: unknown }).wallet === "string" &&
+    (data as { wallet: string }).wallet.toLowerCase() === wallet.toLowerCase();
+}
+
+export async function logoutWalletRead(): Promise<void> {
+  await fetch("/api/deopt/logout", { method: "POST", cache: "no-store" }).catch(() => undefined);
+}
+
 export async function fetchCanonicalPerpFees(wallet: string, signal?: AbortSignal): Promise<CanonicalPerpFeeHistory> {
   if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) throw new Error("Invalid wallet address");
-  const response = await fetch(backendUrl(`/accounts/${wallet}/perps/canonical-fees?limit=25`), {
+  const url = walletReadAuthEnabled()
+    ? `/api/deopt/fees?wallet=${encodeURIComponent(wallet)}`
+    : backendUrl(`/accounts/${wallet}/perps/canonical-fees?limit=25`);
+  const response = await fetch(url, {
     method: "GET", cache: "no-store", signal,
     headers: { Accept: "application/json" },
   });
+  if (response.status === 401 && walletReadAuthEnabled()) throw new WalletReadAuthRequired("Wallet sign-in required");
   if (!response.ok) throw new Error("Fee history unavailable");
   const data: unknown = await response.json();
   if (!data || typeof data !== "object") throw new Error("Invalid fee history response");

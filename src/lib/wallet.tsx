@@ -54,6 +54,7 @@ import {
 } from "./subaccount-storage";
 import { isPublicTradingEnabled } from "./public-trading";
 import { buildAuthorization, canonical } from "./write-auth";
+import { logoutWalletRead, walletReadAuthEnabled } from "./trading-api";
 
 declare global {
   interface Window {
@@ -253,6 +254,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [buildClient, isConnecting]);
 
   const disconnect = useCallback(() => {
+    if (walletReadAuthEnabled()) void logoutWalletRead();
     setAddress(null);
     setChainId(null);
     setWalletClient(null);
