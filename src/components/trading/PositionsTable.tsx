@@ -42,6 +42,13 @@ export function PositionsTable() {
       </div>
     );
   }
+  if (payload.positions.length === 0 && data.status !== "ok") {
+    return (
+      <div data-testid="positions-not-ready" className="rounded border border-amber-500/30 bg-zinc-950 p-3 text-xs text-amber-200">
+        Positions are unavailable until on-chain data is reconciled.
+      </div>
+    );
+  }
   if (payload.positions.length === 0) {
     return (
       <EmptyState
@@ -55,6 +62,11 @@ export function PositionsTable() {
       data-testid="positions-table"
       className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950"
     >
+      {data.status !== "ok" && (
+        <p data-testid="positions-partial-warning" className="border-b border-amber-500/30 px-3 py-2 text-xs text-amber-200">
+          Positions are inferred from backend fills and are not yet reconciled with the blockchain.
+        </p>
+      )}
       <table className="w-full text-xs">
         <thead className="bg-black/40 text-left text-zinc-500">
           <tr>
@@ -104,7 +116,7 @@ export function PositionsTable() {
         </tbody>
       </table>
       <p className="border-t border-zinc-800 bg-black/40 px-3 py-2 text-[10px] text-zinc-500">
-        Testnet only — mark and PnL come from the testnet mock oracle.
+        Testnet only. Indicative marks are unavailable when the oracle cannot be verified.
       </p>
     </div>
   );
