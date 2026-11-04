@@ -55,6 +55,14 @@ export class TradingApiError extends Error {
   }
 }
 
+function unavailableHttpResponse(status: number): TradingApiError {
+  return new TradingApiError({
+    code: status === 403 || status === 503 ? "SOURCE_UNAVAILABLE" : "INTERNAL_ERROR",
+    message: `API route unavailable (HTTP ${status}).`,
+    status,
+  });
+}
+
 export function tradingApiBaseUrl(): string {
   if (walletReadAuthEnabled()) return "/api/deopt/public";
   if (typeof process !== "undefined") {
@@ -227,6 +235,7 @@ async function request<T>(
   try {
     parsed = text.length ? JSON.parse(text) : {};
   } catch {
+    if (!res.ok) throw unavailableHttpResponse(res.status);
     throw new TradingApiError({
       code: "PARSE",
       message: `Backend returned non-JSON response`,
@@ -234,6 +243,7 @@ async function request<T>(
     });
   }
   if (!res.ok) {
+    if (!text.length) throw unavailableHttpResponse(res.status);
     const env = parsed as Partial<ErrorEnvelope>;
     throw new TradingApiError({
       code: env.error?.code ?? "INTERNAL_ERROR",
@@ -625,6 +635,7 @@ async function rawRequest<T>(
   try {
     parsed = text.length ? JSON.parse(text) : {};
   } catch {
+    if (!res.ok) throw unavailableHttpResponse(res.status);
     throw new TradingApiError({
       code: "PARSE",
       message: `Backend returned non-JSON response`,
@@ -632,6 +643,7 @@ async function rawRequest<T>(
     });
   }
   if (!res.ok) {
+    if (!text.length) throw unavailableHttpResponse(res.status);
     const env = parsed as { error?: string };
     throw new TradingApiError({
       code: "INTERNAL_ERROR",

@@ -222,6 +222,18 @@ test("backend-unavailable state renders MarketsFallbackCard on /options", async 
   await expect(page.getByTestId("markets-fallback-card")).toBeVisible();
 });
 
+test("a blocked Options route without JSON shows unavailable, not a parse failure", async ({ page }) => {
+  await page.route("**/options/products*", (route) =>
+    route.fulfill({ status: 403, body: "" }),
+  );
+  await installMockWallet(page);
+  await page.goto("/options");
+  const fallback = page.getByTestId("markets-fallback-card");
+  await expect(fallback).toBeVisible();
+  await expect(fallback).toContainText("SOURCE_UNAVAILABLE");
+  await expect(fallback).not.toContainText("PARSE");
+});
+
 test("/options page contains no fake liquidity / no positive claims", async ({
   page,
 }) => {
