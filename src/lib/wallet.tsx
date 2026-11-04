@@ -104,6 +104,8 @@ export interface WalletState {
    * shows the user what they're signing.
    */
   signMessage: (message: string) => Promise<SignResult>;
+  /** EIP-191 signature only for read-only wallet authentication. */
+  signReadAuthMessage: (message: string) => Promise<SignResult>;
 
   // -------------------------------------------------------------------
   // SUBACCOUNTS-FRONTEND-SWITCHER-V1 — active subaccount context.
@@ -310,15 +312,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [walletClient, address, isMainnet, isExpectedChain],
   );
 
-  const signMessage = useCallback(
+  const signReadAuthMessage = useCallback(
     async (message: string): Promise<SignResult> => {
-      if (!isPublicTradingEnabled()) {
-        return {
-          ok: false,
-          reason: "error",
-          message: "Trading unavailable during maintenance.",
-        };
-      }
       if (!walletClient || !address) {
         return { ok: false, reason: "no_provider" };
       }
@@ -341,6 +336,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     },
     [walletClient, address, isMainnet, isExpectedChain],
+  );
+
+  const signMessage = useCallback(
+    async (message: string): Promise<SignResult> => {
+      if (!isPublicTradingEnabled()) {
+        return { ok: false, reason: "error", message: "Trading unavailable during maintenance." };
+      }
+      return signReadAuthMessage(message);
+    },
+    [signReadAuthMessage],
   );
 
   // -------------------------------------------------------------------
@@ -490,6 +495,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         disconnect,
         signTypedData,
         signMessage,
+        signReadAuthMessage,
         subaccounts,
         activeSubaccountId,
         activeSubaccount,

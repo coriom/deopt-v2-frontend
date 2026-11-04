@@ -13,7 +13,7 @@ function musdc(native: string): string {
 }
 
 export function PerpsFeeHistory() {
-  const { address, chainId, signMessage } = useWallet();
+  const { address, chainId, signReadAuthMessage } = useWallet();
   const currentWallet = useRef({ address, chainId });
   useEffect(() => { currentWallet.current = { address, chainId }; }, [address, chainId]);
   const [history, setHistory] = useState<CanonicalPerpFeeHistory | null>(null);
@@ -41,7 +41,7 @@ export function PerpsFeeHistory() {
     setStatus("loading");
     try {
       const challenge = await issueWalletReadChallenge(address);
-      const signature = await signMessage(challenge.message);
+      const signature = await signReadAuthMessage(challenge.message);
       if (!signature.ok) { setStatus("auth_required"); return; }
       await verifyWalletReadChallenge(challenge.nonce, signature.signature);
       const data = await fetchCanonicalPerpFees(address);
