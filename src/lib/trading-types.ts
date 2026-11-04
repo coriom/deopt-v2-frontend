@@ -28,6 +28,7 @@ export interface MetaBlock {
     | "rpc+cache"
     | "cache"
     | "validation"
+    | "auth"
     | "spec"
     | "internal";
   block_number?: number;
@@ -55,6 +56,8 @@ export interface Envelope<T> {
 export type TradingErrorCode =
   | "INVALID_ADDRESS"
   | "INVALID_REQUEST"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
   | "PRODUCT_NOT_FOUND"
   | "SERIES_NOT_FOUND"
   | "ORDERBOOK_UNAVAILABLE"

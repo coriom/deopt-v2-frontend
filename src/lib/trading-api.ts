@@ -186,6 +186,9 @@ export async function fetchCanonicalPerpFees(wallet: string, signal?: AbortSigna
 }
 
 function backendUrl(path: string): string {
+  if (walletReadAuthEnabled() && (path.startsWith("/options/") || path.startsWith("/accounts/"))) {
+    return `/api/deopt/options${path}`;
+  }
   const base = tradingApiBaseUrl();
   if (!base) {
     throw new TradingApiError({
