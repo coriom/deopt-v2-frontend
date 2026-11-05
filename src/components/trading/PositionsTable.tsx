@@ -42,7 +42,7 @@ export function PositionsTable() {
       </div>
     );
   }
-  if (payload.positions.length === 0 && data.status !== "ok") {
+  if (payload.positions.length === 0 && data.status !== "ok" && payload.source !== "onchain_reconciled") {
     return (
       <div data-testid="positions-not-ready" className="rounded border border-amber-500/30 bg-zinc-950 p-3 text-xs text-amber-200">
         Positions are unavailable until on-chain data is reconciled.
