@@ -15,10 +15,9 @@
  *
  *   - `eth_requestAccounts`, `eth_accounts`, `eth_chainId`,
  *     `wallet_switchEthereumChain`
- *   - `eth_signTypedData_v4`, `eth_signTypedData` — return a
- *     deterministic 65-byte mock signature shape; existing write-auth
- *     tests rely on this. The backend's EIP-712 validator runs as a
- *     unit test against real signatures, not in these browser specs.
+ *   - `eth_signTypedData_v4`, `eth_signTypedData` — return the historical
+ *     deterministic shape by default; `realTypedData` signs EIP-712
+ *     cryptographically in isolated Anvil tests.
  *   - `personal_sign` — produces a REAL EIP-191 secp256k1 signature
  *     that recovers to the test account. The signer runs Node-side
  *     via `page.exposeFunction` so we don't bundle crypto into the
@@ -37,6 +36,10 @@ export interface MockWalletConfig {
   account?: `0x${string}`;
   chainId?: number;
   signatureRejected?: boolean;
+  /** Cryptographic EIP-712 signatures for isolated Anvil tests. */
+  realTypedData?: boolean;
+  /** Public local test key, kept in Playwright's Node process. */
+  testPrivateKey?: `0x${string}`;
   /**
    * FRONTEND-WALLET-CONNECT-RUNTIME-DEBUG-V1 — when true, the mock
    * provider rejects `eth_requestAccounts` with EIP-1193 code 4001
@@ -84,7 +87,11 @@ export async function installMockWallet(
   page: Page,
   cfg: MockWalletConfig = {},
 ): Promise<void> {
-  const account = cfg.account ?? DEFAULT_TEST_ACCOUNT;
+  const signer = privateKeyToAccount(cfg.testPrivateKey ?? TEST_PRIVATE_KEY);
+  const account = cfg.account ?? signer.address;
+  if (cfg.realTypedData && account.toLowerCase() !== signer.address.toLowerCase()) {
+    throw new Error("typed-data signer must match the test wallet");
+  }
   const chainId = cfg.chainId ?? ANVIL_CHAIN_ID;
   const signatureRejected = !!cfg.signatureRejected;
   const connectRejected = !!cfg.connectRejected;
@@ -96,8 +103,13 @@ export async function installMockWallet(
     await page.exposeFunction(
       "__deoptPersonalSign",
       async (message: string): Promise<`0x${string}`> => {
-        return TEST_ACCOUNT.signMessage({ message });
+        return signer.signMessage({ message });
       },
+    );
+    await page.exposeFunction(
+      "__deoptTypedSign",
+      async (typedData: unknown): Promise<`0x${string}`> =>
+        signer.signTypedData(typedData as Parameters<typeof signer.signTypedData>[0]),
     );
     exposedPages.add(page);
   }
@@ -108,6 +120,7 @@ export async function installMockWallet(
       chainId,
       signatureRejected,
       connectRejected,
+      realTypedData,
       MOCK_TYPED_SIGNATURE,
       MOCK_TX_HASH,
     }) => {
@@ -168,7 +181,16 @@ export async function installMockWallet(
                 err.code = 4001;
                 throw err;
               }
-              return MOCK_TYPED_SIGNATURE;
+              if (!realTypedData) return MOCK_TYPED_SIGNATURE;
+              const raw = args.params?.[1] ?? args.params?.[0];
+              const typedData = typeof raw === "string" ? JSON.parse(raw) : raw;
+              const exposed = (window as unknown as {
+                __deoptTypedSign?: (data: unknown) => Promise<`0x${string}`>;
+              }).__deoptTypedSign;
+              if (!exposed || !typedData || typeof typedData !== "object") {
+                throw new Error("local EIP-712 signer unavailable");
+              }
+              return exposed(typedData);
             }
             case "personal_sign": {
               if (state.signatureRejected) {
@@ -257,6 +279,7 @@ export async function installMockWallet(
       chainId,
       signatureRejected,
       connectRejected,
+      realTypedData: !!cfg.realTypedData,
       MOCK_TYPED_SIGNATURE,
       MOCK_TX_HASH,
     },

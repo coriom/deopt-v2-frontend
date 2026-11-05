@@ -18,7 +18,10 @@ export function upstreamUrl(path: string): URL | null {
   if (!value) return null;
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/") return null;
+    const localHttp = process.env.NODE_ENV !== "production"
+      && url.protocol === "http:"
+      && (url.hostname === "127.0.0.1" || url.hostname === "localhost");
+    if ((!localHttp && url.protocol !== "https:") || url.username || url.password || url.search || url.hash || url.pathname !== "/") return null;
     return new URL(path, url);
   } catch { return null; }
 }
