@@ -186,6 +186,16 @@ export async function fetchCanonicalPerpFees(wallet: string, signal?: AbortSigna
 }
 
 function backendUrl(path: string): string {
+  // The hosted wallet bridge intentionally accepts reads only. Local Anvil
+  // execution tests use the real Rust handlers directly on loopback; never
+  // route an economic write through the hosted bridge or a public origin.
+  if ((path.startsWith("/options/execution-intents") || path.split("?", 1)[0] === "/options/quotes/preview") &&
+      process.env.NODE_ENV !== "production") {
+    const local = localEconomicBaseUrl();
+    if (local) {
+      return `${local}${path}`;
+    }
+  }
   if (walletReadAuthEnabled() && (path.startsWith("/options/") || path.startsWith("/accounts/"))) {
     return `/api/deopt/options${path}`;
   }
@@ -198,6 +208,12 @@ function backendUrl(path: string): string {
     });
   }
   return `${base}${path}`;
+}
+
+export function localEconomicBaseUrl(): string | null {
+  if (process.env.NODE_ENV === "production") return null;
+  const local = process.env.NEXT_PUBLIC_TRADING_API_BASE_URL;
+  return local && /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(local) ? local : null;
 }
 
 async function request<T>(

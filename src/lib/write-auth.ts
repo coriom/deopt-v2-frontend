@@ -21,7 +21,7 @@
 import type { Address, Hex } from "viem";
 import { keccak256, toBytes, toHex } from "viem";
 import { BASE_SEPOLIA, expectedChain } from "./chains";
-import { tradingApiBaseUrl, TradingApiError } from "./trading-api";
+import { tradingApiBaseUrl, localEconomicBaseUrl, TradingApiError } from "./trading-api";
 import { isPublicTradingEnabled } from "./public-trading";
 
 // ---------------------------------------------------------------------
@@ -331,7 +331,7 @@ export async function requestChallenge(args: {
       status: 0,
     });
   }
-  const url = `${tradingApiBaseUrl()}/auth/write-challenges`;
+  const url = `${localEconomicBaseUrl() ?? tradingApiBaseUrl()}/auth/write-challenges`;
   let res: Response;
   try {
     res = await fetch(url, {

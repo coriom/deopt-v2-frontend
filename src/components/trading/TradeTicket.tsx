@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@/lib/wallet";
 import { useSeriesDetails } from "@/hooks/trading";
 import { isSigningEnabled, adaptSigningPayload } from "@/lib/eip712";
+import { isPublicTradingEnabled } from "@/lib/public-trading";
+import { humanToScaled1e8 } from "@/lib/price-scaling";
 import {
   fetchSigningPayload,
   postSignatures,
@@ -50,6 +52,7 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [size, setSize] = useState("1");
   const [price1e8, setPrice1e8] = useState("");
+  const [counterparty, setCounterparty] = useState("");
   const [intentId, setIntentId] = useState("");
 
   const [phase, setPhase] = useState<SigningPhase>("idle");
@@ -60,6 +63,10 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
   );
 
   const { data, isLoading, error, refetch } = useSeriesDetails(seriesId);
+  const size1e8 = humanToScaled1e8(size);
+  const validCounterparty = /^0x[0-9a-fA-F]{40}$/.test(counterparty) &&
+    counterparty.toLowerCase() !== address?.toLowerCase();
+  const validPrice = /^\d+$/.test(price1e8) && BigInt(price1e8 || "0") > BigInt(0);
 
   if (!seriesId) {
     return (
@@ -105,6 +112,15 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
     if (!payload?.types || !payload?.domain) {
       setPhase("backend_unavailable");
       setDetail("Backend returned an empty signing-payload");
+      return;
+    }
+    const expectedSigner = side === "buy" ? payload.message.buyer : payload.message.seller;
+    if (payload.domain.chainId !== 84532 ||
+        typeof expectedSigner !== "string" ||
+        expectedSigner.toLowerCase() !== address?.toLowerCase() ||
+        !/^0x[0-9a-fA-F]{40}$/.test(payload.domain.verifyingContract)) {
+      setPhase("error");
+      setDetail("Signing payload does not match the selected wallet, chain or contract.");
       return;
     }
     const typed = adaptSigningPayload(payload);
@@ -225,13 +241,24 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
         </p>
       </div>
       <label className="text-xs text-zinc-300">
-        Size
+        Size (contracts)
         <input
           type="text"
           inputMode="numeric"
           value={size}
           onChange={(e) => setSize(e.target.value)}
           data-testid="trade-size-input"
+          className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
+        />
+      </label>
+      <label className="text-xs text-zinc-300">
+        {side === "buy" ? "Seller" : "Buyer"} wallet address
+        <input
+          type="text"
+          value={counterparty}
+          onChange={(e) => setCounterparty(e.target.value.trim())}
+          data-testid="trade-counterparty-input"
+          autoComplete="off"
           className="mt-1 w-full rounded border border-zinc-800 bg-black/40 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-emerald-500/60 focus:outline-none"
         />
       </label>
@@ -250,7 +277,7 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
       <QuotePreviewCard
         seriesId={seriesId}
         side={side}
-        size={size}
+        size={size1e8 ?? ""}
         price_1e8={price1e8 || undefined}
       />
       <div className="flex flex-col gap-2 rounded border border-zinc-800 bg-black/40 p-2">
@@ -261,12 +288,13 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
           request={{
             series_id: seriesId,
             side,
-            size_1e8: size,
-            price_1e8: price1e8 || "0",
-            buyer: side === "buy" ? (address ?? undefined) : undefined,
-            seller: side === "sell" ? (address ?? undefined) : undefined,
+            size_1e8: size1e8 ?? "0",
+            price_1e8: price1e8,
+            buyer: side === "buy" ? (address ?? undefined) : counterparty,
+            seller: side === "sell" ? (address ?? undefined) : counterparty,
           }}
-          disabled={!address || !isExpectedChain}
+          disabled={!isPublicTradingEnabled() || !address || !isExpectedChain ||
+            !validCounterparty || !validPrice || !size1e8 || size1e8 === "0"}
           onIntentCreated={(id) => {
             setIntentId(id);
             setCreatePendingMessage(null);

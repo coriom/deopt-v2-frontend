@@ -94,7 +94,7 @@ export interface SigningPayloadResponse {
   /** Backend-issued payload (e.g. from `/options/execution-intents/:id/signing-payload`). */
   domain: Eip712Domain;
   primaryType: string;
-  types: Record<string, Array<{ name: string; type: string }>>;
+  types: Record<string, Array<{ name: string; type: string }>> | Array<{ name: string; type: string }>;
   message: Record<string, unknown>;
   /** Who this envelope expects to sign (buyer or seller). */
   expected_signer?: Address;
@@ -108,7 +108,9 @@ export function adaptSigningPayload(payload: SigningPayloadResponse): TypedData 
   return {
     domain: payload.domain,
     primaryType: payload.primaryType,
-    types: payload.types,
+    types: Array.isArray(payload.types)
+      ? { [payload.primaryType]: payload.types }
+      : payload.types,
     message: payload.message,
   };
 }

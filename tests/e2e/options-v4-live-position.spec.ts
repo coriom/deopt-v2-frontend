@@ -57,6 +57,13 @@ test("real indexed Anvil position reaches authenticated Next.js portfolio for tw
       await expect(sellerPage.getByTestId(`position-row-${optionId}`)).toHaveCount(0);
       await expect(buyerPage.getByText("No open positions")).toBeVisible();
       await expect(sellerPage.getByText("No open positions")).toBeVisible();
+      if (process.env.OPTIONS_V5_PRODUCT === "1" && process.env.OPTIONS_V4_PHASE === "settled") {
+        await expect(buyerPage.getByTestId(`settlement-proof-${optionId}`)).toBeVisible();
+        await expect(sellerPage.getByTestId(`settlement-proof-${optionId}`)).toBeVisible();
+      }
+      if (process.env.OPTIONS_V5_PRODUCT === "1" && process.env.OPTIONS_V4_PHASE === "reorg") {
+        await expect(buyerPage.getByTestId(`settlement-proof-${optionId}`)).toHaveCount(0);
+      }
       await sellerPage.reload();
       await sellerPage.getByTestId("wallet-connect-button").click();
       await expect(sellerPage.getByText("No open positions")).toBeVisible();

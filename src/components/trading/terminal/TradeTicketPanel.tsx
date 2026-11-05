@@ -33,6 +33,8 @@ import {
   useSelectedOption,
 } from "@/lib/workspace-selected-option";
 import { DirectOrderbookForm } from "@/components/trading/DirectOrderbookForm";
+import { TradeTicket } from "@/components/trading/TradeTicket";
+import { isPublicTradingEnabled } from "@/lib/public-trading";
 import { TradeBookLadder } from "./TradeBookLadder";
 import { TradeHistoryTable } from "@/components/trading/TradeHistoryTable";
 import { PayoffSvg } from "@/components/trading/terminal/PayoffSvg";
@@ -193,6 +195,12 @@ function TradeBody(props: TradeBodyProps) {
           key={prefill ?? "__no_selection__"}
           initialSeriesId={prefill ?? undefined}
         />
+        {prefill && isPublicTradingEnabled() && (
+          <section aria-label="Paired Options execution">
+            <h3 className="mb-2 text-xs font-semibold text-zinc-200">Paired execution</h3>
+            <TradeTicket seriesId={prefill ?? null} />
+          </section>
+        )}
       </div>
     );
   }

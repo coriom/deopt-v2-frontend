@@ -187,12 +187,29 @@ export interface Position {
   mm_contribution?: DecimalString;
   is_exercisable?: boolean;
   quantity_contracts?: DecimalString;
+  premium_proof?: {
+    amount_native: DecimalString;
+    settlement_asset: EthAddress;
+    direction: "paid" | "received";
+    tx_hash: string;
+    block_hash: string;
+    status: "vault_transfer_verified";
+  };
 }
 
 export interface PositionsData {
   address: EthAddress;
   positions: Position[];
   source?: "onchain_reconciled";
+  settlements?: Array<{
+    option_id: string;
+    collected_native: DecimalString;
+    paid_native: DecimalString;
+    settlement_asset: EthAddress;
+    tx_hash: string;
+    block_hash: string;
+    status: "vault_transfer_verified";
+  }>;
 }
 
 export interface PortfolioData {

@@ -92,8 +92,8 @@ export function QuotePreviewCard({
   return (
     <div className="flex flex-col gap-2">
       <dl className="grid grid-cols-2 gap-2 rounded border border-zinc-200 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
-        <dt className="text-zinc-500">Premium</dt>
-        <dd className="text-right font-mono">{payload.premium ?? "—"}</dd>
+        <dt className="text-zinc-500">Indicative premium (native units)</dt>
+        <dd className="text-right font-mono" data-testid="quote-premium">{payload.premium ?? "—"}</dd>
         <dt className="text-zinc-500">Buyer fee</dt>
         <dd className="text-right font-mono">
           {payload.buyer_fee?.amount ?? "—"} ({payload.buyer_fee?.ppm_signed ?? "—"} ppm)
