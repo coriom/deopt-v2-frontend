@@ -186,11 +186,13 @@ export interface Position {
   im_contribution?: DecimalString;
   mm_contribution?: DecimalString;
   is_exercisable?: boolean;
+  quantity_contracts?: DecimalString;
 }
 
 export interface PositionsData {
   address: EthAddress;
   positions: Position[];
+  source?: "onchain_reconciled";
 }
 
 export interface PortfolioData {

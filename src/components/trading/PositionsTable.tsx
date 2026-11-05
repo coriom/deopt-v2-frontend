@@ -64,7 +64,9 @@ export function PositionsTable() {
     >
       {data.status !== "ok" && (
         <p data-testid="positions-partial-warning" className="border-b border-amber-500/30 px-3 py-2 text-xs text-amber-200">
-          Positions are inferred from backend fills and are not yet reconciled with the blockchain.
+          {payload.source === "onchain_reconciled"
+            ? "Contract counts match indexed receipts and MarginEngine. Premium, fees, collateral and mark are not verified."
+            : "Positions are inferred from backend fills and are not yet reconciled with the blockchain."}
         </p>
       )}
       <table className="w-full text-xs">
@@ -72,7 +74,7 @@ export function PositionsTable() {
           <tr>
             <th className="py-2 pl-3 pr-2">Series</th>
             <th className="py-2 pr-2">Side</th>
-            <th className="py-2 pr-2 text-right">Size</th>
+            <th className="py-2 pr-2 text-right">{payload.source === "onchain_reconciled" ? "Contracts" : "Size"}</th>
             <th className="py-2 pr-2 text-right">Mark</th>
             <th className="py-2 pr-3 text-right">PnL</th>
           </tr>
