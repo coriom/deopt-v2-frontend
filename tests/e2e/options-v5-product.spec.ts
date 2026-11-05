@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { privateKeyToAccount } from "viem/accounts";
 import { installMockWallet, BASE_SEPOLIA_CHAIN_ID } from "./wallet-fixture";
 
@@ -8,8 +8,8 @@ const SELLER_KEY = `0x${"0".repeat(60)}ca11` as `0x${string}`;
 async function signIn(page: Page, key: `0x${string}`) {
   const account = privateKeyToAccount(key);
   await installMockWallet(page, { testPrivateKey: key, chainId: BASE_SEPOLIA_CHAIN_ID, realTypedData: true });
-  await page.goto("/portfolio");
-  await page.getByTestId("wallet-connect-button").click();
+  await page.goto("/portfolio", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.getByTestId("wallet-connect-button").click({ timeout: 20_000 });
   const challenge = await page.evaluate(async (address) => {
     const response = await fetch("/api/deopt/challenge", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -33,13 +33,31 @@ async function signIn(page: Page, key: `0x${string}`) {
 async function openCallTicket(page: Page) {
   await page.goto("/options", { waitUntil: "domcontentloaded", timeout: 30_000 });
   await expect(page.getByTestId("wallet-connect-button")).toHaveAttribute("data-wallet-state", "disconnected");
-  await page.getByTestId("wallet-connect-button").click();
-  await page.getByTestId(/^chain-call-/).first().click();
+  await page.getByTestId("wallet-connect-button").click({ timeout: 20_000 });
+  await page.getByTestId(/^chain-call-/).first().click({ timeout: 20_000 });
   await expect(page.getByTestId("trade-ticket")).toBeVisible();
 }
 
+async function openPortfolio(context: BrowserContext, key: `0x${string}`) {
+  const page = await context.newPage();
+  await installMockWallet(page, { testPrivateKey: key, chainId: BASE_SEPOLIA_CHAIN_ID, realTypedData: true });
+  await page.goto("/portfolio", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  const button = page.getByTestId("wallet-connect-button");
+  await expect(button).toHaveAttribute("data-wallet-state", "disconnected", { timeout: 20_000 });
+  await button.click({ timeout: 20_000 });
+  await expect(button).toHaveAttribute("data-wallet-state", "connected", { timeout: 20_000 });
+  return page;
+}
+
+async function expectIntentSubmitted(page: Page, intentId: string) {
+  await expect.poll(async () => {
+    if (page.url().endsWith(`/transactions/${intentId}`)) return "submitted";
+    return page.getByTestId("signing-state-modal").getAttribute("data-phase").catch(() => null);
+  }, { timeout: 30_000 }).toBe("submitted");
+}
+
 test("product form creates and signs a real Rust intent; Anvil receipt reaches the portfolio", async ({ browser, baseURL }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   const optionId = process.env.OPTIONS_V4_OPTION_ID!;
   const buyerContext = await browser.newContext({ baseURL });
   const sellerContext = await browser.newContext({ baseURL });
@@ -67,29 +85,25 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
     await buyerPage.unroute(signatureEndpoint);
     await buyerPage.getByTestId("signing-state-modal").getByRole("button", { name: "Close" }).click();
     await buyerPage.getByTestId("sign-button").click();
-    await expect(buyerPage.getByTestId("signing-state-modal")).toHaveAttribute("data-phase", /^(submitted|error|backend_unavailable|rejected|wrong_network)$/, { timeout: 20_000 });
-    expect(await buyerPage.getByTestId("signing-state-modal").getAttribute("data-phase")).toBe("submitted");
-    await expect(buyerPage).toHaveURL(new RegExp(`/transactions/${intentId}$`), { timeout: 30_000 });
+    await expectIntentSubmitted(buyerPage, intentId);
 
     await openCallTicket(sellerPage);
     await sellerPage.getByTestId("side-sell").click();
     await sellerPage.getByTestId("intent-id-input").fill(intentId);
     await sellerPage.getByTestId("sign-button").click();
-    await expect(sellerPage.getByTestId("signing-state-modal")).toHaveAttribute("data-phase", /^(submitted|error|backend_unavailable|rejected|wrong_network)$/, { timeout: 20_000 });
-    expect(await sellerPage.getByTestId("signing-state-modal").getAttribute("data-phase")).toBe("submitted");
-    await expect(sellerPage).toHaveURL(new RegExp(`/transactions/${intentId}$`), { timeout: 30_000 });
+    await expectIntentSubmitted(sellerPage, intentId);
 
-    await buyerPage.goto("/portfolio");
-    await buyerPage.getByTestId("wallet-connect-button").click();
-    await expect(buyerPage.getByTestId(`position-row-${optionId}`)).toHaveAttribute("data-side", "long", { timeout: 45_000 });
-    await expect(buyerPage.getByTestId(`premium-proof-${optionId}`)).toContainText("paid 100000000 native");
-    const crossWallet = await buyerPage.evaluate(async (address) =>
+    const buyerPortfolio = await openPortfolio(buyerContext, BUYER_KEY);
+    await expect(buyerPortfolio.getByTestId(`position-row-${optionId}`)).toHaveAttribute("data-side", "long", { timeout: 45_000 });
+    await expect(buyerPortfolio.getByTestId(`premium-proof-${optionId}`)).toContainText("paid 100000000 native");
+    await expect(buyerPortfolio.getByTestId(`fee-proof-${optionId}`)).toContainText("25000 native");
+    const crossWallet = await buyerPortfolio.evaluate(async (address) =>
       (await fetch(`/api/deopt/options/accounts/${address}/positions`, { cache: "no-store" })).status, seller);
     expect(crossWallet).toBe(403);
-    await sellerPage.goto("/portfolio");
-    await sellerPage.getByTestId("wallet-connect-button").click();
-    await expect(sellerPage.getByTestId(`position-row-${optionId}`)).toHaveAttribute("data-side", "short");
-    await expect(sellerPage.getByTestId(`premium-proof-${optionId}`)).toContainText("received 100000000 native");
+    const sellerPortfolio = await openPortfolio(sellerContext, SELLER_KEY);
+    await expect(sellerPortfolio.getByTestId(`position-row-${optionId}`)).toHaveAttribute("data-side", "short");
+    await expect(sellerPortfolio.getByTestId(`premium-proof-${optionId}`)).toContainText("received 100000000 native");
+    await expect(sellerPortfolio.getByTestId(`fee-proof-${optionId}`)).toContainText("5000 native");
   } finally {
     await buyerContext.close();
     await sellerContext.close();

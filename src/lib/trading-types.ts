@@ -195,6 +195,15 @@ export interface Position {
     block_hash: string;
     status: "vault_transfer_verified";
   };
+  fee_proof?: {
+    amount_native: DecimalString;
+    settlement_asset: EthAddress;
+    recipient: EthAddress;
+    fee_ppm: number;
+    tx_hash: string;
+    block_hash: string;
+    status: "vault_transfer_verified";
+  };
 }
 
 export interface PositionsData {

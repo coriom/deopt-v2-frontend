@@ -73,7 +73,7 @@ export function PositionsTable() {
       {data.status !== "ok" && (
         <p data-testid="positions-partial-warning" className="border-b border-amber-500/30 px-3 py-2 text-xs text-amber-200">
           {payload.source === "onchain_reconciled"
-            ? "Contract counts match indexed receipts and MarginEngine. Premium appears only when its vault transfer is verified. Fees, collateral and mark remain unverified."
+            ? "Contract counts match indexed receipts and MarginEngine. Premium and fees appear only with verified vault transfers. Per-position collateral and mark remain unverified."
             : "Positions are inferred from backend fills and are not yet reconciled with the blockchain."}
         </p>
       )}
@@ -85,6 +85,7 @@ export function PositionsTable() {
             <th className="py-2 pr-2 text-right">{payload.source === "onchain_reconciled" ? "Contracts" : "Size"}</th>
             <th className="py-2 pr-2 text-right">Mark</th>
             <th className="py-2 pr-2 text-right">Premium</th>
+            <th className="py-2 pr-2 text-right">Fee</th>
             <th className="py-2 pr-3 text-right">PnL</th>
           </tr>
         </thead>
@@ -121,6 +122,11 @@ export function PositionsTable() {
                 <td className="py-2 pr-2 text-right font-mono text-zinc-300" data-testid={`premium-proof-${p.series_id}`}>
                   {p.premium_proof?.status === "vault_transfer_verified"
                     ? `${p.premium_proof.direction} ${p.premium_proof.amount_native} native`
+                    : "unverified"}
+                </td>
+                <td className="py-2 pr-2 text-right font-mono text-zinc-300" data-testid={`fee-proof-${p.series_id}`}>
+                  {p.fee_proof?.status === "vault_transfer_verified"
+                    ? `${p.fee_proof.amount_native} native`
                     : "unverified"}
                 </td>
                 <td className="py-2 pr-3 text-right font-mono text-zinc-300">
