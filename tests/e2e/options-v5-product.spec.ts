@@ -34,13 +34,11 @@ async function openCallTicket(page: Page) {
   await page.goto("/options", { waitUntil: "domcontentloaded", timeout: 30_000 });
   await expect(page.getByTestId("wallet-connect-button")).toHaveAttribute("data-wallet-state", "disconnected", { timeout: 20_000 });
   await page.getByTestId("wallet-connect-button").click({ timeout: 20_000 });
-  await page.getByTestId(/^chain-call-/).first().click({ timeout: 20_000 });
+  await page.getByTestId(/^chain-call-/).first().click({ timeout: 60_000 });
   await expect(page.getByTestId("trade-ticket")).toBeVisible();
 }
 
-async function openPortfolio(context: BrowserContext, key: `0x${string}`) {
-  const page = await context.newPage();
-  await installMockWallet(page, { testPrivateKey: key, chainId: BASE_SEPOLIA_CHAIN_ID, realTypedData: true });
+async function openPortfolio(page: Page) {
   await page.goto("/portfolio", { waitUntil: "domcontentloaded", timeout: 30_000 });
   const button = page.getByTestId("wallet-connect-button");
   await expect(button).toHaveAttribute("data-wallet-state", "disconnected", { timeout: 20_000 });
@@ -57,14 +55,14 @@ async function expectIntentSubmitted(page: Page, intentId: string) {
 }
 
 test("product form creates and signs a real Rust intent; Anvil receipt reaches the portfolio", async ({ browser, baseURL }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   const optionId = process.env.OPTIONS_V4_OPTION_ID!;
   const buyerContext = await browser.newContext({ baseURL });
   const sellerContext = await browser.newContext({ baseURL });
   try {
     const buyerPage = await buyerContext.newPage();
     const sellerPage = await sellerContext.newPage();
-    await signIn(buyerPage, BUYER_KEY);
+    const buyer = await signIn(buyerPage, BUYER_KEY);
     const seller = await signIn(sellerPage, SELLER_KEY);
     await openCallTicket(buyerPage);
     await buyerPage.getByTestId("trade-counterparty-input").fill(seller);
@@ -93,14 +91,20 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
     await sellerPage.getByTestId("sign-button").click({ timeout: 20_000 });
     await expectIntentSubmitted(sellerPage, intentId);
 
-    const buyerPortfolio = await openPortfolio(buyerContext, BUYER_KEY);
+    // The real Rust indexer runs asynchronously after the Anvil receipt.
+    // Wait for its authenticated, reconciled read before checking the UI.
+    await expect.poll(async () => buyerPage.evaluate(async (address) =>
+      (await fetch(`/api/deopt/options/accounts/${address}/positions`, { cache: "no-store" })).status,
+    buyer), { timeout: 90_000, intervals: [1_000, 2_000, 3_000] }).toBe(200);
+
+    const buyerPortfolio = await openPortfolio(buyerPage);
     await expect(buyerPortfolio.getByTestId(`position-row-${optionId}`)).toHaveAttribute("data-side", "long", { timeout: 45_000 });
     await expect(buyerPortfolio.getByTestId(`premium-proof-${optionId}`)).toContainText("paid 100000000 native");
     await expect(buyerPortfolio.getByTestId(`fee-proof-${optionId}`)).toContainText("25000 native");
     const crossWallet = await buyerPortfolio.evaluate(async (address) =>
       (await fetch(`/api/deopt/options/accounts/${address}/positions`, { cache: "no-store" })).status, seller);
     expect(crossWallet).toBe(403);
-    const sellerPortfolio = await openPortfolio(sellerContext, SELLER_KEY);
+    const sellerPortfolio = await openPortfolio(sellerPage);
     await expect(sellerPortfolio.getByTestId(`position-row-${optionId}`)).toHaveAttribute("data-side", "short");
     await expect(sellerPortfolio.getByTestId(`premium-proof-${optionId}`)).toContainText("received 100000000 native");
     await expect(sellerPortfolio.getByTestId(`fee-proof-${optionId}`)).toContainText("5000 native");

@@ -929,6 +929,8 @@ export interface OptionSeriesResponse {
   source: string;
   onchain_product_id: string | null;
   onchain_series_id: string | null;
+  onchain_chain_id?: number | null;
+  onchain_registry_address?: string | null;
   created_at_ms: number;
   updated_at_ms: number;
 }
