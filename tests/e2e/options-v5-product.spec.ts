@@ -90,7 +90,7 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
     await openCallTicket(sellerPage);
     await sellerPage.getByTestId("side-sell").click({ timeout: 20_000 });
     await sellerPage.getByTestId("intent-id-input").fill(intentId);
-    await sellerPage.getByTestId("sign-button").click();
+    await sellerPage.getByTestId("sign-button").click({ timeout: 20_000 });
     await expectIntentSubmitted(sellerPage, intentId);
 
     const buyerPortfolio = await openPortfolio(buyerContext, BUYER_KEY);
