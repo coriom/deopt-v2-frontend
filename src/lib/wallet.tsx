@@ -148,7 +148,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setHasProvider(!!window.ethereum);
+    const detectProvider = () => setHasProvider(!!window.ethereum);
+    detectProvider();
+    // Wallet extensions may inject after hydration. EIP-1193 providers
+    // announce that late injection with ethereum#initialized.
+    window.addEventListener("ethereum#initialized", detectProvider);
+    const retry = window.setTimeout(detectProvider, 1000);
+    return () => {
+      window.removeEventListener("ethereum#initialized", detectProvider);
+      window.clearTimeout(retry);
+    };
   }, []);
 
   // Subscribe to provider events when connected.

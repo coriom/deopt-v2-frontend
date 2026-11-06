@@ -259,6 +259,7 @@ export async function installMockWallet(
 
       (window as unknown as { ethereum: typeof provider }).ethereum =
         provider;
+      window.dispatchEvent(new Event("ethereum#initialized"));
       (window as unknown as { __deoptMockWallet: object }).__deoptMockWallet =
         {
           setAccount(addr: `0x${string}` | null) {

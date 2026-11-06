@@ -32,7 +32,7 @@ async function signIn(page: Page, key: `0x${string}`) {
 
 async function openCallTicket(page: Page) {
   await page.goto("/options", { waitUntil: "domcontentloaded", timeout: 30_000 });
-  await expect(page.getByTestId("wallet-connect-button")).toHaveAttribute("data-wallet-state", "disconnected");
+  await expect(page.getByTestId("wallet-connect-button")).toHaveAttribute("data-wallet-state", "disconnected", { timeout: 20_000 });
   await page.getByTestId("wallet-connect-button").click({ timeout: 20_000 });
   await page.getByTestId(/^chain-call-/).first().click({ timeout: 20_000 });
   await expect(page.getByTestId("trade-ticket")).toBeVisible();
@@ -64,7 +64,7 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
   try {
     const buyerPage = await buyerContext.newPage();
     const sellerPage = await sellerContext.newPage();
-    const buyer = await signIn(buyerPage, BUYER_KEY);
+    await signIn(buyerPage, BUYER_KEY);
     const seller = await signIn(sellerPage, SELLER_KEY);
     await openCallTicket(buyerPage);
     await buyerPage.getByTestId("trade-counterparty-input").fill(seller);
@@ -88,7 +88,7 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
     await expectIntentSubmitted(buyerPage, intentId);
 
     await openCallTicket(sellerPage);
-    await sellerPage.getByTestId("side-sell").click();
+    await sellerPage.getByTestId("side-sell").click({ timeout: 20_000 });
     await sellerPage.getByTestId("intent-id-input").fill(intentId);
     await sellerPage.getByTestId("sign-button").click();
     await expectIntentSubmitted(sellerPage, intentId);
