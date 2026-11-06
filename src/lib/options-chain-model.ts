@@ -55,6 +55,10 @@ export interface OptionsChainRow {
   strike1e8: DecimalString;
   /** Expiry timestamp (ms). Same for call + put at this row. */
   expiryMs: number;
+  /** Registry identity for the row; null marks historical unproven rows. */
+  registryAddress: string | null;
+  chainId: number | null;
+  settlementAsset: string;
   /** Display label for the strike (best-effort numeric format). */
   strikeLabel: string;
   /** Display label for the expiry (YYYY-MM-DD). */
@@ -165,8 +169,8 @@ export function buildOptionsChain(
 ): OptionsChainRow[] {
   // Group strike + expiry across the call-product and put-product for
   // the same underlying.
-  const rowKey = (strike1e8: DecimalString, expiryMs: number) =>
-    `${strike1e8}::${expiryMs}`;
+  const rowKey = (s: Series) =>
+    `${s.strike_1e8}::${s.expiry_ms}::${s.settlement_asset.toLowerCase()}::${s.onchain_chain_id ?? "legacy"}::${s.onchain_registry_address?.toLowerCase() ?? "legacy"}`;
   const rows: Map<string, OptionsChainRow> = new Map();
 
   // First pass: gather all series referenced by the products.
@@ -182,13 +186,18 @@ export function buildOptionsChain(
   for (const sid of seriesIdsFromProducts) {
     const s = seriesById.get(sid);
     if (!s) continue;
-    const key = rowKey(s.strike_1e8, s.expiry_ms);
+    const key = rowKey(s);
     let row = rows.get(key);
     if (!row) {
       row = {
         strike1e8: s.strike_1e8,
         expiryMs: s.expiry_ms,
-        strikeLabel: formatStrike1e8(s.strike_1e8),
+        registryAddress: s.onchain_registry_address?.toLowerCase() ?? null,
+        chainId: s.onchain_chain_id ?? null,
+        settlementAsset: s.settlement_asset,
+        strikeLabel: s.onchain_registry_address
+          ? `${formatStrike1e8(s.strike_1e8)} · ${s.onchain_registry_address.slice(0, 6)}…${s.onchain_registry_address.slice(-4)}`
+          : formatStrike1e8(s.strike_1e8),
         expiryLabel: isoDate(s.expiry_ms),
         itm: null,
         call: emptyLeg(true),
@@ -210,7 +219,9 @@ export function buildOptionsChain(
     const bS = BigInt(b.strike1e8);
     if (aS < bS) return -1;
     if (aS > bS) return 1;
-    return a.expiryMs - b.expiryMs;
+    return a.expiryMs - b.expiryMs ||
+      (a.chainId ?? 0) - (b.chainId ?? 0) ||
+      (a.registryAddress ?? "").localeCompare(b.registryAddress ?? "");
   });
   return out;
 }

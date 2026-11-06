@@ -53,6 +53,13 @@ interface OptionsChainGridProps {
 
 const DASH = "—";
 
+function rowIdentity(row: OptionsChainRow): string {
+  const base = `${row.strike1e8}-${row.expiryMs}`;
+  return row.registryAddress
+    ? `${base}-${row.chainId ?? "unknown"}-${row.registryAddress}-${row.settlementAsset.toLowerCase()}`
+    : base;
+}
+
 function fmt(leg: OptionLeg, id: ColumnId): string {
   const v = COLUMN_REGISTRY[id].value(leg);
   return v ?? DASH;
@@ -217,7 +224,7 @@ export function OptionsChainGrid({
                 onSelect,
                 onCellAction,
                 sideGridStyle: { ...sideGridStyle, minWidth: sideMinWidth },
-                rowKey: `${row.strike1e8}-${row.expiryMs}`,
+                rowKey: rowIdentity(row),
                 hoveredRowKey,
                 onHoverRow: setHoveredRowKey,
               }),
@@ -241,12 +248,12 @@ export function OptionsChainGrid({
           </div>
           <div role="rowgroup" className="flex flex-1 flex-col">
             {rows.map((row) => {
-              const rowKey = `${row.strike1e8}-${row.expiryMs}`;
+              const rowKey = rowIdentity(row);
               const rowHovered = hoveredRowKey === rowKey;
               return (
                 <div
-                  key={`strike-${row.strike1e8}-${row.expiryMs}`}
-                  data-testid={`chain-strike-${row.strike1e8}-${row.expiryMs}`}
+                  key={`strike-${rowKey}`}
+                  data-testid={`chain-strike-${rowKey}`}
                   data-row-hovered={rowHovered ? "true" : "false"}
                   onMouseEnter={() => setHoveredRowKey(rowKey)}
                   onMouseLeave={() => setHoveredRowKey(null)}
@@ -299,7 +306,7 @@ export function OptionsChainGrid({
                 onSelect,
                 onCellAction,
                 sideGridStyle: { ...sideGridStyle, minWidth: sideMinWidth },
-                rowKey: `${row.strike1e8}-${row.expiryMs}`,
+                rowKey: rowIdentity(row),
                 hoveredRowKey,
                 onHoverRow: setHoveredRowKey,
               }),
@@ -451,7 +458,7 @@ function renderChainRow(props: RenderChainRowProps) {
   const rowHovered = hoveredRowKey === rowKey;
   return (
     <div
-      key={`${side}-row-${row.strike1e8}-${row.expiryMs}`}
+      key={`${side}-row-${rowKey}`}
       data-row-hovered={rowHovered ? "true" : "false"}
       onMouseEnter={() => onHoverRow(rowKey)}
       onMouseLeave={() => onHoverRow(null)}
@@ -497,11 +504,11 @@ function renderChainRow(props: RenderChainRowProps) {
         //      column marker (kept for regression coverage)
         let testid: string | undefined;
         if (isBid) {
-          testid = `chain-bid-${side}-${row.strike1e8}-${row.expiryMs}`;
+          testid = `chain-bid-${side}-${rowKey}`;
         } else if (isAsk) {
-          testid = `chain-ask-${side}-${row.strike1e8}-${row.expiryMs}`;
+          testid = `chain-ask-${side}-${rowKey}`;
         } else if (visible[0] === id) {
-          testid = `chain-${side}-${row.strike1e8}-${row.expiryMs}`;
+          testid = `chain-${side}-${rowKey}`;
         }
         const onClick = () => {
           if (cellDisabled) return;

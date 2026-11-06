@@ -119,6 +119,8 @@ export interface ProductsBatchData {
 export interface Series {
   series_id: SeriesId;
   product_id: ProductId;
+  onchain_chain_id?: number | null;
+  onchain_registry_address?: EthAddress | null;
   underlying: EthAddress;
   settlement_asset: EthAddress;
   is_call: boolean;
