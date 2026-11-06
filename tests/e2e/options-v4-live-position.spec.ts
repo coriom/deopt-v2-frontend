@@ -1,5 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { privateKeyToAccount } from "viem/accounts";
+import { encodeAbiParameters, keccak256 } from "viem";
 import { installMockWallet, BASE_SEPOLIA_CHAIN_ID } from "./wallet-fixture";
 
 // This spec is run only by the disposable Anvil/PG/Rust/Next V4 bench.
@@ -41,6 +42,14 @@ test("real indexed Anvil position reaches authenticated Next.js portfolio for tw
   const buyer = process.env.OPTIONS_V4_BUYER;
   const seller = process.env.OPTIONS_V4_SELLER;
   const localApi = process.env.OPTIONS_V4_API_URL;
+  const dedicatedRegistry = process.env.OPTIONS_V16_DEDICATED_REGISTRY;
+  const legacyRegistry = process.env.OPTIONS_V16_LEGACY_REGISTRY;
+  const scopedId = (registry: string) => keccak256(encodeAbiParameters(
+    [{ type: "uint256" }, { type: "address" }, { type: "uint256" }],
+    [BigInt(84532), registry as `0x${string}`, BigInt(optionId!)],
+  ));
+  const dedicatedId = dedicatedRegistry && legacyRegistry ? scopedId(dedicatedRegistry) : optionId;
+  const legacyId = dedicatedRegistry && legacyRegistry ? scopedId(legacyRegistry) : null;
   expect(optionId).toMatch(/^\d+$/);
   expect(buyer).toMatch(/^0x[0-9a-fA-F]{40}$/);
   expect(seller).toMatch(/^0x[0-9a-fA-F]{40}$/);
@@ -53,20 +62,26 @@ test("real indexed Anvil position reaches authenticated Next.js portfolio for tw
     const sellerPage = await sellerContext.newPage();
     expect((await signIn(sellerPage, SELLER_KEY)).toLowerCase()).toBe(seller?.toLowerCase());
     if (process.env.OPTIONS_V4_PHASE === "settled" || process.env.OPTIONS_V4_PHASE === "reorg") {
-      await expect(buyerPage.getByTestId(`position-row-${optionId}`)).toHaveCount(0);
-      await expect(sellerPage.getByTestId(`position-row-${optionId}`)).toHaveCount(0);
-      await expect(buyerPage.getByText("No open positions")).toBeVisible();
-      await expect(sellerPage.getByText("No open positions")).toBeVisible();
+      await expect(buyerPage.getByTestId(`position-row-${dedicatedId}`)).toHaveCount(0);
+      await expect(sellerPage.getByTestId(`position-row-${dedicatedId}`)).toHaveCount(0);
+      if (legacyId) {
+        await expect(buyerPage.getByTestId(`position-row-${legacyId}`)).toHaveAttribute("data-side", "long");
+        await expect(sellerPage.getByTestId(`position-row-${legacyId}`)).toHaveAttribute("data-side", "short");
+      } else {
+        await expect(buyerPage.getByText("No open positions")).toBeVisible();
+        await expect(sellerPage.getByText("No open positions")).toBeVisible();
+      }
       if (process.env.OPTIONS_V5_PRODUCT === "1" && process.env.OPTIONS_V4_PHASE === "settled") {
-        await expect(buyerPage.getByTestId(`settlement-proof-${optionId}`)).toBeVisible();
-        await expect(sellerPage.getByTestId(`settlement-proof-${optionId}`)).toBeVisible();
+        await expect(buyerPage.getByTestId(`settlement-proof-${dedicatedId}`)).toBeVisible();
+        await expect(sellerPage.getByTestId(`settlement-proof-${dedicatedId}`)).toBeVisible();
       }
       if (process.env.OPTIONS_V5_PRODUCT === "1" && process.env.OPTIONS_V4_PHASE === "reorg") {
-        await expect(buyerPage.getByTestId(`settlement-proof-${optionId}`)).toHaveCount(0);
+        await expect(buyerPage.getByTestId(`settlement-proof-${dedicatedId}`)).toHaveCount(0);
       }
       await sellerPage.reload();
       await sellerPage.getByTestId("wallet-connect-button").click();
-      await expect(sellerPage.getByText("No open positions")).toBeVisible();
+      if (legacyId) await expect(sellerPage.getByTestId(`position-row-${legacyId}`)).toBeVisible();
+      else await expect(sellerPage.getByText("No open positions")).toBeVisible();
       return;
     }
     const typedData = await buyerPage.evaluate(async (url) => {

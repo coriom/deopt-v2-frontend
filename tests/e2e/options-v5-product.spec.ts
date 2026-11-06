@@ -1,5 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { privateKeyToAccount } from "viem/accounts";
+import { encodeAbiParameters, keccak256 } from "viem";
 import { installMockWallet, BASE_SEPOLIA_CHAIN_ID } from "./wallet-fixture";
 
 const BUYER_KEY = `0x${"0".repeat(61)}b0b` as `0x${string}`;
@@ -34,7 +35,17 @@ async function openCallTicket(page: Page) {
   await page.goto("/options", { waitUntil: "domcontentloaded", timeout: 30_000 });
   await expect(page.getByTestId("wallet-connect-button")).toHaveAttribute("data-wallet-state", "disconnected", { timeout: 20_000 });
   await page.getByTestId("wallet-connect-button").click({ timeout: 20_000 });
-  await page.getByTestId(/^chain-call-/).first().click({ timeout: 60_000 });
+  const dedicated = process.env.OPTIONS_V16_DEDICATED_REGISTRY;
+  const legacy = process.env.OPTIONS_V16_LEGACY_REGISTRY;
+  if (dedicated && legacy) {
+    const dedicatedRow = page.getByTestId(new RegExp(`^chain-call-.*${dedicated.toLowerCase()}`));
+    const legacyRow = page.getByTestId(new RegExp(`^chain-call-.*${legacy.toLowerCase()}`));
+    await expect(dedicatedRow.first()).toBeVisible({ timeout: 60_000 });
+    await expect(legacyRow.first()).toBeVisible({ timeout: 60_000 });
+    await dedicatedRow.first().click({ timeout: 60_000 });
+  } else {
+    await page.getByTestId(/^chain-call-/).first().click({ timeout: 60_000 });
+  }
   await expect(page.getByTestId("trade-ticket")).toBeVisible();
 }
 
@@ -57,6 +68,20 @@ async function expectIntentSubmitted(page: Page, intentId: string) {
 test("product form creates and signs a real Rust intent; Anvil receipt reaches the portfolio", async ({ browser, baseURL }) => {
   test.setTimeout(360_000);
   const optionId = process.env.OPTIONS_V4_OPTION_ID!;
+  const registry = process.env.OPTIONS_V16_DEDICATED_REGISTRY;
+  const legacyRegistry = process.env.OPTIONS_V16_LEGACY_REGISTRY;
+  const seriesId = registry && legacyRegistry
+    ? keccak256(encodeAbiParameters(
+        [{ type: "uint256" }, { type: "address" }, { type: "uint256" }],
+        [BigInt(84532), registry as `0x${string}`, BigInt(optionId)],
+      ))
+    : optionId;
+  const legacySeriesId = registry && legacyRegistry
+    ? keccak256(encodeAbiParameters(
+        [{ type: "uint256" }, { type: "address" }, { type: "uint256" }],
+        [BigInt(84532), legacyRegistry as `0x${string}`, BigInt(optionId)],
+      ))
+    : null;
   const buyerContext = await browser.newContext({ baseURL });
   const sellerContext = await browser.newContext({ baseURL });
   try {
@@ -82,11 +107,12 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
     await expect(buyerPage.getByTestId("signing-state-modal")).toHaveAttribute("data-phase", "backend_unavailable", { timeout: 20_000 });
     await buyerPage.unroute(signatureEndpoint);
     await buyerPage.getByTestId("signing-state-modal").getByRole("button", { name: "Close" }).click();
-    await buyerPage.getByTestId("sign-button").click();
+    await expect(buyerPage.getByTestId("signing-state-modal")).toBeHidden({ timeout: 20_000 });
+    await buyerPage.getByTestId("sign-button").click({ timeout: 20_000 });
     await expectIntentSubmitted(buyerPage, intentId);
 
     await openCallTicket(sellerPage);
-    await sellerPage.getByTestId("side-sell").click({ timeout: 20_000 });
+    await sellerPage.getByTestId("side-sell").click({ timeout: 60_000 });
     await sellerPage.getByTestId("intent-id-input").fill(intentId);
     await sellerPage.getByTestId("sign-button").click({ timeout: 20_000 });
     await expectIntentSubmitted(sellerPage, intentId);
@@ -98,16 +124,22 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
     buyer), { timeout: 90_000, intervals: [1_000, 2_000, 3_000] }).toBe(200);
 
     const buyerPortfolio = await openPortfolio(buyerPage);
-    await expect(buyerPortfolio.getByTestId(`position-row-${optionId}`)).toHaveAttribute("data-side", "long", { timeout: 45_000 });
-    await expect(buyerPortfolio.getByTestId(`premium-proof-${optionId}`)).toContainText("paid 100000000 native");
-    await expect(buyerPortfolio.getByTestId(`fee-proof-${optionId}`)).toContainText("25000 native");
+    await expect(buyerPortfolio.getByTestId(`position-row-${seriesId}`)).toHaveAttribute("data-side", "long", { timeout: 45_000 });
+    await expect(buyerPortfolio.getByTestId(`premium-proof-${seriesId}`)).toContainText("paid 100000000 native");
+    await expect(buyerPortfolio.getByTestId(`fee-proof-${seriesId}`)).toContainText("25000 native");
+    if (legacySeriesId) {
+      await expect(buyerPortfolio.getByTestId(`position-row-${legacySeriesId}`)).toHaveAttribute("data-side", "long");
+    }
     const crossWallet = await buyerPortfolio.evaluate(async (address) =>
       (await fetch(`/api/deopt/options/accounts/${address}/positions`, { cache: "no-store" })).status, seller);
     expect(crossWallet).toBe(403);
     const sellerPortfolio = await openPortfolio(sellerPage);
-    await expect(sellerPortfolio.getByTestId(`position-row-${optionId}`)).toHaveAttribute("data-side", "short");
-    await expect(sellerPortfolio.getByTestId(`premium-proof-${optionId}`)).toContainText("received 100000000 native");
-    await expect(sellerPortfolio.getByTestId(`fee-proof-${optionId}`)).toContainText("5000 native");
+    await expect(sellerPortfolio.getByTestId(`position-row-${seriesId}`)).toHaveAttribute("data-side", "short");
+    await expect(sellerPortfolio.getByTestId(`premium-proof-${seriesId}`)).toContainText("received 100000000 native");
+    await expect(sellerPortfolio.getByTestId(`fee-proof-${seriesId}`)).toContainText("5000 native");
+    if (legacySeriesId) {
+      await expect(sellerPortfolio.getByTestId(`position-row-${legacySeriesId}`)).toHaveAttribute("data-side", "short");
+    }
   } finally {
     await buyerContext.close();
     await sellerContext.close();

@@ -214,6 +214,7 @@ export interface PositionsData {
   source?: "onchain_reconciled";
   settlements?: Array<{
     option_id: string;
+    series_id?: string | null;
     collected_native: DecimalString;
     paid_native: DecimalString;
     settlement_asset: EthAddress;

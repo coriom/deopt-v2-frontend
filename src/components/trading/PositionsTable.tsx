@@ -57,7 +57,7 @@ export function PositionsTable() {
           description="Open a position from the trade ticket on a market page. Testnet only — all positions are denominated in mock tokens."
         />
         {payload.settlements?.map((settlement) => (
-          <p key={settlement.tx_hash} data-testid={`settlement-proof-${settlement.option_id}`}
+          <p key={settlement.tx_hash} data-testid={`settlement-proof-${settlement.series_id ?? settlement.option_id}`}
             className="rounded border border-emerald-500/30 p-2 text-xs text-zinc-200">
             Settled · vault transfer verified · paid {settlement.paid_native} / collected {settlement.collected_native} native units · tx {shortenSeries(settlement.tx_hash)}
           </p>
@@ -137,6 +137,12 @@ export function PositionsTable() {
           })}
         </tbody>
       </table>
+      {payload.settlements?.map((settlement) => (
+        <p key={settlement.tx_hash} data-testid={`settlement-proof-${settlement.series_id ?? settlement.option_id}`}
+          className="border-t border-emerald-500/30 px-3 py-2 text-xs text-zinc-200">
+          Settled · vault transfer verified · paid {settlement.paid_native} / collected {settlement.collected_native} native units · tx {shortenSeries(settlement.tx_hash)}
+        </p>
+      ))}
       <p className="border-t border-zinc-800 bg-black/40 px-3 py-2 text-[10px] text-zinc-500">
         Testnet only. Indicative marks are unavailable when the oracle cannot be verified.
       </p>
