@@ -18,7 +18,7 @@ function allowedPath(parts: string[]): { path: string; privateRead: boolean } | 
   }
   if (parts[0] === "accounts" && walletAddress(parts[1] ?? null)) {
     const suffix = parts.slice(2).join("/");
-    if (["positions", "portfolio", "balances", "history", "history/v2"].includes(suffix)) {
+    if (["positions", "physical-positions", "portfolio", "balances", "history", "history/v2"].includes(suffix)) {
       return { path: `/accounts/${parts[1]}/${suffix}`, privateRead: true };
     }
   }

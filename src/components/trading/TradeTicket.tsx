@@ -63,6 +63,10 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
   );
 
   const { data, isLoading, error, refetch } = useSeriesDetails(seriesId);
+  const physicalRegistry = process.env.NODE_ENV !== "production"
+    ? process.env.NEXT_PUBLIC_OPTIONS_PHYSICAL_REGISTRY : undefined;
+  const physicalSeries = !!physicalRegistry &&
+    data?.data?.series?.onchain_registry_address?.toLowerCase() === physicalRegistry.toLowerCase();
   const size1e8 = humanToScaled1e8(size);
   const validCounterparty = /^0x[0-9a-fA-F]{40}$/.test(counterparty) &&
     counterparty.toLowerCase() !== address?.toLowerCase();
@@ -235,9 +239,13 @@ export function TradeTicket({ seriesId }: { seriesId: string | null }) {
           data-testid="trade-side-microcopy"
           className="text-[10px] leading-relaxed text-zinc-400"
         >
-          {side === "buy"
-            ? "Buyer (long): pay the premium up front. No mUSDC collateral required to open the long."
-            : "Seller (short): post mUSDC collateral to cover the short. Receive premium on settlement."}
+          {physicalSeries
+            ? (side === "buy"
+              ? "Covered Call: pay the premium now. Physical exercise later requires the full strike in mUSDC."
+              : "Covered Call: lock 1 mWETH per contract now. Receive the premium; exercise delivers mWETH for the strike in mUSDC.")
+            : side === "buy"
+              ? "Buyer (long): pay the premium up front. No mUSDC collateral required to open the long."
+              : "Seller (short): post mUSDC collateral to cover the short. Receive premium on settlement."}
         </p>
       </div>
       <label className="text-xs text-zinc-300">

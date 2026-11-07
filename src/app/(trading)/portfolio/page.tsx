@@ -1,6 +1,7 @@
 import { PortfolioSummary } from "@/components/trading/PortfolioSummary";
 import { PositionsTable } from "@/components/trading/PositionsTable";
 import { BalancesCard } from "@/components/trading/BalancesCard";
+import { PhysicalPositions } from "@/components/trading/PhysicalPositions";
 
 export default function PortfolioPage() {
   return (
@@ -24,6 +25,7 @@ export default function PortfolioPage() {
       <section>
         <h2 className="mb-2 text-sm font-medium text-zinc-500">Positions</h2>
         <PositionsTable />
+        <PhysicalPositions />
       </section>
       <section>
         <h2 className="mb-2 text-sm font-medium text-zinc-500">Balances</h2>

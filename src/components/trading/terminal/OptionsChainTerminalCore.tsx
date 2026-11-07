@@ -137,8 +137,8 @@ export function OptionsChainTerminalCore() {
   // grid populated on first load. Users can still switch expiries via
   // the pill row.
   useEffect(() => {
-    if (expiryPick !== null) return;
     if (expiries.length === 0) return;
+    if (expiryPick !== null && expiries.some((expiry) => expiry.ms === expiryPick)) return;
     const first = expiries[0].ms;
     Promise.resolve().then(() => setExpiryPick(first));
   }, [expiryPick, expiries]);

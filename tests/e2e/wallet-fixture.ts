@@ -30,6 +30,8 @@
  */
 
 import { Page } from "@playwright/test";
+import { createWalletClient, http, type Address, type Hex } from "viem";
+import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
 export interface MockWalletConfig {
@@ -40,6 +42,8 @@ export interface MockWalletConfig {
   realTypedData?: boolean;
   /** Public local test key, kept in Playwright's Node process. */
   testPrivateKey?: `0x${string}`;
+  /** Real transactions signed in Node and sent only to a loopback Anvil RPC. */
+  localAnvilRpc?: string;
   /**
    * FRONTEND-WALLET-CONNECT-RUNTIME-DEBUG-V1 — when true, the mock
    * provider rejects `eth_requestAccounts` with EIP-1193 code 4001
@@ -95,6 +99,10 @@ export async function installMockWallet(
   const chainId = cfg.chainId ?? ANVIL_CHAIN_ID;
   const signatureRejected = !!cfg.signatureRejected;
   const connectRejected = !!cfg.connectRejected;
+  const localAnvilRpc = cfg.localAnvilRpc;
+  if (localAnvilRpc && !/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(localAnvilRpc)) {
+    throw new Error("real wallet fixture requires loopback Anvil");
+  }
 
   // Node-side EIP-191 signer. The browser will call this via
   // `page.exposeFunction` whenever the WalletProvider issues a
@@ -111,6 +119,24 @@ export async function installMockWallet(
       async (typedData: unknown): Promise<`0x${string}`> =>
         signer.signTypedData(typedData as Parameters<typeof signer.signTypedData>[0]),
     );
+    if (localAnvilRpc) {
+      const localWallet = createWalletClient({ account: signer, chain: baseSepolia, transport: http(localAnvilRpc) });
+      await page.exposeFunction("__deoptSendLocalTx", async (tx: { to: Address; data?: Hex; value?: Hex }) => {
+        return localWallet.sendTransaction({
+          account: signer, chain: baseSepolia, to: tx.to,
+          data: tx.data ?? "0x", value: tx.value ? BigInt(tx.value) : BigInt(0),
+        });
+      });
+      await page.exposeFunction("__deoptLocalRpc", async (method: string, params: unknown[]) => {
+        const response = await fetch(localAnvilRpc, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        });
+        const result = await response.json() as { result?: unknown; error?: { message?: string } };
+        if (result.error) throw new Error(result.error.message ?? "local RPC error");
+        return result.result;
+      });
+    }
     exposedPages.add(page);
   }
 
@@ -123,6 +149,7 @@ export async function installMockWallet(
       realTypedData,
       MOCK_TYPED_SIGNATURE,
       MOCK_TX_HASH,
+      localAnvilRpc,
     }) => {
       type Handler = (...args: unknown[]) => void;
       const listeners: Map<string, Handler[]> = new Map();
@@ -237,9 +264,26 @@ export async function installMockWallet(
                 err.code = 4001;
                 throw err;
               }
+              if (localAnvilRpc) {
+                const exposed = (window as unknown as {
+                  __deoptSendLocalTx?: (tx: unknown) => Promise<`0x${string}`>;
+                }).__deoptSendLocalTx;
+                if (!exposed) throw new Error("local signer unavailable");
+                return exposed(args.params?.[0]);
+              }
               return MOCK_TX_HASH;
             }
             default:
+              if (localAnvilRpc && ["eth_call", "eth_getTransactionReceipt", "eth_getTransactionByHash",
+                "eth_getBlockByNumber", "eth_getBlockByHash", "eth_getLogs",
+                "eth_blockNumber", "eth_estimateGas", "eth_getBalance", "eth_getTransactionCount",
+                "eth_gasPrice", "eth_feeHistory", "eth_maxPriorityFeePerGas"].includes(args.method)) {
+                const exposed = (window as unknown as {
+                  __deoptLocalRpc?: (method: string, params: unknown[]) => Promise<unknown>;
+                }).__deoptLocalRpc;
+                if (!exposed) throw new Error("local RPC unavailable");
+                return exposed(args.method, args.params ?? []);
+              }
               return null;
           }
         },
@@ -283,6 +327,7 @@ export async function installMockWallet(
       realTypedData: !!cfg.realTypedData,
       MOCK_TYPED_SIGNATURE,
       MOCK_TX_HASH,
+      localAnvilRpc,
     },
   );
 }
