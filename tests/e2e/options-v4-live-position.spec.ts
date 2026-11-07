@@ -67,6 +67,8 @@ test("real indexed Anvil position reaches authenticated Next.js portfolio for tw
       if (legacyId) {
         await expect(buyerPage.getByTestId(`position-row-${legacyId}`)).toHaveAttribute("data-side", "long");
         await expect(sellerPage.getByTestId(`position-row-${legacyId}`)).toHaveAttribute("data-side", "short");
+        await expect(buyerPage.getByTestId(`premium-proof-${legacyId}`)).toContainText("paid 200000000 native (2 fills)");
+        await expect(buyerPage.getByTestId(`fee-proof-${legacyId}`)).toContainText("10000 native (2 fills)");
       } else {
         await expect(buyerPage.getByText("No open positions")).toBeVisible();
         await expect(sellerPage.getByText("No open positions")).toBeVisible();

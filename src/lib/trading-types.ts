@@ -195,7 +195,8 @@ export interface Position {
     direction: "paid" | "received";
     tx_hash: string;
     block_hash: string;
-    status: "vault_transfer_verified";
+    status: "vault_transfer_verified" | "vault_transfers_verified_aggregate";
+    receipt_tx_hashes?: string[];
   };
   fee_proof?: {
     amount_native: DecimalString;
@@ -204,7 +205,8 @@ export interface Position {
     fee_ppm: number;
     tx_hash: string;
     block_hash: string;
-    status: "vault_transfer_verified";
+    status: "vault_transfer_verified" | "vault_transfers_verified_aggregate";
+    receipt_tx_hashes?: string[];
   };
 }
 

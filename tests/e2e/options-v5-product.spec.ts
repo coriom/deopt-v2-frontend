@@ -119,9 +119,12 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
 
     // The real Rust indexer runs asynchronously after the Anvil receipt.
     // Wait for its authenticated, reconciled read before checking the UI.
-    await expect.poll(async () => buyerPage.evaluate(async (address) =>
-      (await fetch(`/api/deopt/options/accounts/${address}/positions`, { cache: "no-store" })).status,
-    buyer), { timeout: 90_000, intervals: [1_000, 2_000, 3_000] }).toBe(200);
+    await expect.poll(async () => buyerPage.evaluate(async ({ address, seriesId }) => {
+      const response = await fetch(`/api/deopt/options/accounts/${address}/positions`, { cache: "no-store" });
+      if (!response.ok) return false;
+      const body = await response.json() as { data?: { positions?: Array<{ series_id?: string }> } };
+      return body.data?.positions?.some((position) => position.series_id === seriesId) ?? false;
+    }, { address: buyer, seriesId }), { timeout: 120_000, intervals: [1_000, 2_000, 3_000] }).toBe(true);
 
     const buyerPortfolio = await openPortfolio(buyerPage);
     await expect(buyerPortfolio.getByTestId(`position-row-${seriesId}`)).toHaveAttribute("data-side", "long", { timeout: 45_000 });
@@ -129,6 +132,8 @@ test("product form creates and signs a real Rust intent; Anvil receipt reaches t
     await expect(buyerPortfolio.getByTestId(`fee-proof-${seriesId}`)).toContainText("25000 native");
     if (legacySeriesId) {
       await expect(buyerPortfolio.getByTestId(`position-row-${legacySeriesId}`)).toHaveAttribute("data-side", "long");
+      await expect(buyerPortfolio.getByTestId(`premium-proof-${legacySeriesId}`)).toContainText("paid 200000000 native (2 fills)");
+      await expect(buyerPortfolio.getByTestId(`fee-proof-${legacySeriesId}`)).toContainText("10000 native (2 fills)");
     }
     const crossWallet = await buyerPortfolio.evaluate(async (address) =>
       (await fetch(`/api/deopt/options/accounts/${address}/positions`, { cache: "no-store" })).status, seller);

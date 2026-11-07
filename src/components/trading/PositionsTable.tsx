@@ -120,13 +120,13 @@ export function PositionsTable() {
                   {p.mark_price_1e8 ?? "—"}
                 </td>
                 <td className="py-2 pr-2 text-right font-mono text-zinc-300" data-testid={`premium-proof-${p.series_id}`}>
-                  {p.premium_proof?.status === "vault_transfer_verified"
-                    ? `${p.premium_proof.direction} ${p.premium_proof.amount_native} native`
+                  {(p.premium_proof?.status === "vault_transfer_verified" || p.premium_proof?.status === "vault_transfers_verified_aggregate")
+                    ? `${p.premium_proof.direction} ${p.premium_proof.amount_native} native${p.premium_proof.receipt_tx_hashes ? ` (${p.premium_proof.receipt_tx_hashes.length} fills)` : ""}`
                     : "unverified"}
                 </td>
                 <td className="py-2 pr-2 text-right font-mono text-zinc-300" data-testid={`fee-proof-${p.series_id}`}>
-                  {p.fee_proof?.status === "vault_transfer_verified"
-                    ? `${p.fee_proof.amount_native} native`
+                  {(p.fee_proof?.status === "vault_transfer_verified" || p.fee_proof?.status === "vault_transfers_verified_aggregate")
+                    ? `${p.fee_proof.amount_native} native${p.fee_proof.receipt_tx_hashes ? ` (${p.fee_proof.receipt_tx_hashes.length} fills)` : ""}`
                     : "unverified"}
                 </td>
                 <td className="py-2 pr-3 text-right font-mono text-zinc-300">
